@@ -8,6 +8,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'tests'))
+import isolate  # noqa: E402,F401  (temporary HOME for the whole test run)
 sys.path.insert(0, str(ROOT / 'core'))
 from aiface import integrations, paths, server  # noqa: E402
 

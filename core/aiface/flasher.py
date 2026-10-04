@@ -39,7 +39,7 @@ def sketch_dir():
     """firmware/ESP32_Display in the AI Face project folder."""
     root = paths.project_root()
     if root is None:
-        raise FlashError('펌웨어 폴더 위치를 모릅니다. AI Face 폴더의 MCP 설치.command를 다시 실행해 주세요.')
+        raise FlashError('펌웨어 폴더 위치를 모릅니다. AI Face 앱을 한 번 실행하거나 설정 → AI 연결에서 다시 연결해 주세요.')
     sketch = root / 'firmware' / 'ESP32_Display'
     try:
         if (sketch / 'ESP32_Display.ino').is_file():

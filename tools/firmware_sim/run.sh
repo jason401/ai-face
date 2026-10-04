@@ -10,7 +10,7 @@ mkdir -p "$OUT"
 cp "$HERE"/stub.h "$HERE"/test_*.cpp "$OUT"/
 python3 "$HERE/mkfw.py" "$ROOT/firmware/ESP32_Display/ESP32_Display.ino" "$OUT/fw.cpp"
 cd "$OUT"
-for t in test_core test_fire test_notice; do
+for t in test_core test_fire test_notice test_style; do
   "$CXX" -std=c++17 -O1 -w -o "$t" "$t.cpp"
   echo "== $t"
   "./$t"

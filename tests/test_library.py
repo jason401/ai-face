@@ -5,6 +5,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import isolate  # noqa: E402,F401  (temporary HOME for the whole test run)
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'core'))
 from aiface import library as lib  # noqa: E402
 

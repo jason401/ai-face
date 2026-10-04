@@ -50,6 +50,15 @@ final class StatusController: NSObject, NSMenuDelegate {
     private var polling = false
     private var drawTimer: Timer?
     private var pollTimer: Timer?
+    // The photo shown by a photo saver (or picked by hand): board photo id + file version.
+    private var photoKey = ""
+    private var photoLoading = ""
+    // A little jump (or a shiver for upset moods) when the face changes.
+    private var lastChange = ""
+    private var bounceStart = 0.0
+    private var bounceShake = false
+    static let SHAKE_MOODS: Set<String> = ["angry", "furious", "annoyed", "disgusted", "jealous", "shocked",
+                                          "terrified", "afraid", "cold", "cringe", "nervous", "sick", "dizzy"]
 
     override init() {
         super.init()
@@ -122,9 +131,46 @@ final class StatusController: NSObject, NSMenuDelegate {
         } else {
             view.timerEnd = 0
         }
+        view.mono = (v["mono"] as? Bool) ?? false
+        view.clockOnPhoto = (v["clock"] as? Bool) ?? false
+        if kind == "photo" {
+            let id = (v["photo"] as? NSNumber)?.intValue ?? -1
+            let version = (v["photo_v"] as? NSNumber)?.intValue ?? 0
+            loadPhoto(id, key: "\(id)-\(version)")
+        }
+        let emotion = (v["emotion"] as? String) ?? ""
+        let change = "\(kind)|\(emotion)|\(view.owner)"
+        if !lastChange.isEmpty && change != lastChange {
+            bounceStart = now
+            bounceShake = StatusController.SHAKE_MOODS.contains(emotion)
+        }
+        lastChange = change
         name = (v["name"] as? String) ?? ""
         board = (v["board"] as? Bool) ?? false
         item.button?.toolTip = "AI Face · \(name) · \(ownerName(view.owner))"
+    }
+
+    private func loadPhoto(_ id: Int, key: String) {
+        guard id >= 0, key != photoKey, key != photoLoading else { return }
+        photoLoading = key
+        API.shared.get("photo/\(id)?v=\(key)", timeout: 10) { [weak self] data in
+            guard let self = self else { return }
+            self.photoLoading = ""
+            guard let data = data, let text = String(data: data, encoding: .utf8),
+                  let bytes = Data(base64Encoded: text.trimmingCharacters(in: .whitespacesAndNewlines)),
+                  let image = imageFromBoardPhoto(bytes) else { return }
+            self.photoKey = key
+            self.view.photo = image
+        }
+    }
+
+    /// Offset for the change animation: a hop up, or a short shiver.
+    private func bounce(_ now: Double) -> NSPoint {
+        let t = now - bounceStart
+        guard t >= 0 && t < 0.7 else { return .zero }
+        let decay = 1 - t / 0.7
+        if bounceShake { return NSPoint(x: 1.6 * sin(t * 55) * decay, y: 0) }
+        return NSPoint(x: 0, y: -3 * abs(sin(t * Double.pi * 2.6)) * decay)
     }
 
     func ownerName(_ owner: String) -> String {
@@ -142,7 +188,8 @@ final class StatusController: NSObject, NSMenuDelegate {
         animator.step(now)
         if view.kind == "fire" { fire.step() }
         let side = NSStatusBar.system.thickness
-        item.button?.image = renderFace(side: side, inset: 2, view: view, pose: animator.pose, fire: fire, now: now)
+        item.button?.image = renderFace(side: side, inset: 2, view: view, pose: animator.pose, fire: fire, now: now,
+                                        offset: bounce(now))
         if menuOpen { updateHeader(now) }
     }
 
@@ -155,7 +202,8 @@ final class StatusController: NSObject, NSMenuDelegate {
     }
 
     private func updateHeader(_ now: Double) {
-        header.face.image = renderFace(side: 64, inset: 1, view: view, pose: animator.pose, fire: fire, now: now)
+        header.face.image = renderFace(side: 64, inset: 1, view: view, pose: animator.pose, fire: fire, now: now,
+                                       offset: bounce(now))
         header.title.stringValue = name.isEmpty ? "AI Face" : name
         header.detail.stringValue = view.kind == "face" ? ownerName(view.owner) : (board ? "보드에 표시 중" : "메뉴바에 표시 중")
         header.extra.stringValue = timerText(now) ?? (board ? "● 보드 연결됨" : "○ 보드 없음")

@@ -17,7 +17,7 @@ enum P {
 enum Eye {
     static let normal = 0, happy = 1, calm = 2, cross = 3, heart = 4, spiral = 5, star = 6, dot = 7, big = 8, squeeze = 9
 }
-let FX_BLUSH = 1, FX_TEAR = 2, FX_SWEAT = 4
+let FX_BLUSH = 1, FX_TEAR = 2, FX_SWEAT = 4, FX_ZZZ = 8, FX_WAVE = 1024, FX_BULB = 2048, FX_PRAY = 4096
 let PALETTE: [[Double]] = [[255, 255, 255], [255, 150, 190], [120, 180, 255], [255, 225, 90],
                            [255, 70, 60], [130, 220, 110], [190, 140, 255], [255, 160, 60]]
 let TIMER_COLORS = ["white", "pink", "blue", "yellow", "red", "green", "purple", "orange"]
@@ -42,7 +42,14 @@ func poseOf(_ f: Frame) -> Pose {
     return p
 }
 
+// Monochrome style (설정 → 일반): every color becomes its gray (luminance), like the LCD.
+var MONO = false
+
 func rgb(_ r: Double, _ g: Double, _ b: Double) -> NSColor {
+    if MONO {
+        let y = (r * 77 + g * 150 + b * 29) / 256 / 255
+        return NSColor(srgbRed: CGFloat(y), green: CGFloat(y), blue: CGFloat(y), alpha: 1)
+    }
     return NSColor(srgbRed: CGFloat(r / 255), green: CGFloat(g / 255), blue: CGFloat(b / 255), alpha: 1)
 }
 
@@ -237,6 +244,50 @@ func drawFaceFeatures(_ p: Pose, _ now: Double) {
     }
 }
 
+func stroke(_ x0: Double, _ y0: Double, _ x1: Double, _ y1: Double, _ width: Double) {
+    let p = roundPath(NSBezierPath(), width)
+    p.move(to: pt(x0, y0))
+    p.line(to: pt(x1, y1))
+    p.stroke()
+}
+
+/// Effects added with FACE8, in LCD coordinates: waving hand, light bulb, praying hands.
+func drawExtraEffects(_ p: Pose, _ now: Double) {
+    let col = rgb(p.rgb[0], p.rgb[1], p.rgb[2])
+    if p.fx & FX_WAVE != 0 {
+        col.setStroke(); col.setFill()
+        let hx = 188.0, hy = 150.0, rock = 0.45 * sin(now * 1000 / 150)
+        let spread = [-0.42, -0.14, 0.14, 0.42], len = [13.0, 15.0, 15.0, 13.0]
+        for k in 0..<4 {
+            let a = rock + spread[k]
+            stroke(hx + sin(a) * 7, hy - cos(a) * 7, hx + sin(a) * (7 + len[k]), hy - cos(a) * (7 + len[k]), 6)
+        }
+        let ta = rock - 1.25
+        stroke(hx + sin(ta) * 6, hy - cos(ta) * 6, hx + sin(ta) * 16, hy - cos(ta) * 16, 6)
+        NSBezierPath(ovalIn: NSRect(x: hx - 10, y: hy - 10, width: 20, height: 20)).fill()
+    }
+    if p.fx & FX_BULB != 0 {
+        let bx = 182.0, by = 52.0, glass = rgb(255, 225, 90)
+        let pulse = 0.5 + 0.5 * sin(now * 1000 / 180)
+        glass.setStroke(); glass.setFill()
+        for k in 0..<5 {
+            let a = Double(-60 + k * 30) * Double.pi / 180, r1 = 18 + 4 * pulse
+            stroke(bx + sin(a) * 14, by - cos(a) * 14, bx + sin(a) * r1, by - cos(a) * r1, 4)
+        }
+        NSBezierPath(ovalIn: NSRect(x: bx - 11, y: by - 11, width: 22, height: 22)).fill()
+        rgb(170, 170, 170).setFill()
+        NSBezierPath.fill(NSRect(x: bx - 6, y: by + 8, width: 12, height: 8))
+    }
+    if p.fx & FX_PRAY != 0 {
+        col.setStroke()
+        let y = 2 * sin(now * 1000 / 260)
+        stroke(110, 203 + y, 118, 180 + y, 12)
+        stroke(130, 203 + y, 122, 180 + y, 12)
+        NSColor.black.setStroke()
+        stroke(120, 176 + y, 120, 210 + y, 2)
+    }
+}
+
 func drawClockHands() {
     let c = Calendar.current.dateComponents([.hour, .minute], from: Date())
     let hour = Double((c.hour ?? 0) % 12), minute = Double(c.minute ?? 0)
@@ -351,11 +402,24 @@ final class Campfire {
 
 /// What the face shows right now, from the server's /view.
 struct FaceView {
-    var kind = "face"            // face / clock / fire
+    var kind = "face"            // face / clock / fire / photo
+    var photo: NSImage? = nil    // the picture for "photo" (a board photo, 240x240)
+    var clockOnPhoto = false     // clock hands drawn over the photo
+    var mono = false             // monochrome style: grays, owner shown by the ring pattern
     var owner = "user"           // user / claude / gpt: ring color
     var timerEnd = 0.0           // seconds since the reference date; 0 = no timer
     var timerTotal = 1.0
     var timerColor = 2
+}
+
+/// Monochrome ring patterns (same as the LCD): app solid, Claude short dashes, GPT six arcs.
+/// Lengths are along the ring (radius 110 in 240 space: about 1.92 per degree).
+func ownerDash(_ owner: String) -> [CGFloat]? {
+    switch owner {
+    case "claude": return [19.2, 11.5]
+    case "gpt": return [96, 19.2]
+    default: return nil
+    }
 }
 
 func ownerColor(_ owner: String) -> NSColor {
@@ -367,16 +431,32 @@ func ownerColor(_ owner: String) -> NSColor {
 }
 
 /// The round face as an image of `side` points (the circle fills it but `inset` on each side).
-func renderFace(side: CGFloat, inset: CGFloat, view v: FaceView, pose p: Pose, fire: Campfire, now: Double) -> NSImage {
+/// `offset` moves everything (in points): the little bounce or shake when the face changes.
+func renderFace(side: CGFloat, inset: CGFloat, view v: FaceView, pose p: Pose, fire: Campfire, now: Double,
+                offset: NSPoint = .zero) -> NSImage {
     let d = side - inset * 2
     let img = NSImage(size: NSSize(width: side, height: side), flipped: true) { _ in
+        MONO = v.mono
+        defer { MONO = false }
         let tf = NSAffineTransform()
-        tf.translateX(by: inset, yBy: inset)
+        tf.translateX(by: inset + offset.x, yBy: inset + offset.y)
         tf.scale(by: d / 240.0)
         tf.concat()
         NSColor.black.setFill()
         NSBezierPath(ovalIn: NSRect(x: 0, y: 0, width: 240, height: 240)).fill()
-        let isClock = v.kind == "clock", isFire = v.kind == "fire"
+        let isClock = v.kind == "clock", isFire = v.kind == "fire", isPhoto = v.kind == "photo" && v.photo != nil
+        if isPhoto, let photo = v.photo {
+            NSGraphicsContext.saveGraphicsState()
+            NSBezierPath(ovalIn: NSRect(x: 0, y: 0, width: 240, height: 240)).addClip()
+            // Flipped context: draw the picture upright.
+            photo.draw(in: NSRect(x: 0, y: 0, width: 240, height: 240), from: .zero, operation: .sourceOver,
+                       fraction: 1, respectFlipped: true, hints: nil)
+            if v.mono {   // saturation from white = grays only
+                NSColor.white.setFill()
+                NSRect(x: 0, y: 0, width: 240, height: 240).fill(using: .saturation)
+            }
+            NSGraphicsContext.restoreGraphicsState()
+        }
         if isFire {   // clipped to the circle, under the ring
             NSGraphicsContext.saveGraphicsState()
             NSBezierPath(ovalIn: NSRect(x: 0, y: 0, width: 240, height: 240)).addClip()
@@ -384,9 +464,9 @@ func renderFace(side: CGFloat, inset: CGFloat, view v: FaceView, pose p: Pose, f
             NSGraphicsContext.restoreGraphicsState()
         }
         NSGraphicsContext.saveGraphicsState()
-        if isClock {
+        if isClock || (isPhoto && v.clockOnPhoto) {
             drawClockHands()
-        } else if !isFire {
+        } else if !isFire && !isPhoto {
             // Features larger than on the LCD (about the face center) so they read small.
             let zoom = NSAffineTransform()
             zoom.translateX(by: 120, yBy: 118)
@@ -396,13 +476,14 @@ func renderFace(side: CGFloat, inset: CGFloat, view v: FaceView, pose p: Pose, f
             drawFaceFeatures(p, now)
         }
         NSGraphicsContext.restoreGraphicsState()
+        if !isClock && !isFire && !isPhoto { drawExtraEffects(p, now) }
         // Border ring: who chose the face, or the timer.
         let RW = 20.0
         let circle = NSBezierPath(ovalIn: NSRect(x: RW / 2, y: RW / 2, width: 240 - RW, height: 240 - RW))
         circle.lineWidth = CGFloat(RW)
         if v.timerEnd > 0 {
             let left = max(0, v.timerEnd - now), frac = left / max(1, v.timerTotal)
-            let c = PALETTE[max(0, min(7, v.timerColor))]
+            let c = v.mono ? PALETTE[0] : PALETTE[max(0, min(7, v.timerColor))]
             rgb(c[0] / 4, c[1] / 4, c[2] / 4).setStroke()
             circle.stroke()
             if left > 0 || fmod(now, 0.8) < 0.4 {   // blink when time is up
@@ -414,6 +495,10 @@ func renderFace(side: CGFloat, inset: CGFloat, view v: FaceView, pose p: Pose, f
                 rgb(c[0], c[1], c[2]).setStroke()
                 arc.stroke()
             }
+        } else if v.mono {
+            NSColor.white.setStroke()
+            if let dash = ownerDash(v.owner) { circle.setLineDash(dash, count: dash.count, phase: 0) }
+            circle.stroke()
         } else {
             ownerColor(v.owner).setStroke()
             circle.stroke()

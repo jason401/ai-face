@@ -5,6 +5,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import isolate  # noqa: E402,F401  (temporary HOME for the whole test run)
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'core'))
 from aiface import moods as face_modes  # noqa: E402
 from aiface import board as esp_display  # noqa: E402
@@ -16,6 +18,7 @@ class ViewTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory(); self.addCleanup(self.tmp.cleanup)
         p = patch.object(face_modes, 'SETTINGS', Path(self.tmp.name) / 'settings.json'); p.start(); self.addCleanup(p.stop)
         p = patch.object(esp_display, 'ports', return_value=[]); p.start(); self.addCleanup(p.stop)
+        p = patch.object(face_modes, 'PHOTO_DIR', Path(self.tmp.name) / 'photos'); p.start(); self.addCleanup(p.stop)
         self.d = esp_display.Device()
         self.happy = next(m for m in face_modes.emotions() if m['id'] == 'happy')
 
@@ -38,12 +41,31 @@ class ViewTests(unittest.TestCase):
         self.assertEqual(self.d.view(now + 121)['emotion'], 'sleeping')
         face_modes.save_settings(saver=dict(after=1, type='fire', clock=False, slide=60))
         self.assertEqual(self.d.view(now + 61)['kind'], 'fire')
-        face_modes.save_settings(saver=dict(after=1, type='photo', clock=False, slide=60))
-        self.assertEqual(self.d.view(now + 61)['emotion'], 'sleeping')    # photo savers: asleep in the menu bar
+        face_modes.save_settings(saver=dict(after=1, type='photo', clock=True, slide=60))
+        self.assertEqual(self.d.view(now + 61)['emotion'], 'sleeping')    # no photo on this Mac: asleep
+        face_modes.PHOTO_DIR.mkdir()
+        for pid in (2, 5):
+            face_modes.photo_copy(pid).write_bytes(bytes(face_modes.PHOTO_BYTES))
+        v = self.d.view(now + 61)
+        self.assertEqual((v['kind'], v['photo'], v['clock'], v['name']), ('photo', 2, True, '사진'))
+        face_modes.save_settings(saver=dict(after=1, type='slideshow', clock=False, slide=30))
+        self.assertEqual([self.d.view(now + 61 + k * 30)['photo'] for k in range(3)], [2, 5, 2])
         face_modes.save_settings(saver=dict(after=1, type='clock', clock=False, slide=60))
         self.assertEqual(self.d.view(now + 61)['kind'], 'clock')
         face_modes.save_settings(saver=dict(after=1, type='off', clock=False, slide=60))
         self.assertEqual(self.d.view(now + 9999)['emotion'], 'happy')
+
+    def test_history_and_mono(self):
+        from aiface import history
+        self.d.show_emotion(self.happy, 'claude')
+        self.d.show_emotion(self.happy, 'gpt')
+        last = history.recent(5)
+        self.assertEqual([(e['owner'], e['emotion']) for e in last][:2], [('gpt', 'happy'), ('claude', 'happy')])
+        self.assertFalse(self.d.view()['mono'])
+        self.d.set_style(True)
+        self.assertTrue(self.d.view()['mono'] and face_modes.load_settings()['mono'])
+        with self.assertRaises(ValueError):
+            self.d.set_style('yes')
 
     def test_clock_and_timer_without_board(self):
         self.d.set_mode('FIRE')

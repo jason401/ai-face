@@ -32,17 +32,30 @@ struct FakeSPI { void begin(int,int,int,int){} };
 extern FakeSPI SPI;
 struct Adafruit_GFX {
   long pixels=0, tris=0;
+  // Only the face canvas really rasterizes (so tests can look at it); the LCD just counts.
+  bool raster=false; int W=240, H=240;
   virtual ~Adafruit_GFX(){}
-  void fillTriangle(int,int,int,int,int,int,uint16_t){tris++;}
-  void fillRect(int,int,int,int,uint16_t){pixels++;}
-  void fillRoundRect(int,int,int,int,int,uint16_t){pixels++;}
-  void fillCircle(int,int,int,uint16_t){pixels++;}
-  void drawLine(int,int,int,int,uint16_t){pixels++;}
+  virtual void px(int,int,uint16_t){}
+  void span(int x0,int x1,int y,uint16_t c){ if(x0>x1) std::swap(x0,x1); for(int x=x0;x<=x1;x++) px(x,y,c); }
+  void fillTriangle(int x0,int y0,int x1,int y1,int x2,int y2,uint16_t c){tris++; if(!raster) return;
+    int a=min(x0,min(x1,x2)), b=max(x0,max(x1,x2)), p=min(y0,min(y1,y2)), q=max(y0,max(y1,y2));
+    auto e=[](int ax,int ay,int bx,int by,float x,float y){return (bx-ax)*(y-ay)-(by-ay)*(x-ax);};
+    for(int y=p;y<=q;y++) for(int x=a;x<=b;x++){ float fx=x+0.5f, fy=y+0.5f;
+      float w0=e(x1,y1,x2,y2,fx,fy), w1=e(x2,y2,x0,y0,fx,fy), w2=e(x0,y0,x1,y1,fx,fy);
+      if((w0>=0&&w1>=0&&w2>=0)||(w0<=0&&w1<=0&&w2<=0)) px(x,y,c);} }
+  void fillRect(int x,int y,int w,int h,uint16_t c){pixels++; if(!raster) return; for(int j=0;j<h;j++) for(int i=0;i<w;i++) px(x+i,y+j,c);}
+  void fillRoundRect(int x,int y,int w,int h,int r,uint16_t c){pixels++; if(!raster) return;
+    for(int j=0;j<h;j++) for(int i=0;i<w;i++){ int dx=i<r?r-i:(i>=w-r?i-(w-r-1):0), dy=j<r?r-j:(j>=h-r?j-(h-r-1):0); if(dx*dx+dy*dy<=r*r+r) px(x+i,y+j,c);} }
+  void fillCircle(int cx,int cy,int r,uint16_t c){pixels++; if(!raster) return; for(int j=-r;j<=r;j++) for(int i=-r;i<=r;i++) if(i*i+j*j<=r*r+r) px(cx+i,cy+j,c);}
+  void drawLine(int x0,int y0,int x1,int y1,uint16_t c){pixels++; if(!raster) return;
+    int dx=abs(x1-x0), sx=x0<x1?1:-1, dy=-abs(y1-y0), sy=y0<y1?1:-1, err=dx+dy;
+    for(;;){ px(x0,y0,c); if(x0==x1&&y0==y1) break; int e2=2*err; if(e2>=dy){err+=dy;x0+=sx;} if(e2<=dx){err+=dx;y0+=sy;} } }
   void drawCircle(int,int,int,uint16_t){pixels++;}
-  void fillScreen(uint16_t){pixels++;}
+  void fillScreen(uint16_t c){pixels++; if(raster) for(int j=0;j<H;j++) for(int i=0;i<W;i++) px(i,j,c);}
   void setTextSize(int){} void setTextColor(uint16_t){} void setCursor(int,int){} void print(char){}
 };
-struct GFXcanvas16 : Adafruit_GFX { std::vector<uint16_t> buf; GFXcanvas16(int w,int h):buf(w*h){} uint16_t*getBuffer(){return buf.data();} };
+struct GFXcanvas16 : Adafruit_GFX { std::vector<uint16_t> buf; GFXcanvas16(int w,int h):buf(w*h){raster=true;W=w;H=h;} uint16_t*getBuffer(){return buf.data();}
+  void px(int x,int y,uint16_t c) override { if(x>=0&&y>=0&&x<W&&y<H) buf[y*W+x]=c; } };
 struct Adafruit_GC9A01A : Adafruit_GFX {
   Adafruit_GC9A01A(int,int,int){}
   void begin(){} void setRotation(int){}
@@ -60,6 +73,8 @@ struct Preferences {
   size_t getBytes(const char*k,void*v,size_t n){auto i=kv.find(k);if(i==kv.end())return 0;memcpy(v,i->second.data(),min(n,i->second.size()));return n;}
   void putInt(const char*k,int v){putBytes(k,&v,4);}
   int getInt(const char*k,int d){int v=d; if(getBytesLength(k)==4) getBytes(k,&v,4); return v;}
+  void putBool(const char*k,bool v){uint8_t b=v;putBytes(k,&b,1);}
+  bool getBool(const char*k,bool d){uint8_t b=d; if(getBytesLength(k)==1) getBytes(k,&b,1); return b;}
   void remove(const char*k){kv.erase(k);}
   bool isKey(const char*k){return kv.count(k)>0;}
 };

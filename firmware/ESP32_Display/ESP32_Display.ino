@@ -22,7 +22,8 @@ int clockHour=12, clockMinute=0, clockSecond=0;
 uint32_t clockStartMillis=0, lastClockUpdate=0;
 int oldHX=CX, oldHY=CY, oldMX=CX, oldMY=CY, oldSX=CX, oldSY=CY;
 
-// ===== FACE7 = FACE3 frames + owner ring + countdown timer ring + photos + screen saver.
+// ===== FACE8 = FACE3 frames + owner ring + countdown timer ring + photos + screen saver
+// + monochrome style (FACE8) + wave / light bulb / praying hands effects (FACE8).
 // Frame: 16 integers, data only (no executable code uploaded) =====
 // 0 move ms, 1 hold ms, 2 left eye %, 3 right eye %, 4 gaze x, 5 gaze y,
 // 6 mouth width, 7 smile, 8 mouth open, 9 brow tilt, 10 brow lift (0=hidden),
@@ -30,14 +31,15 @@ int oldHX=CX, oldHY=CY, oldMX=CX, oldMY=CY, oldSX=CX, oldSY=CY;
 enum { F_MOVE, F_HOLD, F_LEFT, F_RIGHT, F_X, F_Y, F_WIDTH, F_SMILE, F_OPEN,
        F_BROW, F_LIFT, F_EYES, F_TILT, F_FX, F_COLOR, F_SHAKE, F_COUNT };
 const int32_t LO[F_COUNT]={80,0,0,0,-15,-10,10,-28,0,-10,0,0,-10,0,0,0};
-const int32_t HI[F_COUNT]={5000,10000,100,100,15,10,100,28,30,10,12,9,10,1023,7,6};
+const int32_t HI[F_COUNT]={5000,10000,100,100,15,10,100,28,30,10,12,9,10,8191,7,6};
 
 // Eye shapes
 enum { EYE_NORMAL, EYE_HAPPY, EYE_CALM, EYE_CROSS, EYE_HEART, EYE_SPIRAL,
        EYE_STAR, EYE_DOT, EYE_BIG, EYE_SQUEEZE };
 // Effect bits
 enum { FX_BLUSH=1, FX_TEAR=2, FX_SWEAT=4, FX_ZZZ=8, FX_HEARTS=16, FX_ANGER=32,
-       FX_QUESTION=64, FX_EXCLAIM=128, FX_SPARKLE=256, FX_NOTE=512 };
+       FX_QUESTION=64, FX_EXCLAIM=128, FX_SPARKLE=256, FX_NOTE=512,
+       FX_WAVE=1024, FX_BULB=2048, FX_PRAY=4096 };
 // Face colors: white, pink, blue, yellow, red, green, purple, orange
 const uint8_t PALETTE[8][3]={{255,255,255},{255,150,190},{120,180,255},{255,225,90},
                              {255,70,60},{130,220,110},{190,140,255},{255,160,60}};
@@ -77,6 +79,10 @@ RingGeo OWNER_RING;   // r 113-119: owner color (faces); the timer uses it on th
 RingGeo TIMER_RING;   // r 104-110: countdown timer just inside the owner ring (faces)
 typedef uint16_t (*RingColorFn)(float);
 int owner=0, ringFrom=0;
+// Monochrome style (STYLE:1): the face is drawn in grays and the owner ring shows who chose
+// the face by its pattern instead of its color: app = solid, Claude = short dashes,
+// GPT = six long arcs. Kept across restarts.
+bool mono=false;
 bool sweeping=false, ringDirty=true;
 uint32_t sweepStart=0;
 float ringHeadNow=360.0f+RING_BAND, headDrawn=0;
@@ -144,9 +150,16 @@ void initRing(RingGeo &r,int rIn,int rOut) {
     r.ox[i]=CX+(int)roundf(rOut*s); r.oy[i]=CY-(int)roundf(rOut*c);
   }
 }
+bool ringOn(int who,float a) {
+  int i=(int)(a/2);
+  if(who==1) return i%8<5;     // Claude: 22 short dashes
+  if(who==2) return i%30<25;   // GPT: six long arcs
+  return true;                 // app: solid
+}
 uint16_t ringColor(float a) {
   // u=1: new owner's color, u=0: previous color; smooth blend inside the band.
   float u=sweeping?constrain((ringHeadNow-a)/RING_BAND,0.0f,1.0f):1.0f;
+  if(mono) return ringOn(u>=0.5f?owner:ringFrom,a)?0xFFFF:C_BLACK;
   u=u*u*(3-2*u);
   const uint8_t *n=OWNER_RGB[owner], *o=OWNER_RGB[ringFrom];
   return rgb((int)(o[0]+(n[0]-o[0])*u),(int)(o[1]+(n[1]-o[1])*u),(int)(o[2]+(n[2]-o[2])*u));
@@ -182,7 +195,7 @@ void updateRing(uint32_t now) {
 // ----- countdown timer -----
 uint16_t cdColor(float a) {
   if(cdState==T_OFF) return C_BLACK;
-  const uint8_t *c=PALETTE[cdColorIdx];
+  const uint8_t *c=mono?PALETTE[0]:PALETTE[cdColorIdx];
   if(cdState==T_ALARM) return alarmOn?rgb(c[0],c[1],c[2]):C_BLACK;
   return a<cdSeg*2.0f ? rgb(c[0]/6,c[1]/6,c[2]/6) : rgb(c[0],c[1],c[2]);
 }
@@ -541,6 +554,7 @@ void startSaver() {
 // ----- saver notice -----
 uint16_t noticeColor(float a) {
   if(noticeSeg<0) return C_BLACK;
+  if(mono) return a<noticeSeg*2.0f ? rgb(200,200,200) : rgb(40,40,40);
   return a<noticeSeg*2.0f ? rgb(190,140,255) : rgb(36,28,52);   // filled part bright, rest a dim track
 }
 void updateNotice(uint32_t now) {
@@ -603,6 +617,42 @@ void star(int x,int y,int len,uint16_t c) {
   sTri(x-len,y,x,y-2,x,y+2,c); sTri(x+len,y,x,y-2,x,y+2,c);
 }
 float phase(uint32_t now,float period,float offset) { return fmodf(now/period+offset,1.0f); }
+// A round-ended stroke of radius r (for fingers).
+void sStroke(float x0,float y0,float x1,float y1,int r,uint16_t c) {
+  float dx=x1-x0, dy=y1-y0; int n=max(1,(int)(sqrtf(dx*dx+dy*dy)/2));
+  for(int k=0;k<=n;k++) sCircle((int)roundf(x0+dx*k/n),(int)roundf(y0+dy*k/n),r,c);
+}
+// Waving hand at the right of the face: palm plus four fingers and a thumb, rocking.
+void waveHand(uint32_t now,uint16_t c) {
+  float hx=188, hy=150, rock=0.45f*sinf(now/150.0f);
+  const float spread[4]={-0.42f,-0.14f,0.14f,0.42f}, len[4]={12,14,14,12};
+  for(int k=0;k<4;k++) {
+    float a=rock+spread[k];
+    sStroke(hx+sinf(a)*6,hy-cosf(a)*6,hx+sinf(a)*(6+len[k]),hy-cosf(a)*(6+len[k]),2,c);
+  }
+  float ta=rock-1.25f;
+  sStroke(hx+sinf(ta)*5,hy-cosf(ta)*5,hx+sinf(ta)*14,hy-cosf(ta)*14,2,c);
+  sCircle((int)hx,(int)hy,8,c);
+}
+// Light bulb above the right eye, its rays pulsing.
+void bulb(uint32_t now) {
+  int bx=182, by=52;
+  uint16_t glass=rgb(255,225,90), base=rgb(170,170,170);
+  float pulse=0.5f+0.5f*sinf(now/180.0f);
+  for(int k=0;k<5;k++) {
+    float a=(-60+k*30)*DEG_TO_RAD, r0=13, r1=17+3*pulse;
+    sStroke(bx+sinf(a)*r0,by-cosf(a)*r0,bx+sinf(a)*r1,by-cosf(a)*r1,1,glass);
+  }
+  sCircle(bx,by,9,glass);
+  sRect(bx-5,by+7,10,7,base);
+  sRect(bx-5,by+9,10,1,C_BLACK); sRect(bx-5,by+12,10,1,C_BLACK);
+}
+// Two hands pressed together under the mouth (hoping, praying), bobbing a little.
+void prayHands(uint32_t now,uint16_t c) {
+  int y=(int)roundf(2*sinf(now/260.0f));
+  sStroke(110,203+y,118,180+y,5,c); sStroke(130,203+y,122,180+y,5,c);   // two palms leaning in
+  sLine(120,178+y,120,208+y,C_BLACK);                                     // the gap between them
+}
 
 void drawEye(int e,float open,int shape,int ex,int ey,uint16_t col,uint32_t now) {
   if(shape!=EYE_NORMAL && open<20) { sRound(ex-11,ey-2,22,4,2,col); return; }
@@ -676,6 +726,16 @@ void renderFace(const Pose &p,uint32_t now) {
     float q=phase(now,1800,i*0.5f); int nx=i?184:54, ny=82-(int)(q*30);
     sCircle(nx,ny,4,col); sRect(nx+3,ny-14,2,14,col); sThick(nx+4,ny-14,nx+9,ny-9,2,col);
   }
+  if(p.fx&FX_WAVE) waveHand(now,col);
+  if(p.fx&FX_BULB) bulb(now);
+  if(p.fx&FX_PRAY) prayHands(now,col);
+}
+// Monochrome style: the face canvas in grays (luminance) just before it goes to the LCD.
+void toGray(uint16_t *px,int n) {
+  for(int i=0;i<n;i++) {
+    uint16_t c=px[i]; int r=(c>>11)<<3, g=((c>>5)&63)<<2, b=(c&31)<<3;
+    int y=(r*77+g*150+b*29)>>8; px[i]=rgb(y,y,y);
+  }
 }
 
 void drawFace() {
@@ -703,11 +763,12 @@ void drawFace() {
   ringArc(canvas,OX,OY,CW,CH,0,360,OWNER_RING,ringColor);
   if(cdState!=T_OFF) ringArc(canvas,OX,OY,CW,CH,0,360,TIMER_RING,cdColor);
   else if(noticeSeg>=0) ringArc(canvas,OX,OY,CW,CH,0,360,TIMER_RING,noticeColor);
+  if(mono) toGray(canvas.getBuffer(),CW*CH);
   tft.drawRGBBitmap(OX,OY,canvas.getBuffer(),CW,CH);
 }
 
 void command(char *line) {
-  if(!strcmp(line,"HELLO")) { Serial.println("OK FACE7"); return; }
+  if(!strcmp(line,"HELLO")) { Serial.println("OK FACE8"); return; }
   if(!strncmp(line,"PHOTO:",6)) { photoCommand(line); return; }
   if(!strcmp(line,"FIRE")) {
     // Chosen on purpose, like the clock: no saver until the next face arrives.
@@ -773,6 +834,16 @@ void command(char *line) {
     uploadSlot=-1;Serial.println("OK COMMIT");return;
   }
   n=0;
+  if(sscanf(line,"STYLE:%d%n",&slot,&n)==1 && !line[n] && slot>=0 && slot<=1) {
+    bool next=slot==1;
+    if(next!=mono) {
+      mono=next; prefs.putBool("mono",mono);
+      ringDirty=true; cdDirty=true; noticeDrawn=-1;
+      if(active==FIRE_SCREEN || active==PHOTO_SCREEN || active==CLOCK_SCREEN) cdDirty=true;
+    }
+    Serial.println("OK STYLE"); return;
+  }
+  n=0;
   if(sscanf(line,"OWNER:%d%n",&slot,&n)==1 && !line[n] && slot>=0 && slot<3) {
     setOwner(slot); Serial.println("OK OWNER"); return;
   }
@@ -796,6 +867,7 @@ void setup() {
   initRing(OWNER_RING,RING_IN,RING_OUT);
   initRing(TIMER_RING,104,110);
   owner=constrain(prefs.getInt("owner",0),0,2); ringFrom=owner;
+  mono=prefs.getBool("mono",false);
   if(prefs.getBytesLength("saver")==sizeof(saver)) {
     int32_t v[4]; prefs.getBytes("saver",v,sizeof(v));
     if(v[0]>=0 && v[0]<=86400 && v[1]>=0 && v[1]<SV_COUNT && v[2]>=0 && v[2]<=1 && v[3]>=5 && v[3]<=86400) memcpy(saver,v,sizeof(v));

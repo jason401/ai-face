@@ -9,6 +9,8 @@ import tty
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import isolate  # noqa: E402,F401  (temporary HOME for the whole test run)
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'core'))
 from aiface import moods as face_modes
 from aiface.board import Device
@@ -64,10 +66,15 @@ class EngineTests(unittest.TestCase):
     def test_emotion_catalog(self):
         import json
         moods=face_modes.emotions()
-        self.assertEqual(len(moods),64)
-        self.assertEqual(len({m['id'] for m in moods}),64)
-        self.assertEqual(len({m['name'] for m in moods}),64)
-        self.assertEqual(len({json.dumps(m['frames'],sort_keys=True) for m in moods}),64)
+        self.assertEqual(len(moods),72)
+        self.assertEqual(len({m['id'] for m in moods}),72)
+        self.assertEqual(len({m['name'] for m in moods}),72)
+        self.assertEqual(len({json.dumps(m['frames'],sort_keys=True) for m in moods}),72)
+        # FACE8 effects are used by the new moods
+        used=0
+        for m in moods:
+            for f in m['frames']: used|=f['fx']
+        for bit in (face_modes.WAVE,face_modes.BULB,face_modes.PRAY): self.assertTrue(used&bit)
         # Seven dedicated slots, "sleeping" in slot 9 for idling; every other mood shares slot 8.
         self.assertEqual(sorted(m['slot'] for m in moods if m['slot']<7),list(range(7)))
         self.assertEqual([m['id'] for m in moods if m['slot']==face_modes.SLEEPING_SLOT],['sleeping'])
@@ -99,7 +106,7 @@ class EngineTests(unittest.TestCase):
             os.read(master,64);os.write(master,b'OK FACE2\r\n')
         worker=threading.Thread(target=board,daemon=True);worker.start()
         try:
-            with self.assertRaises(ValueError) as ctx: device.exchange('HELLO','OK FACE7')
+            with self.assertRaises(ValueError) as ctx: device.exchange('HELLO','OK FACE8')
             self.assertIn('이전 버전',str(ctx.exception))
         finally:
             device.close();worker.join(1);os.close(master)
@@ -112,7 +119,7 @@ class EngineTests(unittest.TestCase):
 
     def test_firmware_matches_protocol(self):
         ino=(Path(__file__).resolve().parents[1]/'firmware'/'ESP32_Display'/'ESP32_Display.ino').read_text()
-        self.assertIn('"OK FACE7"',ino); self.assertIn('"OK OWNER"',ino)
+        self.assertIn('"OK FACE8"',ino); self.assertIn('"OK OWNER"',ino)
         for reply in ('"OK TIMER"','"OK SAVER"','"ERR FULL"','"OK LIST:','"OK SUM:','"OK TIME"','"OK PHOTO"','"OK DATA"','"ERR FS"','"ERR NOPHOTO"'): self.assertIn(reply,ino)
         self.assertIn('PHOTO_BYTES=240*240*2, PHOTO_CHUNK=%d'%face_modes.PHOTO_CHUNK,ino)
         self.assertIn('MAX_PHOTOS=%d;'%face_modes.MAX_PHOTOS,ino)
@@ -138,7 +145,7 @@ class EngineTests(unittest.TestCase):
 
     def test_settings_round_trip(self):
         with tempfile.TemporaryDirectory() as tmp, patch.object(face_modes,'SETTINGS',Path(tmp)/'s'/'settings.json'):
-            self.assertEqual(face_modes.load_settings(),dict(saver=face_modes.SAVER_DEFAULT,timer=None))
+            self.assertEqual(face_modes.load_settings(),dict(saver=face_modes.SAVER_DEFAULT,timer=None,mono=False))
             # FACE5/6 idle settings carry over their first delay
             face_modes.SETTINGS.parent.mkdir(parents=True)
             face_modes.SETTINGS.write_text('{"idle": {"sleepy": 3, "sleeping": 6, "clock": 9}}')
@@ -163,7 +170,7 @@ class EngineTests(unittest.TestCase):
                 while b'\n' in buf:
                     line,buf=buf.split(b'\n',1);text=line.decode();seen.append(text)
                     key=text.split(':')[0]
-                    reply='OK SUM:%d'%sums.get(int(text[4:]),0) if key=='SUM' else 'OK LIST:0:-1' if text=='PHOTO:LIST' else {'HELLO':'OK FACE7'}.get(key,'OK '+key)
+                    reply='OK SUM:%d'%sums.get(int(text[4:]),0) if key=='SUM' else 'OK LIST:0:-1' if text=='PHOTO:LIST' else {'HELLO':'OK FACE8'}.get(key,'OK '+key)
                     os.write(master,(reply+'\r\n').encode())
         worker=threading.Thread(target=run,daemon=True);worker.start();return worker
 

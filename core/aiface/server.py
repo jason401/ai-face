@@ -12,6 +12,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from . import VERSION
+from . import history
 from . import integrations
 from . import library as photo_library
 from . import moods as face_modes
@@ -69,6 +70,7 @@ def main():
     parser.parse_args()
     device = Device()
     token = secrets.token_urlsafe(32)
+    history.prune()
     try:
         integrations.refresh_runtime()   # an installed MCP server runs this version of the code
     except (OSError, ValueError):
@@ -123,6 +125,12 @@ def main():
                 return self.reply(200, device.view())
             if self.path == '/status':   # for the settings window; no lock either
                 return self.reply(200, dict(device.status(), version=VERSION))
+            if self.path.startswith('/history'):
+                query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                day = (query.get('day') or [time.strftime('%Y-%m-%d')])[0]
+                if self.path.startswith('/history/week'):
+                    return self.reply(200, history.week(day))
+                return self.reply(200, history.summary(day, face_modes.emotions()))
             if self.path == '/mcp':
                 return self.reply(200, integrations.status())
             if self.path == '/state':
@@ -202,6 +210,8 @@ def main():
                         device.message = 'Finder에서 사진 보관함을 열었습니다.'
                     elif action == 'saver':
                         device.set_saver(data.get('saver'))
+                    elif action == 'style':
+                        device.set_style(data.get('mono'))
                     elif action == 'mcp_install':
                         integrations.install(data.get('target'))
                         device.message = '연결했습니다. 그 앱을 완전히 종료(Cmd+Q)한 뒤 다시 실행하세요.'
