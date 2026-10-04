@@ -17,7 +17,7 @@ int main(){ static uint16_t fb[240*240]; tft.fb=fb; setup();
   CHECK(cmd("OWNER:1")=="OK OWNER"); CHECK(cmd("PLAY:0")=="OK PLAY"); run(1500);
   FILE*o=fopen("style_color.raw","wb"); fwrite(fb,2,240*240,o); fclose(o);
   uint16_t glass=at(fb,190,60); CHECK(glass!=0 && !gray(glass));          // yellow bulb
-  CHECK(at(fb,113,195)!=0);                                               // praying hands
+  CHECK(at(fb,110,190)!=0);                                               // praying hands
   // owner ring: Claude orange in color
   CHECK(ringColor(1)!=0xFFFF);
   // monochrome: grays only, patterned ring, kept across restarts
