@@ -57,6 +57,7 @@ final class SettingsStore: NSObject, ObservableObject {
     @Published var library: [LibraryItem] = []
     @Published var thumbs: [String: NSImage] = [:]
     @Published var sending = ""
+    @Published var dropping = false   // a picture is dragged over the library
     @Published var notice = ""
     // AI apps
     @Published var claude = "off"
@@ -433,8 +434,9 @@ struct SaverTab: View {
 }
 
 struct PhotosTab: View {
+    // No @State: the Command Line Tools have no SwiftUI macro plugin, and the newest SDK
+    // resolves @State to a macro. View state lives in the store instead.
     @ObservedObject var store: SettingsStore
-    @State private var dropping = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -472,16 +474,16 @@ struct PhotosTab: View {
                     }
                     .padding(2)
                 }
-                if store.library.isEmpty || dropping {
+                if store.library.isEmpty || store.dropping {
                     RoundedRectangle(cornerRadius: 12)
                         .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [6]))
-                        .foregroundStyle(dropping ? Color.accentColor : Color.secondary.opacity(0.5))
+                        .foregroundStyle(store.dropping ? Color.accentColor : Color.secondary.opacity(0.5))
                         .overlay(Text("사진을 여기로 끌어다 놓으세요").foregroundStyle(.secondary))
-                        .background(dropping ? Color.accentColor.opacity(0.08) : Color.clear)
+                        .background(store.dropping ? Color.accentColor.opacity(0.08) : Color.clear)
                 }
             }
             .frame(maxHeight: .infinity)
-            .onDrop(of: [UTType.fileURL], isTargeted: $dropping) { providers in
+            .onDrop(of: [UTType.fileURL], isTargeted: $store.dropping) { providers in
                 var urls: [URL] = []
                 let group = DispatchGroup()
                 for provider in providers {
