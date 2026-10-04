@@ -624,15 +624,15 @@ void sStroke(float x0,float y0,float x1,float y1,int r,uint16_t c) {
 }
 // Waving hand at the right of the face: palm plus four fingers and a thumb, rocking.
 void waveHand(uint32_t now,uint16_t c) {
-  float hx=188, hy=150, rock=0.45f*sinf(now/150.0f);
-  const float spread[4]={-0.42f,-0.14f,0.14f,0.42f}, len[4]={12,14,14,12};
+  float hx=192, hy=166, rock=0.3f*sinf(now/150.0f);
+  const float spread[4]={-0.6f,-0.2f,0.2f,0.6f}, len[4]={15,19,19,15};
   for(int k=0;k<4;k++) {
     float a=rock+spread[k];
-    sStroke(hx+sinf(a)*6,hy-cosf(a)*6,hx+sinf(a)*(6+len[k]),hy-cosf(a)*(6+len[k]),2,c);
+    sStroke(hx+sinf(a)*11,hy-cosf(a)*11,hx+sinf(a)*(11+len[k]),hy-cosf(a)*(11+len[k]),3,c);
   }
   float ta=rock-1.25f;
-  sStroke(hx+sinf(ta)*5,hy-cosf(ta)*5,hx+sinf(ta)*14,hy-cosf(ta)*14,2,c);
-  sCircle((int)hx,(int)hy,8,c);
+  sStroke(hx+sinf(ta)*8,hy-cosf(ta)*8,hx+sinf(ta)*19,hy-cosf(ta)*19,4,c);
+  sCircle((int)hx,(int)hy,13,c);
 }
 // Light bulb above the right eye, its rays pulsing.
 void bulb(uint32_t now) {
@@ -650,8 +650,8 @@ void bulb(uint32_t now) {
 // Two hands pressed together under the mouth (hoping, praying), bobbing a little.
 void prayHands(uint32_t now,uint16_t c) {
   int y=(int)roundf(2*sinf(now/260.0f));
-  sStroke(110,203+y,118,180+y,5,c); sStroke(130,203+y,122,180+y,5,c);   // two palms leaning in
-  sLine(120,178+y,120,208+y,C_BLACK);                                     // the gap between them
+  sStroke(107,198+y,117,166+y,8,c); sStroke(133,198+y,123,166+y,8,c);   // two palms leaning in
+  sLine(120,160+y,120,209,C_BLACK);                                    // the gap between them
 }
 
 void drawEye(int e,float open,int shape,int ex,int ey,uint16_t col,uint32_t now) {

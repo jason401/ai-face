@@ -256,15 +256,15 @@ func drawExtraEffects(_ p: Pose, _ now: Double) {
     let col = rgb(p.rgb[0], p.rgb[1], p.rgb[2])
     if p.fx & FX_WAVE != 0 {
         col.setStroke(); col.setFill()
-        let hx = 188.0, hy = 150.0, rock = 0.45 * sin(now * 1000 / 150)
-        let spread = [-0.42, -0.14, 0.14, 0.42], len = [13.0, 15.0, 15.0, 13.0]
+        let hx = 192.0, hy = 166.0, rock = 0.3 * sin(now * 1000 / 150)
+        let spread = [-0.6, -0.2, 0.2, 0.6], len = [15.0, 19.0, 19.0, 15.0]
         for k in 0..<4 {
             let a = rock + spread[k]
-            stroke(hx + sin(a) * 7, hy - cos(a) * 7, hx + sin(a) * (7 + len[k]), hy - cos(a) * (7 + len[k]), 6)
+            stroke(hx + sin(a) * 11, hy - cos(a) * 11, hx + sin(a) * (11 + len[k]), hy - cos(a) * (11 + len[k]), 7)
         }
         let ta = rock - 1.25
-        stroke(hx + sin(ta) * 6, hy - cos(ta) * 6, hx + sin(ta) * 16, hy - cos(ta) * 16, 6)
-        NSBezierPath(ovalIn: NSRect(x: hx - 10, y: hy - 10, width: 20, height: 20)).fill()
+        stroke(hx + sin(ta) * 8, hy - cos(ta) * 8, hx + sin(ta) * 19, hy - cos(ta) * 19, 9)
+        NSBezierPath(ovalIn: NSRect(x: hx - 14, y: hy - 14, width: 28, height: 28)).fill()
     }
     if p.fx & FX_BULB != 0 {
         let bx = 190.0, by = 60.0, glass = rgb(255, 225, 90)
@@ -281,10 +281,10 @@ func drawExtraEffects(_ p: Pose, _ now: Double) {
     if p.fx & FX_PRAY != 0 {
         col.setStroke()
         let y = 2 * sin(now * 1000 / 260)
-        stroke(110, 203 + y, 118, 180 + y, 12)
-        stroke(130, 203 + y, 122, 180 + y, 12)
+        stroke(107, 198 + y, 117, 166 + y, 17)
+        stroke(133, 198 + y, 123, 166 + y, 17)
         NSColor.black.setStroke()
-        stroke(120, 176 + y, 120, 210 + y, 2)
+        stroke(120, 158 + y, 120, 212, 2)
     }
 }
 
