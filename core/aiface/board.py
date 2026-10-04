@@ -37,6 +37,8 @@ class Device:
         self.message = '보드 없음 · 표정은 메뉴바 얼굴에 표시돼요. 보드를 꽂으면 자동으로 연결해요.'
         self.lock = threading.RLock()
         self.buffer = b''
+        self.paused = False   # 'disconnect' until 'connect': no automatic reconnect
+        self.flashing = False
 
     def close(self):
         if self.fd is not None:
@@ -120,11 +122,14 @@ class Device:
         if not port:
             raise ValueError('ESP32가 USB로 연결되어 있지 않습니다.')
         self.close()
+        self.flashing = True
         try:
             importlib.reload(flasher)   # pick up flasher.py fixes without restarting the app
-            report = flasher.flash(port)
+            report = flasher.flash(port, progress=lambda text: setattr(self, 'message', text))
         except flasher.FlashError as exc:
             raise ValueError(str(exc))
+        finally:
+            self.flashing = False
         # The board restarts after the upload; its port can take a moment to come back.
         deadline = time.monotonic() + 20
         while True:
@@ -322,6 +327,22 @@ class Device:
                     emotion=emotion if kind == 'face' else '',
                     name={'clock': '시계', 'fire': '모닥불'}.get(kind) or names.get(emotion, emotion),
                     owner=self.owner or 'user', board=self.fd is not None,
+                    timer=dict(left=left, total=timer['total'], color=timer['color']) if left else None)
+
+    def status(self):
+        """Like state(), for the settings window: read-only, so it needs no lock and
+        answers even during a firmware upload."""
+        available = ports()
+        settings = face_modes.load_settings()
+        timer = settings['timer']
+        left = max(0, int(round(timer['end'] - time.time()))) if timer else 0
+        busy = not self.lock.acquire(blocking=False)
+        if not busy:
+            self.lock.release()
+        return dict(ports=available, connected=self.fd is not None and self.port in available,
+                    port=self.port, message=self.message, busy=busy, flashing=self.flashing,
+                    paused=self.paused, saver=settings['saver'], photos=list(self.photos),
+                    current_photo=self.current_photo, owner=self.owner or 'user',
                     timer=dict(left=left, total=timer['total'], color=timer['color']) if left else None)
 
     def state(self):

@@ -1,5 +1,6 @@
-"""The controller app's local web server: the page (web/controller.html), its API, and
-/view for the menu bar face. Started by the macOS app (core/run_server.py)."""
+"""AI Face's local server: the API behind the menu bar app (face, menu, settings window)
+and the MCP server. Started by the macOS app (core/run_server.py); listens on 127.0.0.1
+only, and changes need the token printed on the second line of output."""
 import argparse
 import base64
 import json
@@ -7,24 +8,16 @@ import os
 import secrets
 import threading
 import urllib.parse
-import webbrowser
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+from . import VERSION
+from . import integrations
 from . import library as photo_library
 from . import moods as face_modes
 from . import paths
 from .board import Device, ports
 
-
-def _page():
-    root = paths.project_root()
-    for path in ([root / 'web' / 'controller.html'] if root else []) + [paths.PACKAGE / 'controller.html']:
-        if path.is_file():
-            return path.read_text()
-    return '<p>controller.html을 찾지 못했습니다.</p>'
-
-
-PAGE = _page()
 # Lets esp32_mcp.py (the AI chat bridge) reach this app while it owns the USB port.
 # Kept outside ~/Documents so the MCP server (launched by the chat app) can read it.
 DISCOVERY = paths.DISCOVERY
@@ -47,12 +40,39 @@ def remove_discovery(token):
         pass
 
 
+def auto_connect(device, stop, interval=3, retry=30):
+    """Connect a board as soon as it is plugged in. A board that fails (old firmware, port
+    busy) is tried again only every `retry` seconds: opening the port can restart it."""
+    failed = {}
+    while not stop.wait(interval):
+        if device.fd is not None or device.paused:
+            continue
+        found = ports()
+        port = next((p for p in found if time.monotonic() - failed.get(p, -1e9) >= retry), None)
+        if not port or not device.lock.acquire(blocking=False):
+            continue   # busy (e.g. a firmware upload holds the lock)
+        try:
+            if device.fd is None and not device.paused:
+                device.connect(port)
+                failed.pop(port, None)
+        except (OSError, ValueError, TimeoutError) as exc:
+            device.close()
+            failed[port] = time.monotonic()
+            device.message = str(exc)
+        finally:
+            device.lock.release()
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--no-browser', action='store_true')
-    args = parser.parse_args()
+    parser.add_argument('--no-browser', action='store_true')   # accepted for old launchers
+    parser.parse_args()
     device = Device()
     token = secrets.token_urlsafe(32)
+    try:
+        integrations.refresh_runtime()   # an installed MCP server runs this version of the code
+    except (OSError, ValueError):
+        pass
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_):
@@ -80,14 +100,9 @@ def main():
             if not self.allowed():
                 return self.reply(403, {'error': 'Invalid host'})
             if self.path == '/':
-                return self.reply(200, PAGE.replace('__TOKEN__', token), 'text/html')
+                return self.reply(200, 'AI Face ' + VERSION, 'text/plain')
             if self.path == '/emotions':
                 return self.reply(200, face_modes.emotions())
-            if self.path == '/modes':
-                try:
-                    return self.reply(200, face_modes.load())
-                except (OSError, ValueError) as exc:
-                    return self.reply(400, {'error': str(exc)})
             if self.path.startswith('/photo/'):
                 try:   # /photo/<id>?v=<n> (the query only defeats caching)
                     data = face_modes.local_photo(int(self.path[7:].split('?')[0]))
@@ -106,6 +121,10 @@ def main():
                 return self.reply(200, data, kind)
             if self.path == '/view':   # for the menu bar face; no lock (a flash can hold it for minutes)
                 return self.reply(200, device.view())
+            if self.path == '/status':   # for the settings window; no lock either
+                return self.reply(200, dict(device.status(), version=VERSION))
+            if self.path == '/mcp':
+                return self.reply(200, integrations.status())
             if self.path == '/state':
                 with device.lock:
                     return self.reply(200, device.state())
@@ -139,13 +158,15 @@ def main():
                         raise ValueError('잘못된 요청입니다.')
                     action = data.get('action')
                     # A board that was plugged in after the app started is picked up here.
-                    if action not in ('connect', 'disconnect', 'quit', 'firmware', 'save') and device.fd is None and ports():
+                    if action not in ('connect', 'disconnect', 'quit', 'firmware', 'mcp_install', 'mcp_remove') \
+                            and device.fd is None and not device.paused and ports():
                         try:
                             device.connect(ports()[0])
                         except (OSError, ValueError, TimeoutError):
                             device.close()
                     if action == 'connect':
-                        device.connect(data.get('port'))
+                        device.paused = False
+                        device.connect(data.get('port') or (ports()[0] if ports() else None))
                     elif action == 'emotion':
                         preset = next((m for m in face_modes.emotions() if m['id'] == data.get('id')), None)
                         if preset is None:
@@ -154,21 +175,8 @@ def main():
                         device.show_emotion(preset, data.get('agent', 'user'))
                     elif action == 'disconnect':
                         device.close()
+                        device.paused = True   # until 'connect': lets Arduino IDE use the port
                         device.message = 'USB 연결 해제 · 이제 Arduino 업로드가 가능합니다.'
-                    elif action == 'play':
-                        slot = data.get('slot')
-                        if type(slot) is not int or not 0 <= slot < face_modes.SLOTS:
-                            raise ValueError('저장 위치는 1~9입니다.')
-                        device.exchange(f'PLAY:{slot}', 'OK PLAY')
-                        device.mode = str(slot + 1)
-                        device.message = f'보드의 {slot + 1}번 모드를 재생합니다.'
-                    elif action == 'save':
-                        face_modes.save(data.get('preset'))
-                        device.message = '모드를 맥에 저장했습니다.'
-                    elif action == 'upload':
-                        preset = face_modes.validate(data.get('preset'))
-                        device.upload(preset)
-                        face_modes.save(preset)
                     elif action == 'mode':
                         device.set_mode(data.get('mode'), data.get('time'))
                     elif action == 'timer':
@@ -194,6 +202,12 @@ def main():
                         device.message = 'Finder에서 사진 보관함을 열었습니다.'
                     elif action == 'saver':
                         device.set_saver(data.get('saver'))
+                    elif action == 'mcp_install':
+                        integrations.install(data.get('target'))
+                        device.message = '연결했습니다. 그 앱을 완전히 종료(Cmd+Q)한 뒤 다시 실행하세요.'
+                    elif action == 'mcp_remove':
+                        integrations.remove(data.get('target'))
+                        device.message = '연결을 해제했습니다. 그 앱을 다시 실행하면 반영됩니다.'
                     elif action == 'quit':
                         device.close()
                         device.message = '종료되었습니다.'
@@ -210,17 +224,19 @@ def main():
                     threading.Thread(target=self.server.shutdown, daemon=True).start()
 
     server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
-    url = 'http://127.0.0.1:' + str(server.server_port)
-    print(url, flush=True)
+    print('http://127.0.0.1:' + str(server.server_port), flush=True)
+    print(token, flush=True)   # read by the menu bar app (POST requests need it)
     write_discovery(server.server_port, token)
-    if not args.no_browser:
-        webbrowser.open(url)
+    stop = threading.Event()
+    threading.Thread(target=auto_connect, args=(device, stop), daemon=True).start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
-        device.close()
+        stop.set()
+        with device.lock:
+            device.close()
         server.server_close()
         remove_discovery(token)
 
