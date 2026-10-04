@@ -384,6 +384,7 @@ struct GeneralTab: View {
                 Toggle("로그인할 때 자동 실행", isOn: Binding(get: { store.loginItem }, set: { store.setLogin($0) }))
             } footer: {
                 Text("켜 두면 맥을 켤 때 메뉴바에 얼굴이 바로 나타나요.").font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Section("정보") {
                 LabeledContent("버전", value: "AI Face " + store.version)
@@ -423,6 +424,7 @@ struct SaverTab: View {
                 }
             } footer: {
                 Text(store.saverHint).font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Section {
                 Text("표정이 한동안 안 바뀌면 대기 화면으로 바뀌어요. AI가 새 표정을 보내거나 타이머가 끝나면 다시 얼굴로 돌아와요. 설정은 보드에도 저장돼서 맥이 꺼져 있어도 동작해요.")
@@ -587,6 +589,7 @@ struct AITab: View {
                      ? "연결하면 AI가 대답할 때마다 표정을 골라요. 연결하거나 해제한 뒤에는 그 앱을 완전히 종료(⌘Q)하고 다시 실행하세요. 테두리 색: Claude 주황, GPT 초록, 직접 고르면 흰색."
                      : store.aiNotice)
                     .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Section("다른 앱") {
                 LabeledContent("Claude Code") {
@@ -647,6 +650,7 @@ struct BoardTab: View {
             } footer: {
                 Text("프로젝트의 firmware/ESP32_Display를 컴파일해서 보드에 올려요. Arduino IDE 2가 응용 프로그램 폴더에 있어야 하고, 처음에는 1~2분 걸려요.")
                     .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .formStyle(.grouped)
@@ -659,8 +663,16 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     let store = SettingsStore()
     private var window: NSWindow?
 
+    static let size = NSSize(width: 520, height: 470)
+
     private func tab<V: View>(_ content: V, _ title: String, _ symbol: String) -> NSTabViewItem {
-        let host = NSHostingController(rootView: content.frame(width: 560, height: 480))
+        let size = SettingsWindowController.size
+        let host = NSHostingController(rootView: content.frame(width: size.width, height: size.height))
+        // A fixed size: otherwise the hosting view sizes itself from the forms' ideal width
+        // (long footers on one line) and the window shows it clipped edge to edge.
+        host.sizingOptions = []
+        host.view.frame = NSRect(origin: .zero, size: size)
+        host.preferredContentSize = size
         host.title = title
         let item = NSTabViewItem(viewController: host)
         item.label = title
@@ -679,6 +691,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             tabs.addTabViewItem(tab(BoardTab(store: store), "보드", "cpu"))
             let w = NSWindow(contentViewController: tabs)
             w.styleMask = [.titled, .closable, .miniaturizable]
+            w.setContentSize(SettingsWindowController.size)
             w.isReleasedWhenClosed = false
             w.delegate = self
             w.center()
