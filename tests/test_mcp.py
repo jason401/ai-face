@@ -12,6 +12,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'tests'))
+import isolate  # noqa: E402,F401  (temporary HOME for the whole test run)
 sys.path.insert(0, str(ROOT / 'core'))
 from aiface import mcp_server as esp32_mcp  # noqa: E402
 from aiface import board as esp_display  # noqa: E402
@@ -31,11 +33,11 @@ class ProtocolTests(unittest.TestCase):
         unknown = call('initialize', {'protocolVersion': '1999-01-01'})['result']
         self.assertEqual(unknown['protocolVersion'], esp32_mcp.PROTOCOLS[0])
         tools = {t['name']: t for t in call('tools/list')['result']['tools']}
-        self.assertEqual(set(tools), {'set_expression', 'show_clock', 'start_timer', 'cancel_timer', 'show_photo',
+        self.assertEqual(set(tools), {'set_expression', 'get_expression', 'show_clock', 'start_timer', 'cancel_timer', 'show_photo',
                                       'update_firmware'})
         self.assertIn('red', tools['start_timer']['inputSchema']['properties']['color']['enum'])
         enum = tools['set_expression']['inputSchema']['properties']['emotion']['enum']
-        self.assertEqual(len(enum), 64)
+        self.assertEqual(len(enum), 72)
         self.assertIn('triumph', enum)
         self.assertEqual(call('ping')['result'], {})
 
@@ -162,8 +164,8 @@ class DeliveryTests(unittest.TestCase):
         name = os.ttyname(slave)
         from aiface import moods as face_modes
         sleepy, sleeping = face_modes.idle_moods()
-        replies = {'HELLO': 'OK FACE7', 'BEGIN': 'OK BEGIN', 'FRAME': 'OK FRAME', 'COMMIT': 'OK COMMIT',
-                   'PLAY': 'OK PLAY', 'OWNER': 'OK OWNER', 'TIME': 'OK TIME', 'SAVER': 'OK SAVER', 'PHOTO:LIST': 'OK LIST:0:-1',
+        replies = {'HELLO': 'OK FACE8', 'BEGIN': 'OK BEGIN', 'FRAME': 'OK FRAME', 'COMMIT': 'OK COMMIT',
+                   'PLAY': 'OK PLAY', 'OWNER': 'OK OWNER', 'TIME': 'OK TIME', 'SAVER': 'OK SAVER', 'STYLE': 'OK STYLE', 'PHOTO:LIST': 'OK LIST:0:-1',
                    # sleepy already on the board, sleeping not yet
                    'SUM:3': f'OK SUM:{face_modes.checksum(sleepy)}', 'SUM:8': 'OK SUM:0'}
         seen = []

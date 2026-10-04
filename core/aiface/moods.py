@@ -1,6 +1,6 @@
-"""Moods and board protocol data: the 63 face animations, validation, settings and the
-command lines sent to the ESP32 (firmware protocol FACE7: FACE3 frames + owner ring +
-countdown timer ring + photos + screen saver)."""
+"""Moods and board protocol data: the 71 face animations, validation, settings and the
+command lines sent to the ESP32 (firmware protocol FACE8: FACE3 frames + owner ring +
+countdown timer ring + photos + screen saver + monochrome style + hand/bulb effects)."""
 import json
 import os
 
@@ -9,7 +9,7 @@ from . import paths
 FIELDS = ['move', 'hold', 'left', 'right', 'x', 'y', 'width', 'smile', 'open',
           'brow', 'lift', 'eyes', 'tilt', 'fx', 'color', 'shake']
 LIMITS = [(80,5000),(0,10000),(0,100),(0,100),(-15,15),(-10,10),(10,100),(-28,28),(0,30),
-          (-10,10),(0,12),(0,9),(-10,10),(0,1023),(0,7),(0,6)]
+          (-10,10),(0,12),(0,9),(-10,10),(0,8191),(0,7),(0,6)]
 # FACE3 fields may be missing in modes saved by FACE2; they default to 0.
 OPTIONAL = {'brow','lift','eyes','tilt','fx','color','shake'}
 PATH = paths.DATA / 'face_modes.json'   # user modes from the old editor
@@ -17,7 +17,9 @@ PATH = paths.DATA / 'face_modes.json'   # user modes from the old editor
 # Eye shapes (eyes)
 NORMAL, ARC, CALM, CROSS, HEART, SPIRAL, STAR, DOT, BIG, SQUEEZE = range(10)
 # Effect bits (fx)
-BLUSH, TEAR, SWEAT, ZZZ, HEARTS, ANGER, QUESTION, EXCLAIM, SPARKLE, NOTE = (1 << i for i in range(10))
+BLUSH, TEAR, SWEAT, ZZZ, HEARTS, ANGER, QUESTION, EXCLAIM, SPARKLE, NOTE, WAVE, BULB, PRAY = (1 << i for i in range(13))
+# HELLO reply of the firmware this code talks to.
+PROTOCOL = 'FACE8'
 # Face colors (color)
 WHITE, PINK, BLUE, YELLOW, RED, GREEN, PURPLE, ORANGE = range(8)
 # Who chose the face; the board draws a matching border ring.
@@ -74,7 +76,7 @@ def validate(mode):
 
 
 # ---------------------------------------------------------------------------
-# Emotion catalog: 63 moods + auto. Each entry:
+# Emotion catalog: 71 moods + auto. Each entry:
 # (id, name, icon, group, description, dedicated slot or None, frames)
 # The board has 9 slots: the seven most-used moods keep slots 1-7, "sleeping"
 # keeps slot 9 (idle stage), and every other mood shares slot 8, replaced
@@ -115,6 +117,12 @@ CATALOG = [
   ('greeting','반가움','👋',JOY,'눈썹을 올리고 윙크하며 반겨요',None,[
     F(250,600,lift=8,w=85,s=24,o=14),F(160,400,0,100,lift=8,w=85,s=26,o=8),
     F(200,600,lift=8,w=90,s=26,o=18,eyes=ARC,fx=SPARKLE),F(400,1200,lift=6,w=75,s=20)]),
+  ('cheering','응원','📣',JOY,'눈썹에 힘주고 활짝 웃으며 파이팅!',None,[
+    F(250,500,y=-3,w=90,s=26,o=18,eyes=ARC,lift=6,brow=-4,fx=SPARKLE),F(200,400,y=2,w=85,s=24,o=10,lift=6,brow=-4,fx=SPARKLE),
+    F(250,500,y=-4,w=95,s=26,o=22,eyes=STAR,lift=7,brow=-4,fx=SPARKLE,color=YELLOW),F(200,600,w=85,s=24,o=8,eyes=ARC,lift=6,brow=-3)]),
+  ('farewell','배웅','🖐',JOY,'손을 흔들며 웃는 얼굴로 배웅해요',None,[
+    F(300,900,w=80,s=24,o=8,lift=6,fx=WAVE),F(160,500,100,0,w=80,s=24,o=6,lift=6,fx=WAVE),
+    F(300,1200,w=85,s=24,o=12,eyes=ARC,lift=6,fx=WAVE)]),
   # ----- 사랑·유대 -----
   ('affectionate','다정함','♡',LOVE,'부드러운 미소와 느린 눈인사',None,[
     F(850,1400,65,65,w=75,s=22),F(550,450,w=80,s=24,eyes=ARC,fx=BLUSH),
@@ -155,7 +163,10 @@ CATALOG = [
     F(200,300,y=-4,w=60,s=20,o=6,eyes=BIG,lift=7),F(200,300,y=2,w=60,s=20,o=6,eyes=BIG,lift=7),
     F(200,300,y=-4,w=62,s=22,o=8,eyes=BIG,lift=7,fx=SPARKLE),F(200,300,y=2,w=62,s=22,o=8,eyes=BIG,lift=7),
     F(150,80,0,0,w=60,s=20,lift=7),F(400,900,x=6,y=-3,w=60,s=22,eyes=BIG,lift=8,fx=SPARKLE)]),
-  ('realization','깨달음','💡',WONDER,'멈칫, 번뜩! 하고 알아차려요',None,[
+  ('idea','아이디어','💡',WONDER,'위를 보다가 전구가 반짝, 신이 나요',None,[
+    F(300,500,x=4,y=-6,w=40,s=4,lift=7,fx=BULB),F(200,700,y=-4,w=70,s=20,o=10,lift=8,eyes=BIG,fx=BULB),
+    F(300,900,w=85,s=24,o=16,eyes=STAR,lift=7,fx=BULB|SPARKLE,color=YELLOW)]),
+  ('realization','깨달음','❗',WONDER,'멈칫, 번뜩! 하고 알아차려요',None,[
     F(600,1000,70,70,x=8,y=-6,w=40,s=0,lift=4),F(120,600,w=24,s=0,o=20,lift=11,fx=EXCLAIM),
     F(300,1200,w=75,s=22,o=10,lift=9,fx=EXCLAIM|SPARKLE),F(500,800,w=70,s=20,lift=6)]),
   ('shocked','충격','😱',WONDER,'눈이 점처럼 작아지고 입이 떡 벌어져요',None,[
@@ -167,6 +178,12 @@ CATALOG = [
     F(500,900,55,100,x=6,y=-4,w=40,s=0,brow=4,lift=6,tilt=-6,fx=QUESTION),
     F(140,80,0,0,w=40,s=0,brow=4,lift=6),F(400,1200,90,70,w=38,s=-3,brow=5,lift=7,tilt=4,fx=QUESTION)]),
   # ----- 생각·대화 -----
+  ('determined','결의','💪',MIND,'눈에 힘을 주고 입을 꾹, 이제 해볼게요',None,[
+    F(400,900,60,60,w=50,s=6,lift=5,brow=-5),F(200,250,60,60,y=4,w=50,s=6,lift=5,brow=-5),
+    F(200,250,60,60,y=-1,w=52,s=8,lift=5,brow=-5),F(400,1200,55,55,w=55,s=10,lift=6,brow=-6,fx=SPARKLE)]),
+  ('serious','진지함','😐',MIND,'일자 입에 눈썹을 살짝 모으고 차분하게',None,[
+    F(600,2000,85,85,w=50,s=0,lift=4,brow=-1),F(120,80,0,0,w=50,s=0,lift=4,brow=-1),
+    F(500,1800,85,85,x=-4,w=50,s=-1,lift=4,brow=-2),F(500,1500,85,85,w=48,s=0,lift=5,brow=-1)]),
   ('thinking','생각 중','…',MIND,'위쪽을 바라보며 골똘히 생각해요',None,[
     F(700,2100,80,55,x=9,y=-9,w=40,s=0,lift=6,brow=2,tilt=4),F(140,80,0,0,x=9,y=-9,w=40,s=0,lift=6),
     F(550,1700,70,90,x=-8,y=-7,w=35,s=-3,lift=6,brow=2,tilt=-4),F(650,1100,90,90,w=45,s=5,lift=5)]),
@@ -201,6 +218,9 @@ CATALOG = [
   ('relieved','안도','😮‍💨',REST,'"휴~" 숨을 내쉬고 편안해져요',None,[
     F(600,600,90,90,w=50,s=0,brow=5,lift=5),F(800,900,y=4,w=30,s=0,o=14,eyes=CALM,brow=4,lift=4),
     F(700,1400,y=2,w=60,s=16,eyes=CALM,brow=2,lift=4),F(600,1200,85,85,w=62,s=16)]),
+  ('goodnight','잘 자','🌙',REST,'눈을 감고 살짝 웃으며 잘 자요 인사',None,[
+    F(700,1500,40,40,w=55,s=14),F(600,2500,w=55,s=16,eyes=CALM,fx=ZZZ),
+    F(500,2500,y=2,w=52,s=14,eyes=CALM,fx=ZZZ|BLUSH)]),
   ('sleeping','잠','💤',REST,'눈을 감고 새근새근 잠들어요',SLEEPING_SLOT,[
     F(1500,1000,0,0,y=4,w=24,s=0,o=4,fx=ZZZ),F(1500,1000,0,0,y=6,w=26,s=0,o=10,fx=ZZZ),
     F(1500,1200,0,0,y=4,w=24,s=2,o=2,fx=ZZZ)]),
@@ -228,6 +248,9 @@ CATALOG = [
     F(1500,2200,70,70,x=-12,y=3,w=30,s=-6,brow=5,lift=4,color=BLUE),
     F(1800,2400,70,70,x=12,y=4,w=30,s=-6,brow=5,lift=4,color=BLUE),
     F(500,300,0,0,y=6,w=30,s=-6,brow=5,lift=4,color=BLUE),F(1500,2000,60,60,y=7,w=28,s=-8,brow=6,lift=4,color=PURPLE)]),
+  ('rueful','아쉬움','🥲',SAD,'웃는데 갸웃, 땀 한 방울로 아쉬워해요',None,[
+    F(500,1200,80,80,w=60,s=10,tilt=4,lift=5,brow=4),F(400,1200,x=4,w=58,s=8,tilt=5,eyes=ARC,lift=5,brow=5,fx=SWEAT),
+    F(120,80,0,0,x=4,w=58,s=8,tilt=5,lift=5,brow=5),F(500,1400,75,75,w=60,s=10,tilt=3,lift=5,brow=4)]),
   ('apologetic','미안함','🙇',SAD,'고개를 숙이고 진땀을 흘려요',None,[
     F(600,800,80,80,y=3,w=40,s=-6,brow=8,lift=5),F(700,1000,y=9,w=36,s=-8,eyes=CALM,brow=8,lift=5,fx=SWEAT),
     F(500,800,75,75,x=-5,y=5,w=38,s=-4,o=4,brow=8,lift=5,fx=SWEAT),F(150,80,0,0,y=4,w=38,s=-6,brow=7,lift=5)]),
@@ -253,6 +276,9 @@ CATALOG = [
     F(120,400,x=-10,w=40,s=-4,o=10,eyes=DOT,lift=9,fx=SWEAT|BLUSH),F(120,400,x=10,w=40,s=-4,o=10,eyes=DOT,lift=9,fx=SWEAT|BLUSH),
     F(100,60,0,0,w=40,s=-4,o=10,lift=9,fx=BLUSH),F(150,500,w=44,s=6,o=6,eyes=SQUEEZE,lift=8,fx=SWEAT|BLUSH,shake=1),
     F(400,900,90,90,x=-6,y=4,w=40,s=4,lift=7,fx=BLUSH)]),
+  ('hopeful','조마조마','🤞',TENSE,'두 손을 모으고 눈을 질끈, 잘 되길 빌어요',None,[
+    F(300,900,w=30,s=2,eyes=SQUEEZE,lift=5,brow=5,fx=PRAY,shake=1),F(250,600,70,70,x=-3,w=32,s=0,lift=6,brow=6,fx=PRAY),
+    F(300,1000,w=30,s=2,eyes=SQUEEZE,lift=5,brow=5,fx=PRAY|SWEAT,shake=1)]),
   ('awkward','민망함','😅',TENSE,'땀 한 방울과 함께 멋쩍게 웃어요',None,[
     F(400,1400,w=70,s=14,eyes=ARC,tilt=4,fx=SWEAT),F(500,900,80,80,x=10,w=60,s=8,brow=4,lift=5,tilt=5,fx=SWEAT),
     F(150,60,0,0,w=60,s=8,tilt=5),F(400,1200,w=72,s=16,eyes=ARC,tilt=3,fx=SWEAT|BLUSH)]),
@@ -423,7 +449,8 @@ def load_settings():
     if not (isinstance(timer,dict) and isinstance(timer.get('end'),(int,float)) and type(timer.get('total')) is int
             and timer.get('color') in TIMER_COLORS):
         timer=None
-    return dict(saver=saver,timer=timer)
+    mono=data.get('mono') is True   # monochrome style: gray face, owner shown by ring pattern
+    return dict(saver=saver,timer=timer,mono=mono)
 
 
 def save_settings(**changes):
@@ -435,13 +462,18 @@ def save_settings(**changes):
     return data
 
 
+def style_command(mono):
+    if type(mono) is not bool: raise ValueError('흑백 모드 값이 올바르지 않습니다.')
+    return f'STYLE:{int(mono)}','OK STYLE'
+
+
 def owner_command(owner):
     if owner not in OWNERS: raise ValueError('표정을 바꾼 주체는 user, claude, gpt 중 하나여야 합니다.')
     return f'OWNER:{OWNERS.index(owner)}','OK OWNER'
 
 
 def emotions():
-    """Ready-to-play moods (63 + auto); every mood is its own animation loop.
+    """Ready-to-play moods (71 + auto); every mood is its own animation loop.
     Stylized character states, not diagnostic human facial expressions."""
     return [dict(id=m['id'],description=m['description'],icon=m['icon'],group=m['group'],
                  **validate(dict(slot=m['slot'],name=m['name'],frames=m['frames'])))

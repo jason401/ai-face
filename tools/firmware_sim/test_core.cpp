@@ -21,7 +21,7 @@ int main(){
   uint32_t s0; LittleFS.files["/photo.raw"]=makeImg(99,s0); prefs.putBytes("idle",&s0,4);
   setup();
   CHECK(LittleFS.files.count("/p0.raw") && !LittleFS.files.count("/photo.raw") && currentPhoto==0 && !prefs.isKey("idle"));
-  CHECK(cmd("HELLO")=="OK FACE7");
+  CHECK(cmd("HELLO")=="OK FACE8");
   CHECK(cmd("PHOTO:LIST")=="OK LIST:1:0");
   for(int s:{0,3,8}) upload(s,3);
   CHECK(cmd("SAVER:60:0:0:60")=="OK SAVER");

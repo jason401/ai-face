@@ -3,7 +3,8 @@
 An AI chat app (Claude desktop, Claude Code, or any client that supports local
 stdio MCP servers) launches this file and can then call:
 
-  set_expression(emotion)        show one of the 64 moods on the round LCD
+  set_expression(emotion)        show one of the 71 moods (menu bar face and round LCD)
+  get_expression()               the current face and recent expression history (who, what, when)
   show_clock()                   switch the LCD back to the clock
   start_timer(minutes, color)    countdown ring on the LCD (pomodoro, meetings, ...)
   cancel_timer()                 remove the countdown ring
@@ -23,17 +24,20 @@ is forwarded to it over localhost. Otherwise this server opens the USB port
 itself, sends the animation, and closes the port again right away, so the
 controller app can still be started at any time.
 """
+import datetime
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.request
 
+from . import history
 from . import moods as face_modes
 from . import paths
 
 SERVER_NAME = 'esp32-face'
-SERVER_VERSION = '1.5.0'
+SERVER_VERSION = '1.6.0'
 PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05']
 # Written by esp_display.py while it runs (outside ~/Documents, see install_mcp.py).
 DISCOVERY = paths.DISCOVERY
@@ -58,7 +62,10 @@ INSTRUCTIONS = (
     "start_timer / cancel_timer are only for when the user asks for a timer, a pomodoro, "
     "or a countdown (e.g. to their next meeting); still call set_expression as usual. "
     "show_photo is only for when the user asks to see their photo on the display; it stays "
-    "until your next set_expression, so in that reply skip set_expression."
+    "until your next set_expression, so in that reply skip set_expression. "
+    "get_expression reads the current face and the recent history of faces (yours, the other "
+    "AI's and the user's picks); use it when the user asks about the face or how the day went, "
+    "or when reacting to the face another AI just showed would make your reply better."
 )
 
 
@@ -144,6 +151,25 @@ TOOLS = [
                         "firmware was changed."),
         'inputSchema': {'type': 'object', 'properties': {}, 'additionalProperties': False},
         'annotations': {'readOnlyHint': False, 'destructiveHint': False,
+                        'idempotentHint': True, 'openWorldHint': False},
+    },
+    {
+        'name': 'get_expression',
+        'title': 'AI Face 표정 기록 보기',
+        'description': ("Read what the user's AI Face shows now and the recent history of expressions: "
+                        "which mood, who chose it (claude, gpt, or user = picked by hand) and when, plus "
+                        "today's counts per AI and their most frequent moods. Only moods are recorded, "
+                        "never conversation content. Use when the user asks about the face, today's "
+                        "expressions, or to react to another AI's face."),
+        'inputSchema': {
+            'type': 'object',
+            'properties': {
+                'limit': {'type': 'integer', 'minimum': 1, 'maximum': 50,
+                          'description': 'How many recent changes to list (default 10).'},
+            },
+            'additionalProperties': False,
+        },
+        'annotations': {'readOnlyHint': True, 'destructiveHint': False,
                         'idempotentHint': True, 'openWorldHint': False},
     },
     {
@@ -251,7 +277,10 @@ def set_expression(emotion):
     if mood is None:
         raise DeliveryError(f'알 수 없는 감정입니다: {emotion}')
     who = agent()
-    deliver({'action': 'emotion', 'id': emotion, 'agent': who}, lambda d: d.upload(mood, who))
+    def direct(device):   # the app is not running: log it here (the app logs its own)
+        device.upload(mood, who)
+        history.record(who, emotion)
+    deliver({'action': 'emotion', 'id': emotion, 'agent': who}, direct)
     return f"ESP32 표정을 '{mood['name']}'({emotion})(으)로 바꿨습니다."
 
 
@@ -290,6 +319,48 @@ def update_firmware():
         raise DeliveryError(str(exc))
     finally:
         device.close()
+
+
+WHO = {'claude': 'Claude', 'gpt': 'GPT', 'user': '사용자(직접)'}
+
+
+def get_expression(limit=10, now=None):
+    now = time.time() if now is None else now
+    if type(limit) is not int or not 1 <= limit <= 50:
+        limit = 10
+    lines = []
+    view = None
+    app = _controller()
+    if app:
+        try:
+            status, view = _request(app[0], app[1], 'GET', '/view', timeout=5)
+            if status != 200:
+                view = None
+        except (urllib.error.URLError, ConnectionError, OSError, ValueError):
+            view = None
+    recent = history.recent(limit, now)
+    if view:
+        what = view.get('name') or view.get('emotion') or view.get('kind')
+        lines.append(f"지금 얼굴: {what} (고른 쪽: {WHO.get(view.get('owner'), view.get('owner'))}, "
+                     f"보드 {'연결됨' if view.get('board') else '없음'})")
+    elif recent:
+        e = recent[0]
+        lines.append(f"지금 얼굴(앱 꺼짐, 마지막 기록): {BY_ID.get(e['emotion'], {}).get('name', e['emotion'])} "
+                     f"(고른 쪽: {WHO[e['owner']]})")
+    lines.append('')
+    lines.append(f'최근 {len(recent)}번의 변화 (최신순):')
+    for e in recent:
+        stamp = datetime.datetime.fromtimestamp(e['t']).strftime('%m-%d %H:%M')
+        name = BY_ID.get(e['emotion'], {}).get('name', e['emotion'])
+        lines.append(f"- {stamp} {WHO[e['owner']]}: {name} ({e['emotion']})")
+    today = history.summary(datetime.date.fromtimestamp(now).isoformat(), MOODS)
+    lines.append('')
+    lines.append(f"오늘 합계 {today['total']}번:")
+    for owner in history.OWNERS:
+        info = today['owners'][owner]
+        top = ', '.join(f"{t['name']} {t['count']}" for t in info['top']) or '-'
+        lines.append(f"- {WHO[owner]}: {info['count']}번 (많이 지은 표정: {top})")
+    return '\n'.join(lines)
 
 
 def show_photo():
@@ -348,6 +419,8 @@ def handle(message):
                 text = set_expression(args['emotion'])
             elif name == 'show_clock':
                 text = show_clock()
+            elif name == 'get_expression':
+                text = get_expression(args.get('limit', 10))
             elif name == 'start_timer':
                 text = start_timer(args.get('minutes'), args.get('color', 'blue'))
             elif name == 'cancel_timer':

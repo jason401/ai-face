@@ -1,4 +1,4 @@
-"""The ESP32 board over USB serial (FACE7 protocol) plus what the face shows when no
+"""The ESP32 board over USB serial (FACE8 protocol) plus what the face shows when no
 board is attached (the menu bar). Python standard library only."""
 import datetime
 import importlib
@@ -11,6 +11,7 @@ import threading
 import time
 
 from . import flasher
+from . import history
 from . import moods as face_modes
 
 
@@ -22,7 +23,7 @@ def ports():
 
 class Device:
     def __init__(self, expect_ack=True):
-        # FACE7 requires acknowledgments; older firmware must be updated once.
+        # FACE8 requires acknowledgments; older firmware must be updated once.
         self.expect_ack = expect_ack
         self.fd = None
         self.port = ''
@@ -85,7 +86,7 @@ class Device:
                 if not chunk:
                     raise OSError('USB 연결이 끊어졌습니다.')
                 self.buffer = (self.buffer + chunk)[-8192:]
-        raise TimeoutError('얼굴 엔진(FACE7) 응답이 없습니다. 새 ESP32_Display.ino를 한 번 업로드하고 Serial Monitor를 닫아 주세요.')
+        raise TimeoutError(f'얼굴 엔진({face_modes.PROTOCOL}) 응답이 없습니다. 새 ESP32_Display.ino를 한 번 업로드하고 Serial Monitor를 닫아 주세요.')
 
     def connect(self, port):
         if port not in ports():
@@ -109,7 +110,7 @@ class Device:
             termios.tcflush(fd, termios.TCIOFLUSH)
             self.buffer = b''
             self.port = port
-            self.exchange('HELLO', 'OK FACE7')
+            self.exchange('HELLO', 'OK ' + face_modes.PROTOCOL)
             self.prepare()
             self.message = '얼굴 엔진 연결 완료 · 재생 중인 표정은 유지됩니다.'
         except Exception:
@@ -159,6 +160,7 @@ class Device:
                     self.exchange(command, expected)
         settings = face_modes.load_settings()
         self.exchange(*face_modes.saver_command(settings['saver']))
+        self.exchange(*face_modes.style_command(settings['mono']))
         self.refresh_photos()
         timer = settings['timer']
         if timer:
@@ -253,6 +255,13 @@ class Device:
         face_modes.save_settings(saver=saver)
         self.message = '대기 화면 설정을 저장했습니다.'
 
+    def set_style(self, mono):
+        command = face_modes.style_command(mono)   # validate first
+        if self.fd is not None:       # otherwise sent when a board connects (prepare)
+            self.exchange(*command)
+        face_modes.save_settings(mono=mono)
+        self.message = '흑백 모드를 켰습니다.' if mono else '흑백 모드를 껐습니다.'
+
     def set_mode(self, mode, manual=None):
         if mode == 'FIRE':
             if self.fd is not None:
@@ -299,6 +308,7 @@ class Device:
             except OSError:
                 self.close()
         self.owner, self.emotion, self.screen, self.changed = owner, preset['id'], 'face', time.time()
+        history.record(owner, preset['id'])
         self.mode = preset['name']
         self.message = preset['name'] + (' 모드 재생 중 · 표정은 자동으로 변합니다.' if self.fd is not None
                                           else ' · 보드 없이 메뉴바에 표시 중')
@@ -310,22 +320,39 @@ class Device:
         saver, timer = settings['saver'], settings['timer']
         names = {m['id']: m['name'] for m in face_modes.emotions()}
         kind, emotion = self.screen, self.emotion or 'sleeping'
+        photo, clock = -1, False
+        if kind == 'photo':
+            photo = self.current_photo
         if kind == 'face' and saver['type'] != 'off':
             changed = self.changed
             if timer and timer['end'] <= now:
                 changed = max(changed, timer['end'])   # the alarm woke the face, as on the board
             idle, after = now - changed, saver['after'] * 60
             if idle >= after:
-                # Menu bar: clock and campfire as on the board; photo savers are the sleeping face.
+                # Menu bar: the same saver as the board. Photos come from the Mac copies of
+                # the board's pictures; with none, the sleeping face stands in (as on the board).
+                stored = self.photo_ids()
                 if saver['type'] in ('clock', 'fire'):
                     kind = saver['type']
+                elif saver['type'] in ('photo', 'slideshow') and stored:
+                    kind, clock = 'photo', saver['clock']
+                    if saver['type'] == 'slideshow':
+                        photo = stored[int((idle - after) // saver['slide']) % len(stored)]
+                    else:
+                        photo = self.current_photo if self.current_photo in stored else stored[0]
                 else:
                     emotion = 'sleeping' if saver['type'] != 'sleep' or idle >= 2 * after else 'sleepy'
         left = max(0, int(round(timer['end'] - now))) if timer else 0
-        kind = kind if kind in ('face', 'clock', 'fire') else 'face'
-        return dict(kind=kind,
+        if kind == 'photo' and photo not in self.photo_ids():
+            kind = 'face'
+        kind = kind if kind in ('face', 'clock', 'fire', 'photo') else 'face'
+        try:
+            photo_v = int(face_modes.photo_copy(photo).stat().st_mtime) if kind == 'photo' else 0
+        except OSError:
+            photo_v = 0
+        return dict(kind=kind, photo=photo if kind == 'photo' else -1, photo_v=photo_v, clock=clock, mono=settings['mono'],
                     emotion=emotion if kind == 'face' else '',
-                    name={'clock': '시계', 'fire': '모닥불'}.get(kind) or names.get(emotion, emotion),
+                    name={'clock': '시계', 'fire': '모닥불', 'photo': '사진'}.get(kind) or names.get(emotion, emotion),
                     owner=self.owner or 'user', board=self.fd is not None,
                     timer=dict(left=left, total=timer['total'], color=timer['color']) if left else None)
 
@@ -341,9 +368,14 @@ class Device:
             self.lock.release()
         return dict(ports=available, connected=self.fd is not None and self.port in available,
                     port=self.port, message=self.message, busy=busy, flashing=self.flashing,
-                    paused=self.paused, saver=settings['saver'], photos=list(self.photos),
+                    paused=self.paused, saver=settings['saver'], mono=settings['mono'], photos=list(self.photos),
                     current_photo=self.current_photo, owner=self.owner or 'user',
                     timer=dict(left=left, total=timer['total'], color=timer['color']) if left else None)
+
+    def photo_ids(self):
+        """Board photos with a copy on this Mac (the board's list when connected)."""
+        ids = self.photos if self.fd is not None else range(face_modes.MAX_PHOTOS)
+        return [i for i in ids if face_modes.photo_copy(i).is_file()]
 
     def state(self):
         available = ports()

@@ -28,6 +28,38 @@ func minutesText(_ m: Int) -> String {
     return "\(m)분"
 }
 
+struct OwnerStats: Equatable {
+    var count = 0
+    var top: [String] = []            // "행복 ×3"
+    var groups: [String: Int] = [:]   // emotion group -> count
+}
+
+struct TimelineEvent: Identifiable, Equatable {
+    let id: Int
+    let t: Double                     // seconds since 1970
+    let owner: String
+    let name: String
+}
+
+struct WeekRow: Identifiable, Equatable {
+    let id: String                    // yyyy-MM-dd
+    let label: String                 // weekday
+    let counts: [String: Int]         // owner -> changes
+}
+
+let OWNERS = ["claude", "gpt", "user"]
+let OWNER_LABEL = ["claude": "Claude", "gpt": "GPT", "user": "직접"]
+let OWNER_COLOR: [String: Color] = [
+    "claude": Color(red: 0xD9 / 255.0, green: 0x77 / 255.0, blue: 0x57 / 255.0),
+    "gpt": Color(red: 0x10 / 255.0, green: 0xA3 / 255.0, blue: 0x7F / 255.0),
+    "user": Color.gray,
+]
+let GROUP_ORDER = ["기쁨", "사랑·유대", "놀람·관심", "생각·대화", "평온·휴식", "슬픔", "불안·긴장", "분노·불쾌", "몸 상태"]
+let GROUP_COLOR: [String: Color] = [
+    "기쁨": .yellow, "사랑·유대": .pink, "놀람·관심": .orange, "생각·대화": .blue, "평온·휴식": .mint,
+    "슬픔": .indigo, "불안·긴장": .purple, "분노·불쾌": .red, "몸 상태": .green,
+]
+
 struct LibraryItem: Identifiable, Hashable {
     let name: String
     let mtime: Int
@@ -67,7 +99,16 @@ final class SettingsStore: NSObject, ObservableObject {
     @Published var aiNotice = ""
     // General
     @Published var loginItem = false
+    @Published var mono = false
     @Published var version = ""
+    // Expression history (기록 tab)
+    @Published var historyDay = Calendar.current.startOfDay(for: Date())
+    @Published var dayTotal = 0
+    @Published var dayStats: [String: OwnerStats] = [:]
+    @Published var timeline: [TimelineEvent] = []
+    @Published var week: [WeekRow] = []
+    private var historyKey = ""
+    private var weekKey = ""
 
     private var saverLoaded = false
     private var timer: Timer?
@@ -107,6 +148,7 @@ final class SettingsStore: NSObject, ObservableObject {
     }
 
     func refresh() {
+        loadHistory()
         API.shared.getJSON("status") { [weak self] json in
             guard let self = self, let s = json as? [String: Any] else { return }
             self.connected = (s["connected"] as? Bool) ?? false
@@ -115,6 +157,7 @@ final class SettingsStore: NSObject, ObservableObject {
             self.message = (s["message"] as? String) ?? ""
             self.flashing = (s["flashing"] as? Bool) ?? false
             self.version = (s["version"] as? String) ?? ""
+            self.mono = (s["mono"] as? Bool) ?? false
             let photos = ((s["photos"] as? [NSNumber]) ?? []).map { $0.intValue }
             let current = (s["current_photo"] as? NSNumber)?.intValue ?? -1
             if photos != self.photos { self.photos = photos }
@@ -139,6 +182,89 @@ final class SettingsStore: NSObject, ObservableObject {
                 self.libraryKey = key
                 self.library = items
                 self.loadThumbs()
+            }
+        }
+    }
+
+    // MARK: History
+
+    static let dayFormat: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
+
+    var historyDayText: String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "ko_KR")
+        f.dateFormat = "M월 d일 (E)"
+        return f.string(from: historyDay)
+    }
+
+    var isToday: Bool { return Calendar.current.isDateInToday(historyDay) }
+
+    func moveDay(_ days: Int) {
+        let next = Calendar.current.date(byAdding: .day, value: days, to: historyDay) ?? historyDay
+        if next > Date() { return }
+        historyDay = Calendar.current.startOfDay(for: next)
+        historyKey = ""
+        weekKey = ""
+        loadHistory()
+    }
+
+    func goToday() {
+        historyDay = Calendar.current.startOfDay(for: Date())
+        historyKey = ""
+        weekKey = ""
+        loadHistory()
+    }
+
+    func loadHistory() {
+        let day = SettingsStore.dayFormat.string(from: historyDay)
+        API.shared.get("history?day=" + day) { [weak self] data in
+            guard let self = self, let data = data else { return }
+            let key = String(decoding: data, as: UTF8.self)
+            if key == self.historyKey { return }
+            self.historyKey = key
+            guard let s = (try? JSONSerialization.jsonObject(with: data, options: [])) as? [String: Any] else { return }
+            self.dayTotal = (s["total"] as? NSNumber)?.intValue ?? 0
+            var stats: [String: OwnerStats] = [:]
+            let owners = (s["owners"] as? [String: Any]) ?? [:]
+            for owner in OWNERS {
+                let o = (owners[owner] as? [String: Any]) ?? [:]
+                var st = OwnerStats()
+                st.count = (o["count"] as? NSNumber)?.intValue ?? 0
+                st.top = ((o["top"] as? [[String: Any]]) ?? []).map { item in
+                    "\((item["name"] as? String) ?? "") ×\((item["count"] as? NSNumber)?.intValue ?? 0)"
+                }
+                for (g, n) in (o["groups"] as? [String: Any]) ?? [:] {
+                    st.groups[g] = (n as? NSNumber)?.intValue ?? 0
+                }
+                stats[owner] = st
+            }
+            self.dayStats = stats
+            let events = (s["timeline"] as? [[String: Any]]) ?? []
+            self.timeline = events.enumerated().map { pair in
+                let e = pair.element
+                return TimelineEvent(id: pair.offset, t: (e["t"] as? NSNumber)?.doubleValue ?? 0,
+                                     owner: (e["owner"] as? String) ?? "user", name: (e["name"] as? String) ?? "")
+            }
+        }
+        API.shared.get("history/week?day=" + day) { [weak self] data in
+            guard let self = self, let data = data else { return }
+            let key = String(decoding: data, as: UTF8.self)
+            if key == self.weekKey { return }
+            self.weekKey = key
+            let rows = ((try? JSONSerialization.jsonObject(with: data, options: [])) as? [[String: Any]]) ?? []
+            let weekday = DateFormatter()
+            weekday.locale = Locale(identifier: "ko_KR")
+            weekday.dateFormat = "E"
+            self.week = rows.map { r in
+                let d = (r["day"] as? String) ?? ""
+                var counts: [String: Int] = [:]
+                for owner in OWNERS { counts[owner] = (r[owner] as? NSNumber)?.intValue ?? 0 }
+                let label = SettingsStore.dayFormat.date(from: d).map { weekday.string(from: $0) } ?? d
+                return WeekRow(id: d, label: label, counts: counts)
             }
         }
     }
@@ -336,6 +462,13 @@ final class SettingsStore: NSObject, ObservableObject {
 
     // MARK: General
 
+    func setMono(_ on: Bool) {
+        mono = on
+        API.shared.call("style", ["mono": on]) { [weak self] ok, reply in
+            if !ok { self?.mono = !on; self?.notice = (reply["message"] as? String) ?? "" }
+        }
+    }
+
     func setLogin(_ on: Bool) {
         LoginItem.enabled = on
         loginItem = LoginItem.enabled
@@ -384,6 +517,13 @@ struct GeneralTab: View {
                 Toggle("로그인할 때 자동 실행", isOn: Binding(get: { store.loginItem }, set: { store.setLogin($0) }))
             } footer: {
                 Text("켜 두면 맥을 켤 때 메뉴바에 얼굴이 바로 나타나요.").font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Section {
+                Toggle("흑백 모드", isOn: Binding(get: { store.mono }, set: { store.setMono($0) }))
+            } footer: {
+                Text("얼굴을 흑백으로 그리고, 누가 고른 표정인지 테두리 무늬로 보여줘요. 직접 = 실선, Claude = 짧은 점선, GPT = 긴 조각 6개. 메뉴바와 보드 둘 다 바뀌어요.")
+                    .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Section("정보") {
@@ -687,6 +827,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             tabs.addTabViewItem(tab(GeneralTab(store: store), "일반", "gearshape"))
             tabs.addTabViewItem(tab(SaverTab(store: store), "대기 화면", "moon.zzz"))
             tabs.addTabViewItem(tab(PhotosTab(store: store), "사진", "photo.on.rectangle"))
+            tabs.addTabViewItem(tab(HistoryTab(store: store), "기록", "chart.bar"))
             tabs.addTabViewItem(tab(AITab(store: store), "AI 연결", "sparkles"))
             tabs.addTabViewItem(tab(BoardTab(store: store), "보드", "cpu"))
             let w = NSWindow(contentViewController: tabs)
@@ -704,5 +845,178 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
     func windowWillClose(_ notification: Notification) {
         store.stop()
+    }
+}
+
+
+// MARK: - 기록 tab
+
+struct HistoryTab: View {
+    @ObservedObject var store: SettingsStore
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    Button { store.moveDay(-1) } label: { Image(systemName: "chevron.left") }
+                    Text(store.historyDayText).font(.headline).frame(minWidth: 110)
+                    Button { store.moveDay(1) } label: { Image(systemName: "chevron.right") }
+                        .disabled(store.isToday)
+                    Spacer()
+                    if !store.isToday { Button("오늘") { store.goToday() } }
+                    Text("총 \(store.dayTotal)번").foregroundStyle(.secondary)
+                }
+                HStack(spacing: 10) {
+                    ForEach(OWNERS, id: \.self) { owner in ownerCard(owner) }
+                }
+                section("감정 분포") { distribution }
+                section("하루 타임라인") { TimelineStrip(events: store.timeline, day: store.historyDay) }
+                section("최근 7일") { WeekChart(rows: store.week) }
+                Text("표정이 바뀔 때마다 시각, 누가 골랐는지, 무슨 표정인지만 맥에 저장해요. 대화 내용은 저장하지 않아요.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(20)
+        }
+    }
+
+    func section<Content: View>(_ title: String, @ViewBuilder _ content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title).font(.subheadline.weight(.semibold))
+            content()
+        }
+    }
+
+    func ownerCard(_ owner: String) -> some View {
+        let s = store.dayStats[owner] ?? OwnerStats()
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Circle().fill(OWNER_COLOR[owner] ?? .gray).frame(width: 8, height: 8)
+                Text(OWNER_LABEL[owner] ?? owner).font(.caption).foregroundStyle(.secondary)
+            }
+            Text("\(s.count)").font(.system(size: 24, weight: .semibold)).monospacedDigit()
+            ForEach(s.top, id: \.self) { line in
+                Text(line).font(.caption).lineLimit(1)
+            }
+            if s.top.isEmpty { Text("-").font(.caption).foregroundStyle(.secondary) }
+            Spacer(minLength: 0)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, minHeight: 110, alignment: .topLeading)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Color.secondary.opacity(0.08)))
+    }
+
+    var distribution: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(OWNERS, id: \.self) { owner in
+                let s = store.dayStats[owner] ?? OwnerStats()
+                if s.count > 0 {
+                    HStack(spacing: 8) {
+                        Text(OWNER_LABEL[owner] ?? owner).font(.caption).frame(width: 44, alignment: .leading)
+                        GroupBar(groups: s.groups, total: s.count)
+                    }
+                }
+            }
+            if store.dayTotal == 0 {
+                Text("이 날은 기록이 없어요.").font(.caption).foregroundStyle(.secondary)
+            } else {
+                Legend()
+            }
+        }
+    }
+}
+
+struct GroupBar: View {
+    let groups: [String: Int]
+    let total: Int
+
+    var body: some View {
+        GeometryReader { geo in
+            HStack(spacing: 1) {
+                ForEach(GROUP_ORDER + ["기타"], id: \.self) { g in
+                    let n = groups[g] ?? 0
+                    if n > 0 {
+                        Rectangle().fill(GROUP_COLOR[g] ?? .gray)
+                            .frame(width: max(2, geo.size.width * CGFloat(n) / CGFloat(max(1, total)) - 1))
+                            .help("\(g) \(n)번")
+                    }
+                }
+            }
+        }
+        .frame(height: 14)
+        .clipShape(RoundedRectangle(cornerRadius: 4))
+    }
+}
+
+struct Legend: View {
+    var body: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 84), spacing: 6)], alignment: .leading, spacing: 4) {
+            ForEach(GROUP_ORDER, id: \.self) { g in
+                HStack(spacing: 4) {
+                    RoundedRectangle(cornerRadius: 2).fill(GROUP_COLOR[g] ?? .gray).frame(width: 10, height: 10)
+                    Text(g).font(.caption2).foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+}
+
+/// 24 hours left to right; every face change is a tick in the color of who chose it.
+struct TimelineStrip: View {
+    let events: [TimelineEvent]
+    let day: Date
+
+    var body: some View {
+        VStack(spacing: 2) {
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 4).fill(Color.secondary.opacity(0.08))
+                    ForEach(events) { e in
+                        let start = day.timeIntervalSince1970
+                        let x = geo.size.width * CGFloat(max(0, min(86400, e.t - start)) / 86400)
+                        Rectangle().fill(OWNER_COLOR[e.owner] ?? .gray)
+                            .frame(width: 2, height: geo.size.height - 6)
+                            .offset(x: min(geo.size.width - 2, x))
+                            .help(e.name)
+                    }
+                }
+            }
+            .frame(height: 30)
+            HStack {
+                ForEach(["0시", "6시", "12시", "18시", "24시"], id: \.self) { label in
+                    Text(label).font(.caption2).foregroundStyle(.secondary)
+                    if label != "24시" { Spacer() }
+                }
+            }
+        }
+    }
+}
+
+/// Changes per day for the last 7 days, stacked by who chose the face.
+struct WeekChart: View {
+    let rows: [WeekRow]
+
+    var body: some View {
+        let most = max(1, rows.map { r in OWNERS.reduce(0) { $0 + (r.counts[$1] ?? 0) } }.max() ?? 1)
+        return HStack(alignment: .bottom, spacing: 10) {
+            ForEach(rows) { r in
+                VStack(spacing: 4) {
+                    let total = OWNERS.reduce(0) { $0 + (r.counts[$1] ?? 0) }
+                    Text(total > 0 ? "\(total)" : "").font(.caption2).foregroundStyle(.secondary)
+                    VStack(spacing: 1) {
+                        ForEach(OWNERS.reversed(), id: \.self) { owner in
+                            let n = r.counts[owner] ?? 0
+                            if n > 0 {
+                                Rectangle().fill(OWNER_COLOR[owner] ?? .gray)
+                                    .frame(height: max(2, 90 * CGFloat(n) / CGFloat(most)))
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 90, alignment: .bottom)
+                    Text(r.label).font(.caption2)
+                }
+            }
+        }
     }
 }
