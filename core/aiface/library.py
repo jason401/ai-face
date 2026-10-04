@@ -10,6 +10,7 @@ import subprocess
 import unicodedata
 
 from . import paths
+from .i18n import T
 
 FOLDER = paths.LIBRARY
 LEGACY = paths.LEGACY_PROJECT / '사진 보관함'   # where the ESP32-era app kept them
@@ -33,6 +34,12 @@ def migrate():
     """First run after the move: copy pictures from the old project folder (once)."""
     if FOLDER.exists():
         return
+    try:
+        if paths.LIBRARY_KO.is_dir():   # renamed from the Korean-only versions
+            paths.LIBRARY_KO.rename(FOLDER)
+            return
+    except OSError:
+        pass
     try:
         old = [p for p in LEGACY.iterdir() if is_image(p)]
     except OSError:
@@ -59,14 +66,14 @@ def listing():
 def path_of(name):
     """The file for a listed name, or ValueError (no paths outside the folder)."""
     if not isinstance(name, str) or not name or '/' in name or '\\' in name or name.startswith('.'):
-        raise ValueError('사진 이름이 올바르지 않습니다.')
+        raise ValueError(T('사진 이름이 올바르지 않습니다.', 'Invalid photo name.'))
     try:
         for p in FOLDER.iterdir():
             if _norm(p.name) == _norm(name) and is_image(p):
                 return p
     except OSError:
         pass
-    raise ValueError('보관함에 그 사진이 없습니다.')
+    raise ValueError(T('보관함에 그 사진이 없습니다.', 'That photo is not in the library.'))
 
 
 def read(name):
@@ -87,7 +94,7 @@ def add(name, data):
     """Save an original. The same picture again is not duplicated; a different picture
     with a taken name gets ' (2)', ' (3)', ... Returns the stored name."""
     if not data or len(data) > MAX_BYTES:
-        raise ValueError('사진 파일이 비어 있거나 너무 큽니다 (최대 60MB).')
+        raise ValueError(T('사진 파일이 비어 있거나 너무 큽니다 (최대 60MB).', 'The photo file is empty or too big (max 60 MB).'))
     FOLDER.mkdir(parents=True, exist_ok=True)
     digest = hashlib.sha1(data).hexdigest()
     for p in FOLDER.iterdir():

@@ -7,6 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'core'))
 from aiface import integrations  # noqa: E402
+from aiface.i18n import T  # noqa: E402
 
 
 def main():
@@ -15,22 +16,23 @@ def main():
             for target in integrations.TARGETS:
                 integrations.TARGETS[target][2]()
             integrations.remove_runtime()
-            print('제거 완료: esp32-face 등록과 서버 파일을 지웠습니다. 설정과 사진 보관함은 그대로입니다.')
-            print('Claude 데스크톱을 완전히 종료(Cmd+Q)한 뒤 다시 실행하세요.')
-            print('\n[Claude Code에 등록했었다면 터미널에서]  claude mcp remove esp32-face')
+            print(T('제거 완료: esp32-face 등록과 서버 파일을 지웠습니다. 설정과 사진 보관함은 그대로입니다.',
+                    'Removed: the esp32-face registrations and server files. Settings and photos are kept.'))
+            print(T('Claude 데스크톱을 완전히 종료(Cmd+Q)한 뒤 다시 실행하세요.', 'Quit Claude desktop (Cmd+Q) and open it again.'))
+            print(T('\n[Claude Code에 등록했었다면 터미널에서]', '\n[If you added it to Claude Code, in a terminal]') + '  claude mcp remove esp32-face')
             return 0
         integrations.copy_runtime(ROOT)
         integrations.claude_install()
-        print('Claude 데스크톱 등록 완료:', integrations.server_path())
+        print(T('Claude 데스크톱 등록 완료:', 'Connected to Claude desktop:'), integrations.server_path())
         if integrations.codex_available():
             integrations.codex_install()
-            print('Codex 등록 완료 (테두리 초록색)')
+            print(T('Codex 등록 완료 (테두리 초록색)', 'Connected to Codex (green ring)'))
     except (OSError, ValueError) as exc:
-        print('실패:', exc)
+        print(T('실패:', 'Failed:'), exc)
         return 1
     server = integrations.server_path()
-    print('\nClaude 데스크톱(과 Codex)을 완전히 종료(Cmd+Q)한 뒤 다시 실행하세요.')
-    print('\n[Claude Code에서도 쓰려면 터미널에서]')
+    print(T('\nClaude 데스크톱(과 Codex)을 완전히 종료(Cmd+Q)한 뒤 다시 실행하세요.', '\nQuit Claude desktop (and Codex) with Cmd+Q and open them again.'))
+    print(T('\n[Claude Code에서도 쓰려면 터미널에서]', '\n[For Claude Code, in a terminal]'))
     print(f"  claude mcp add esp32-face -e ESP32_AGENT=claude -- {integrations.PYTHON} '{server}'")
     return 0
 
@@ -38,5 +40,5 @@ def main():
 if __name__ == '__main__':
     code = main()
     if sys.stdin.isatty():
-        input('\n엔터를 누르면 창이 닫힙니다.')
+        input(T('\n엔터를 누르면 창이 닫힙니다.', '\nPress Return to close.'))
     sys.exit(code)

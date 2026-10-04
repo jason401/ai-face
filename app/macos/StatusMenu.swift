@@ -37,7 +37,7 @@ final class StatusController: NSObject, NSMenuDelegate {
     let animator = FaceAnimator()
     let fire = Campfire()
     var view = FaceView()
-    var name = "시작하는 중…"
+    var name = L("Starting…")
     var board = false
     var moods: [String: [String: Any]] = [:]
     var moodList: [[String: Any]] = []
@@ -175,9 +175,9 @@ final class StatusController: NSObject, NSMenuDelegate {
 
     func ownerName(_ owner: String) -> String {
         switch owner {
-        case "claude": return "Claude가 고른 표정"
-        case "gpt": return "GPT가 고른 표정"
-        default: return "직접 고른 표정"
+        case "claude": return L("Chosen by Claude")
+        case "gpt": return L("Chosen by GPT")
+        default: return L("Chosen by you")
         }
     }
 
@@ -196,17 +196,17 @@ final class StatusController: NSObject, NSMenuDelegate {
     func timerText(_ now: Double) -> String? {
         guard view.timerEnd > 0 else { return nil }
         let left = Int((view.timerEnd - now).rounded(.up))
-        if left <= 0 { return "⏰ 시간 끝!" }
+        if left <= 0 { return L("⏰ Time's up!") }
         let h = left / 3600, m = left % 3600 / 60, s = left % 60
-        return h > 0 ? String(format: "⏱ %ld:%02ld:%02ld 남음", h, m, s) : String(format: "⏱ %ld:%02ld 남음", m, s)
+        return h > 0 ? String(format: L("⏱ %ld:%02ld:%02ld left"), h, m, s) : String(format: L("⏱ %ld:%02ld left"), m, s)
     }
 
     private func updateHeader(_ now: Double) {
         header.face.image = renderFace(side: 64, inset: 1, view: view, pose: animator.pose, fire: fire, now: now,
                                        offset: bounce(now))
         header.title.stringValue = name.isEmpty ? "AI Face" : name
-        header.detail.stringValue = view.kind == "face" ? ownerName(view.owner) : (board ? "보드에 표시 중" : "메뉴바에 표시 중")
-        header.extra.stringValue = timerText(now) ?? (board ? "● 보드 연결됨" : "○ 보드 없음")
+        header.detail.stringValue = view.kind == "face" ? ownerName(view.owner) : (board ? L("Showing on the board") : L("Showing in the menu bar"))
+        header.extra.stringValue = timerText(now) ?? (board ? L("● Board connected") : L("○ No board"))
     }
 
     // MARK: - Menu
@@ -239,29 +239,29 @@ final class StatusController: NSObject, NSMenuDelegate {
         menu.addItem(.separator())
 
         if view.timerEnd > 0 {
-            _ = add(menu, "타이머 취소", #selector(cancelTimer))
+            _ = add(menu, L("Cancel timer"), #selector(cancelTimer))
         }
-        let timer = add(menu, "타이머", nil)
+        let timer = add(menu, L("Timer"), nil)
         let timerMenu = NSMenu()
         timerMenu.autoenablesItems = false
         for minutes in [5, 25, 50] {
-            _ = add(timerMenu, "\(minutes)분", #selector(startTimer(_:)), object: minutes)
+            _ = add(timerMenu, minutesText(minutes), #selector(startTimer(_:)), object: minutes)
         }
         timerMenu.addItem(.separator())
-        _ = add(timerMenu, "직접 입력…", #selector(customTimer))
+        _ = add(timerMenu, L("Custom…"), #selector(customTimer))
         timer.submenu = timerMenu
-        _ = add(menu, "모닥불 피우기", #selector(campfire))
-        _ = add(menu, "시계 보기", #selector(clock))
+        _ = add(menu, L("Light the campfire"), #selector(campfire))
+        _ = add(menu, L("Show the clock"), #selector(clock))
 
         if !moodList.isEmpty {
-            let faces = add(menu, "표정", nil)
+            let faces = add(menu, L("Faces"), nil)
             let groups = NSMenu()
             groups.autoenablesItems = false
             var order: [String] = []
             var byGroup: [String: [[String: Any]]] = [:]
             for mood in moodList {
                 guard let id = mood["id"] as? String, id != "auto" else { continue }
-                let g = (mood["group"] as? String) ?? "기타"
+                let g = (mood["group"] as? String) ?? L("Other")
                 if byGroup[g] == nil { order.append(g); byGroup[g] = [] }
                 byGroup[g]?.append(mood)
             }
@@ -281,15 +281,15 @@ final class StatusController: NSObject, NSMenuDelegate {
             faces.submenu = groups
         }
         menu.addItem(.separator())
-        _ = add(menu, "설정…", #selector(settings), key: ",")
-        _ = add(menu, "AI Face 종료", #selector(quit), key: "q")
+        _ = add(menu, L("Settings…"), #selector(settings), key: ",")
+        _ = add(menu, L("Quit AI Face"), #selector(quit), key: "q")
     }
 
     private func report(_ ok: Bool, _ reply: [String: Any]) {
         if !ok {
             let alert = NSAlert()
             alert.messageText = "AI Face"
-            alert.informativeText = (reply["message"] as? String) ?? "실패했어요."
+            alert.informativeText = (reply["message"] as? String) ?? L("That didn't work.")
             NSApp.activate(ignoringOtherApps: true)
             alert.runModal()
         }
@@ -303,19 +303,19 @@ final class StatusController: NSObject, NSMenuDelegate {
 
     @objc func customTimer() {
         let alert = NSAlert()
-        alert.messageText = "타이머"
-        alert.informativeText = "몇 분으로 맞출까요? (1~1440)"
+        alert.messageText = L("Timer")
+        alert.informativeText = L("How many minutes? (1–1440)")
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 120, height: 24))
         field.stringValue = "15"
         alert.accessoryView = field
-        alert.addButton(withTitle: "시작")
-        alert.addButton(withTitle: "취소")
+        alert.addButton(withTitle: L("Start"))
+        alert.addButton(withTitle: L("Cancel"))
         NSApp.activate(ignoringOtherApps: true)
         alert.window.initialFirstResponder = field
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         let text = field.stringValue.trimmingCharacters(in: .whitespaces)
         guard let minutes = Double(text), minutes > 0, minutes <= 1440 else {
-            report(false, ["message": "1~1440 사이의 분을 입력해 주세요."])
+            report(false, ["message": L("Enter 1 to 1440 minutes.")])
             return
         }
         API.shared.call("timer", ["seconds": Int((minutes * 60).rounded())]) { [weak self] ok, reply in self?.report(ok, reply) }

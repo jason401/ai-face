@@ -9,6 +9,8 @@ import time
 
 from . import paths
 
+OTHER = 'other'   # group of a mood that is not in the catalog any more
+
 FOLDER = paths.DATA / 'history'
 OWNERS = ('claude', 'gpt', 'user')
 KEEP_DAYS = 400
@@ -77,7 +79,7 @@ def summary(day, moods):
         counts, groups = {}, {}
         for e in mine:
             counts[e['emotion']] = counts.get(e['emotion'], 0) + 1
-            g = info.get(e['emotion'], {}).get('group', '기타')
+            g = info.get(e['emotion'], {}).get('group_id', OTHER)
             groups[g] = groups.get(g, 0) + 1
         top = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[:3]
         per[owner] = dict(count=len(mine),
@@ -85,7 +87,7 @@ def summary(day, moods):
                           groups=groups)
     timeline = [dict(t=e['t'], owner=e['owner'], emotion=e['emotion'],
                      name=info.get(e['emotion'], {}).get('name', e['emotion']),
-                     group=info.get(e['emotion'], {}).get('group', '기타')) for e in list_]
+                     group=info.get(e['emotion'], {}).get('group_id', OTHER)) for e in list_]
     return dict(day=day, total=len(list_), owners=per, timeline=timeline)
 
 

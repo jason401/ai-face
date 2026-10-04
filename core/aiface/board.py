@@ -12,6 +12,7 @@ import time
 
 from . import flasher
 from . import history
+from .i18n import T
 from . import moods as face_modes
 
 
@@ -35,7 +36,8 @@ class Device:
         # What the face should show even with no board (menu bar): the last chosen screen.
         self.screen = 'face'          # face / clock / fire / photo
         self.changed = time.time()    # when the face last changed (screen saver countdown)
-        self.message = '보드 없음 · 표정은 메뉴바 얼굴에 표시돼요. 보드를 꽂으면 자동으로 연결해요.'
+        self.message = T('보드 없음 · 표정은 메뉴바 얼굴에 표시돼요. 보드를 꽂으면 자동으로 연결해요.',
+                         'No board. The face shows in the menu bar; plug a board in and it connects by itself.')
         self.lock = threading.RLock()
         self.buffer = b''
         self.paused = False   # 'disconnect' until 'connect': no automatic reconnect
@@ -52,12 +54,12 @@ class Device:
         """Send one line and wait for its reply. An expected value ending in ':' is a
         prefix (e.g. 'OK SUM:'); the full reply line is returned."""
         if self.fd is None:
-            raise ValueError('먼저 ESP32에 연결해 주세요.')
+            raise ValueError(T('먼저 ESP32에 연결해 주세요.', 'Connect the ESP32 first.'))
         packet = (command + '\n').encode('ascii') + payload   # raw bytes follow the line
         deadline = time.monotonic() + 3
         while packet:
             if time.monotonic() > deadline:
-                raise TimeoutError('명령 전송 시간이 초과되었습니다.')
+                raise TimeoutError(T('명령 전송 시간이 초과되었습니다.', 'Sending the command timed out.'))
             _, writable, _ = select.select([], [self.fd], [], 0.1)
             if writable:
                 packet = packet[os.write(self.fd, packet):]
@@ -68,29 +70,35 @@ class Device:
                 line, self.buffer = self.buffer.split(b'\n', 1)
                 reply = line.strip().decode('utf-8', 'replace')
                 if reply == 'ERR FS':
-                    raise ValueError('보드 저장공간(LittleFS)을 쓸 수 없습니다. Arduino IDE의 Tools → Partition Scheme을 '
-                                     '기본값(8MB with spiffs)으로 두고 펌웨어를 다시 업로드해 주세요.')
+                    raise ValueError(T('보드 저장공간(LittleFS)을 쓸 수 없습니다. Arduino IDE의 Tools → Partition Scheme을 '
+                                       '기본값(8MB with spiffs)으로 두고 펌웨어를 다시 업로드해 주세요.',
+                                       'The board storage (LittleFS) is not available. Set Tools → Partition Scheme in '
+                                       'Arduino IDE to the default (8MB with spiffs) and upload the firmware again.'))
                 if reply == 'ERR FULL':
-                    raise ValueError('보드 저장공간이 가득 찼습니다. 사진을 몇 장 지우고 다시 올려 주세요.')
+                    raise ValueError(T('보드 저장공간이 가득 찼습니다. 사진을 몇 장 지우고 다시 올려 주세요.',
+                                       'The board storage is full. Delete a few photos and try again.'))
                 if reply == 'ERR NOPHOTO':
-                    raise ValueError('보드에 저장된 사진이 없습니다. 앱에 사진을 먼저 올려 주세요.')
+                    raise ValueError(T('보드에 저장된 사진이 없습니다. 앱에 사진을 먼저 올려 주세요.',
+                                       'There are no photos on the board. Add one in the app first.'))
                 if reply.startswith('ERR '):
-                    raise ValueError('보드가 전송을 거부했습니다: ' + reply)
+                    raise ValueError(T('보드가 전송을 거부했습니다: ', 'The board refused it: ') + reply)
                 if reply.startswith('OK FACE') and reply != expected:
-                    raise ValueError('보드 펌웨어가 이전 버전(' + reply[3:] + ')입니다. 새 ESP32_Display.ino를 한 번 업로드해 주세요.')
+                    raise ValueError(T(f'보드 펌웨어가 이전 버전({reply[3:]})입니다. 설정 → 보드에서 펌웨어 업데이트를 한 번 해 주세요.',
+                                       f'The board has older firmware ({reply[3:]}). Update it once in Settings → Board.'))
                 if reply == expected or (expected.endswith(':') and reply.startswith(expected)):
                     return reply
             readable, _, _ = select.select([self.fd], [], [], 0.1)
             if readable:
                 chunk = os.read(self.fd, 4096)
                 if not chunk:
-                    raise OSError('USB 연결이 끊어졌습니다.')
+                    raise OSError(T('USB 연결이 끊어졌습니다.', 'The USB connection was lost.'))
                 self.buffer = (self.buffer + chunk)[-8192:]
-        raise TimeoutError(f'얼굴 엔진({face_modes.PROTOCOL}) 응답이 없습니다. 새 ESP32_Display.ino를 한 번 업로드하고 Serial Monitor를 닫아 주세요.')
+        raise TimeoutError(T(f'얼굴 엔진({face_modes.PROTOCOL}) 응답이 없습니다. 펌웨어를 업데이트하고 Serial Monitor를 닫아 주세요.',
+                             f'No answer from the face engine ({face_modes.PROTOCOL}). Update the firmware and close the Serial Monitor.'))
 
     def connect(self, port):
         if port not in ports():
-            raise ValueError('사용 가능한 USB 포트를 선택해 주세요.')
+            raise ValueError(T('사용 가능한 USB 포트를 선택해 주세요.', 'Choose an available USB port.'))
         self.close()
         fd = os.open(port, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
         self.fd = fd
@@ -112,7 +120,7 @@ class Device:
             self.port = port
             self.exchange('HELLO', 'OK ' + face_modes.PROTOCOL)
             self.prepare()
-            self.message = '얼굴 엔진 연결 완료 · 재생 중인 표정은 유지됩니다.'
+            self.message = T('보드 연결 완료', 'Board connected')
         except Exception:
             self.close()
             raise
@@ -121,7 +129,7 @@ class Device:
         """Compile ESP32_Display.ino, upload it and connect again (USB is released meanwhile)."""
         port = port or self.port or (ports()[0] if ports() else None)
         if not port:
-            raise ValueError('ESP32가 USB로 연결되어 있지 않습니다.')
+            raise ValueError(T('ESP32가 USB로 연결되어 있지 않습니다.', 'No ESP32 is connected over USB.'))
         self.close()
         self.flashing = True
         try:
@@ -139,7 +147,7 @@ class Device:
                 break
             except (OSError, ValueError, TimeoutError, IndexError):
                 if time.monotonic() > deadline:
-                    self.message = report + ' 다시 연결은 실패했어요. 다시 연결을 눌러 주세요.'
+                    self.message = report + T(' 다시 연결은 실패했어요. 다시 연결을 눌러 주세요.', ' Reconnecting failed; press Reconnect.')
                     return self.message
                 time.sleep(1)
         self.message = report
@@ -176,9 +184,9 @@ class Device:
             self.exchange(*command)
         face_modes.save_settings(timer=None if seconds == 0 else dict(end=time.time() + seconds, total=seconds, color=color))
         if seconds:
-            self.message = face_modes.duration_text(seconds) + ' 타이머 시작'
+            self.message = T(f'{face_modes.duration_text(seconds)} 타이머 시작', f'{face_modes.duration_text(seconds)} timer started')
         else:
-            self.message = '타이머를 취소했습니다.'
+            self.message = T('타이머를 취소했습니다.', 'Timer canceled.')
 
     def resync(self):
         """Drop replies and bytes left over from a failed transfer."""
@@ -196,7 +204,8 @@ class Device:
         if pid is None:
             free = [i for i in range(face_modes.MAX_PHOTOS) if i not in self.photos]
             if not free:
-                raise ValueError(f'사진은 {face_modes.MAX_PHOTOS}장까지 저장돼요. 몇 장 지우고 다시 올려 주세요.')
+                raise ValueError(T(f'사진은 {face_modes.MAX_PHOTOS}장까지 저장돼요. 몇 장 지우고 다시 올려 주세요.',
+                                   f'The board holds up to {face_modes.MAX_PHOTOS} photos. Delete a few and try again.'))
             pid = free[0]
         elif type(pid) is not int or not 0 <= pid < face_modes.MAX_PHOTOS:
             raise ValueError('사진 번호가 올바르지 않습니다.')
@@ -214,8 +223,8 @@ class Device:
                 if not lost:
                     raise
                 if attempt == attempts - 1:
-                    raise ValueError('사진 전송 중 데이터가 깨졌습니다. 다시 올려 주세요. '
-                                     '계속되면 펌웨어(ESP32_Display.ino)를 다시 업로드해 주세요.')
+                    raise ValueError(T('사진 전송 중 데이터가 깨졌습니다. 다시 올려 주세요. 계속되면 펌웨어를 다시 업로드해 주세요.',
+                                       'The photo got corrupted on the way. Try again; if it keeps happening, update the firmware.'))
                 self.resync()
         try:
             face_modes.PHOTO_DIR.mkdir(parents=True, exist_ok=True)
@@ -224,7 +233,8 @@ class Device:
             pass   # thumbnail copy only
         self.refresh_photos()
         self.mode, self.emotion, self.screen = 'PHOTO', '', 'photo'
-        self.message = f'사진을 띄웠습니다 ({len(self.photos)}/{face_modes.MAX_PHOTOS}장 저장).'
+        self.message = T(f'사진을 띄웠습니다 ({len(self.photos)}/{face_modes.MAX_PHOTOS}장 저장).',
+                         f'Photo shown ({len(self.photos)}/{face_modes.MAX_PHOTOS} stored).')
 
     def show_photo(self, pid=None):
         if pid is None:
@@ -235,7 +245,7 @@ class Device:
             self.exchange(f'PHOTO:SHOW:{pid}', 'OK PHOTO')
         self.refresh_photos()
         self.mode, self.emotion, self.screen = 'PHOTO', '', 'photo'
-        self.message = '사진을 띄웠습니다.'
+        self.message = T('사진을 띄웠습니다.', 'Photo shown.')
 
     def delete_photo(self, pid):
         if type(pid) is not int or not 0 <= pid < face_modes.MAX_PHOTOS:
@@ -246,42 +256,42 @@ class Device:
         except OSError:
             pass
         self.refresh_photos()
-        self.message = '사진을 지웠습니다.'
+        self.message = T('사진을 지웠습니다.', 'Photo deleted.')
 
     def set_saver(self, saver):
         saver = face_modes.validate_saver(saver)
         if self.fd is not None:       # otherwise sent when a board connects (prepare)
             self.exchange(*face_modes.saver_command(saver))
         face_modes.save_settings(saver=saver)
-        self.message = '대기 화면 설정을 저장했습니다.'
+        self.message = T('대기 화면 설정을 저장했습니다.', 'Screen saver saved.')
 
     def set_style(self, mono):
         command = face_modes.style_command(mono)   # validate first
         if self.fd is not None:       # otherwise sent when a board connects (prepare)
             self.exchange(*command)
         face_modes.save_settings(mono=mono)
-        self.message = '흑백 모드를 켰습니다.' if mono else '흑백 모드를 껐습니다.'
+        self.message = T('흑백 모드를 켰습니다.', 'Monochrome on.') if mono else T('흑백 모드를 껐습니다.', 'Monochrome off.')
 
     def set_mode(self, mode, manual=None):
         if mode == 'FIRE':
             if self.fd is not None:
                 self.exchange('FIRE', 'OK FIRE')
             self.mode, self.emotion, self.screen = 'FIRE', '', 'fire'
-            self.message = '모닥불을 피웠습니다.'
+            self.message = T('모닥불을 피웠습니다.', 'Campfire lit.')
             return
         if mode != 'CLOCK':
-            raise ValueError('편집기에서 모드를 선택하고 보드에 저장 · 재생을 눌러 주세요.')
+            raise ValueError(T('알 수 없는 화면입니다.', 'Unknown screen.'))
         try:
             dt = datetime.datetime.strptime(manual, '%H:%M:%S') if manual else datetime.datetime.now()
         except (ValueError, TypeError):
-            raise ValueError('시간은 00:00:00 ~ 23:59:59로 입력해 주세요.')
+            raise ValueError(T('시간은 00:00:00 ~ 23:59:59로 입력해 주세요.', 'Enter a time from 00:00:00 to 23:59:59.'))
         if self.fd is not None:
             self.exchange(dt.strftime('TIME:%H:%M:%S'), 'OK TIME')
             self.exchange('CLOCK', 'OK CLOCK')
         self.mode = 'CLOCK'
         self.emotion = ''
         self.screen = 'clock'
-        self.message = '시계를 설정했습니다.'
+        self.message = T('시계를 설정했습니다.', 'Clock shown.')
 
     def upload(self, mode, owner='user'):
         mode = face_modes.validate(mode)
@@ -292,7 +302,7 @@ class Device:
         self.exchange(*owner_line)
         self.owner = owner
         self.mode = mode['name']
-        self.message = mode['name'] + ' 저장 · 재생 완료. 맥 연결을 끊어도 재생됩니다.'
+        self.message = mode['name'] + T(' 재생 중', ' playing')
 
     def show_emotion(self, preset, owner='user'):
         """Show a mood: on the board when one is connected, and always in the menu bar."""
@@ -310,8 +320,8 @@ class Device:
         self.owner, self.emotion, self.screen, self.changed = owner, preset['id'], 'face', time.time()
         history.record(owner, preset['id'])
         self.mode = preset['name']
-        self.message = preset['name'] + (' 모드 재생 중 · 표정은 자동으로 변합니다.' if self.fd is not None
-                                          else ' · 보드 없이 메뉴바에 표시 중')
+        self.message = preset['name'] + (T(' 재생 중', ' playing') if self.fd is not None
+                                          else T(' · 보드 없이 메뉴바에 표시 중', ' · in the menu bar (no board)'))
 
     def view(self, now=None):
         """What the menu bar face should show now (mirrors the board, screen saver included)."""
@@ -352,7 +362,8 @@ class Device:
             photo_v = 0
         return dict(kind=kind, photo=photo if kind == 'photo' else -1, photo_v=photo_v, clock=clock, mono=settings['mono'],
                     emotion=emotion if kind == 'face' else '',
-                    name={'clock': '시계', 'fire': '모닥불', 'photo': '사진'}.get(kind) or names.get(emotion, emotion),
+                    name={'clock': T('시계', 'Clock'), 'fire': T('모닥불', 'Campfire'), 'photo': T('사진', 'Photo')}.get(kind)
+                    or names.get(emotion, emotion),
                     owner=self.owner or 'user', board=self.fd is not None,
                     timer=dict(left=left, total=timer['total'], color=timer['color']) if left else None)
 
@@ -381,7 +392,8 @@ class Device:
         available = ports()
         if self.fd is not None and self.port not in available:
             self.close()
-            self.message = 'USB 연결이 끊어졌습니다 · 표정은 메뉴바 얼굴에 계속 표시돼요.'
+            self.message = T('USB 연결이 끊어졌습니다 · 표정은 메뉴바 얼굴에 계속 표시돼요.',
+                             'USB disconnected. The face keeps showing in the menu bar.')
         settings = face_modes.load_settings()
         timer = settings['timer']
         left = max(0, int(round(timer['end'] - time.time()))) if timer else 0

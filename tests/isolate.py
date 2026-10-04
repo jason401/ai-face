@@ -9,4 +9,5 @@ if not os.environ.get('AIFACE_TEST_HOME'):
     HOME = tempfile.mkdtemp(prefix='aiface-test-home-')
     os.environ['AIFACE_TEST_HOME'] = HOME
     os.environ['HOME'] = HOME
+    os.environ['AIFACE_LANG'] = 'ko'   # the tests check the Korean messages; test_i18n covers English
     atexit.register(shutil.rmtree, HOME, True)

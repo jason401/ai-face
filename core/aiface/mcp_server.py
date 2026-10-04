@@ -33,11 +33,12 @@ import urllib.error
 import urllib.request
 
 from . import history
+from .i18n import T
 from . import moods as face_modes
 from . import paths
 
 SERVER_NAME = 'esp32-face'
-SERVER_VERSION = '1.6.0'
+SERVER_VERSION = '1.7.0'
 PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05']
 # Written by esp_display.py while it runs (outside ~/Documents, see install_mcp.py).
 DISCOVERY = paths.DISCOVERY
@@ -50,7 +51,8 @@ MOODS = face_modes.emotions()
 BY_ID = {m['id']: m for m in MOODS}
 
 INSTRUCTIONS = (
-    "This user has a small round LCD on an ESP32 that shows your face. "
+    "This user has an AI Face app: a small animated face in the macOS menu bar (and maybe a "
+    "round LCD on their desk) that shows your expression. "
     "In every reply, call set_expression exactly once, choosing the mood that best "
     "matches the emotional tone of YOUR reply (how you, the assistant, would look "
     "while saying it). Examples: good news or success -> happy/triumph/proud; "
@@ -70,20 +72,22 @@ INSTRUCTIONS = (
 
 
 def _catalog_text():
+    """English for the AI (it follows English best), with the Korean name for Korean users."""
     lines = []
     for m in MOODS:
-        lines.append(f"{m['id']}: {m['name']} ({m['group']}) - {m['description']}")
+        en_desc = face_modes.EN[m['id']][1]
+        lines.append(f"{m['id']}: {m['name_en']} / {m['name_ko']} ({face_modes.GROUP_EN[m['group_id']]}) - {en_desc}")
     return '\n'.join(lines)
 
 
 TOOLS = [
     {
         'name': 'set_expression',
-        'title': 'ESP32 표정 바꾸기',
+        'title': 'Set AI Face expression',
         'description': (
             "Show a facial expression on the user's ESP32 round display. Call once per "
             "reply with the mood matching the tone of your answer. Available moods "
-            "(id: Korean name (group) - look):\n" + _catalog_text()
+            "(id: English / Korean name (group) - look):\n" + _catalog_text()
         ),
         'inputSchema': {
             'type': 'object',
@@ -103,7 +107,7 @@ TOOLS = [
     },
     {
         'name': 'start_timer',
-        'title': 'ESP32 타이머 시작',
+        'title': 'Start a timer',
         'description': (
             "Start a countdown on the user's ESP32 display: a colored ring empties clockwise "
             "from 12 o'clock and blinks when time is up (it also wakes a sleeping face). "
@@ -125,7 +129,7 @@ TOOLS = [
     },
     {
         'name': 'cancel_timer',
-        'title': 'ESP32 타이머 취소',
+        'title': 'Cancel the timer',
         'description': "Remove the countdown ring from the user's ESP32 display. Use only when the user asks.",
         'inputSchema': {'type': 'object', 'properties': {}, 'additionalProperties': False},
         'annotations': {'readOnlyHint': False, 'destructiveHint': False,
@@ -133,7 +137,7 @@ TOOLS = [
     },
     {
         'name': 'show_photo',
-        'title': 'ESP32 사진 띄우기',
+        'title': 'Show a photo',
         'description': ("Show the current photo on the user's ESP32 display (the user adds up to 10 photos "
                         "by dragging them into the controller app). Use only when the user asks to see it. "
                         "The next set_expression replaces it, so skip set_expression in that reply."),
@@ -143,7 +147,7 @@ TOOLS = [
     },
     {
         'name': 'update_firmware',
-        'title': 'ESP32 펌웨어 업로드',
+        'title': 'Update the board firmware',
         'description': ("Compile ESP32_Display/ESP32_Display.ino in the user's ESP32 project folder and upload "
                         "it to the board over USB (uses the Arduino IDE's arduino-cli; takes up to a few "
                         "minutes). On failure the compiler or upload errors are returned so they can be fixed. "
@@ -155,7 +159,7 @@ TOOLS = [
     },
     {
         'name': 'get_expression',
-        'title': 'AI Face 표정 기록 보기',
+        'title': 'Read AI Face expressions',
         'description': ("Read what the user's AI Face shows now and the recent history of expressions: "
                         "which mood, who chose it (claude, gpt, or user = picked by hand) and when, plus "
                         "today's counts per AI and their most frequent moods. Only moods are recorded, "
@@ -174,7 +178,7 @@ TOOLS = [
     },
     {
         'name': 'show_clock',
-        'title': 'ESP32 시계로 바꾸기',
+        'title': 'Show the clock',
         'description': "Switch the user's ESP32 display back to the analog clock (synced to the Mac's time). "
                        "Use only when the user asks for the clock.",
         'inputSchema': {'type': 'object', 'properties': {}, 'additionalProperties': False},
@@ -234,12 +238,12 @@ def _request(port, token, method, path, data=None, timeout=20):
 def _via_app(port, token, payload):
     status, state = _request(port, token, 'GET', '/state')
     if status != 200:
-        raise DeliveryError('컨트롤러 앱 상태를 읽지 못했습니다.')
+        raise DeliveryError(T('AI Face 앱 상태를 읽지 못했습니다.', 'Could not read the AI Face app state.'))
     # The app connects to a board by itself when one is plugged in, and shows the face in
     # the menu bar either way, so no board is not an error any more.
     status, state = _request(port, token, 'POST', '/api', payload)
     if status != 200:
-        raise DeliveryError(state.get('message', '전송 실패'))
+        raise DeliveryError(state.get('message', T('전송 실패', 'Failed')))
     return state.get('message', '')
 
 
@@ -250,7 +254,7 @@ def _direct(action):
     wanted = os.environ.get('ESP32_PORT')
     port = wanted if wanted in available else (available[0] if available else None)
     if port is None:
-        raise DeliveryError('ESP32가 USB로 연결되어 있지 않습니다.')
+        raise DeliveryError(T('ESP32가 USB로 연결되어 있지 않습니다.', 'No ESP32 is connected over USB.'))
     device = esp_display.Device()
     try:
         device.connect(port)
@@ -275,28 +279,29 @@ def deliver(payload, direct_action):
 def set_expression(emotion):
     mood = BY_ID.get(emotion)
     if mood is None:
-        raise DeliveryError(f'알 수 없는 감정입니다: {emotion}')
+        raise DeliveryError(T(f'알 수 없는 감정입니다: {emotion}', f'Unknown mood: {emotion}'))
     who = agent()
     def direct(device):   # the app is not running: log it here (the app logs its own)
         device.upload(mood, who)
         history.record(who, emotion)
     deliver({'action': 'emotion', 'id': emotion, 'agent': who}, direct)
-    return f"ESP32 표정을 '{mood['name']}'({emotion})(으)로 바꿨습니다."
+    return T(f"표정을 '{mood['name']}'({emotion})(으)로 바꿨습니다.", f"Face set to {mood['name']} ({emotion}).")
 
 
 def show_clock():
     deliver({'action': 'mode', 'mode': 'CLOCK'}, lambda d: d.set_mode('CLOCK'))
-    return 'ESP32 화면을 시계로 바꿨습니다.'
+    return T('시계를 띄웠습니다.', 'Showing the clock.')
 
 
 def start_timer(minutes, color='blue'):
     if isinstance(minutes, bool) or not isinstance(minutes, (int, float)) or not 0 < minutes <= 1440:
-        raise DeliveryError('minutes는 0보다 크고 1440 이하인 숫자여야 합니다.')
+        raise DeliveryError(T('minutes는 0보다 크고 1440 이하인 숫자여야 합니다.', 'minutes must be a number above 0 and up to 1440.'))
     if color not in face_modes.TIMER_COLORS:
         raise DeliveryError('color: ' + ', '.join(face_modes.TIMER_COLORS))
     seconds = max(1, int(round(minutes * 60)))
     deliver({'action': 'timer', 'seconds': seconds, 'color': color}, lambda d: d.start_timer(seconds, color))
-    return f'ESP32에 {face_modes.duration_text(seconds)} 타이머를 시작했습니다 ({color}).'
+    return T(f'{face_modes.duration_text(seconds)} 타이머를 시작했습니다 ({color}).',
+             f'Started a {face_modes.duration_text(seconds)} timer ({color}).')
 
 
 def update_firmware():
@@ -311,7 +316,7 @@ def update_firmware():
     wanted = os.environ.get('ESP32_PORT')
     port = wanted if wanted in available else (available[0] if available else None)
     if port is None:
-        raise DeliveryError('ESP32가 USB로 연결되어 있지 않습니다.')
+        raise DeliveryError(T('ESP32가 USB로 연결되어 있지 않습니다.', 'No ESP32 is connected over USB.'))
     device = esp_display.Device()
     try:
         return device.flash_firmware(port)
@@ -321,7 +326,8 @@ def update_firmware():
         device.close()
 
 
-WHO = {'claude': 'Claude', 'gpt': 'GPT', 'user': '사용자(직접)'}
+def _who(owner):
+    return {'claude': 'Claude', 'gpt': 'GPT'}.get(owner) or T('사용자(직접)', 'the user (by hand)')
 
 
 def get_expression(limit=10, now=None):
@@ -341,36 +347,39 @@ def get_expression(limit=10, now=None):
     recent = history.recent(limit, now)
     if view:
         what = view.get('name') or view.get('emotion') or view.get('kind')
-        lines.append(f"지금 얼굴: {what} (고른 쪽: {WHO.get(view.get('owner'), view.get('owner'))}, "
-                     f"보드 {'연결됨' if view.get('board') else '없음'})")
+        board = T('연결됨', 'connected') if view.get('board') else T('없음', 'none')
+        lines.append(T(f"지금 얼굴: {what} (고른 쪽: {_who(view.get('owner'))}, 보드 {board})",
+                       f"Now showing: {what} (chosen by {_who(view.get('owner'))}, board {board})"))
     elif recent:
         e = recent[0]
-        lines.append(f"지금 얼굴(앱 꺼짐, 마지막 기록): {BY_ID.get(e['emotion'], {}).get('name', e['emotion'])} "
-                     f"(고른 쪽: {WHO[e['owner']]})")
+        name = BY_ID.get(e['emotion'], {}).get('name', e['emotion'])
+        lines.append(T(f"지금 얼굴(앱 꺼짐, 마지막 기록): {name} (고른 쪽: {_who(e['owner'])})",
+                       f"Now showing (app not running, last record): {name} (chosen by {_who(e['owner'])})"))
     lines.append('')
-    lines.append(f'최근 {len(recent)}번의 변화 (최신순):')
+    lines.append(T(f'최근 {len(recent)}번의 변화 (최신순):', f'Last {len(recent)} changes (newest first):'))
     for e in recent:
         stamp = datetime.datetime.fromtimestamp(e['t']).strftime('%m-%d %H:%M')
         name = BY_ID.get(e['emotion'], {}).get('name', e['emotion'])
-        lines.append(f"- {stamp} {WHO[e['owner']]}: {name} ({e['emotion']})")
+        lines.append(f"- {stamp} {_who(e['owner'])}: {name} ({e['emotion']})")
     today = history.summary(datetime.date.fromtimestamp(now).isoformat(), MOODS)
     lines.append('')
-    lines.append(f"오늘 합계 {today['total']}번:")
+    lines.append(T(f"오늘 합계 {today['total']}번:", f"Today: {today['total']} changes"))
     for owner in history.OWNERS:
         info = today['owners'][owner]
         top = ', '.join(f"{t['name']} {t['count']}" for t in info['top']) or '-'
-        lines.append(f"- {WHO[owner]}: {info['count']}번 (많이 지은 표정: {top})")
+        lines.append(T(f"- {_who(owner)}: {info['count']}번 (많이 지은 표정: {top})",
+                       f"- {_who(owner)}: {info['count']} (most often: {top})"))
     return '\n'.join(lines)
 
 
 def show_photo():
     deliver({'action': 'photo_show'}, lambda d: d.show_photo())
-    return 'ESP32에 저장된 사진을 띄웠습니다.'
+    return T('저장된 사진을 띄웠습니다.', 'Showing the photo.')
 
 
 def cancel_timer():
     deliver({'action': 'timer', 'seconds': 0}, lambda d: d.start_timer(0))
-    return 'ESP32 타이머를 취소했습니다.'
+    return T('타이머를 취소했습니다.', 'Timer canceled.')
 
 
 # ----- JSON-RPC / MCP ------------------------------------------------------
@@ -402,7 +411,7 @@ def handle(message):
         return _result(rid, {
             'protocolVersion': requested if requested in PROTOCOLS else PROTOCOLS[0],
             'capabilities': {'tools': {'listChanged': False}},
-            'serverInfo': {'name': SERVER_NAME, 'title': 'ESP32 Face', 'version': SERVER_VERSION},
+            'serverInfo': {'name': SERVER_NAME, 'title': 'AI Face', 'version': SERVER_VERSION},
             'instructions': INSTRUCTIONS,
         })
     if method == 'ping':
@@ -433,7 +442,8 @@ def handle(message):
                 return _error(rid, -32602, f'Unknown tool: {name}')
             return _result(rid, {'content': [{'type': 'text', 'text': text}], 'isError': False})
         except DeliveryError as exc:
-            return _result(rid, {'content': [{'type': 'text', 'text': f'ESP32 전송 실패: {exc}'}], 'isError': True})
+            return _result(rid, {'content': [{'type': 'text', 'text': T('AI Face 전송 실패: ', 'AI Face failed: ') + str(exc)}],
+                                 'isError': True})
     return _error(rid, -32601, f'Method not found: {method}')
 
 

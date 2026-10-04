@@ -12,6 +12,7 @@ import time
 from pathlib import Path
 
 from . import paths
+from .i18n import T
 
 NAME = 'esp32-face'
 PYTHON = '/usr/bin/python3'
@@ -66,7 +67,7 @@ def copy_runtime(source=None):
     source = Path(source) if source else paths.project_root()
     package = (source / 'core' / 'aiface') if source else paths.PACKAGE
     if not (package / 'mcp_server.py').is_file():
-        raise ValueError('AI Face 코드(core/aiface)를 찾지 못했습니다.')
+        raise ValueError(T('AI Face 코드(core/aiface)를 찾지 못했습니다.', 'AI Face code (core/aiface) not found.'))
     target = runtime() / 'aiface'
     if package.resolve() == target.resolve():
         return
@@ -114,9 +115,9 @@ def _claude_load():
     try:
         data = json.loads(path.read_text() or '{}')
     except ValueError:
-        raise ValueError(f'Claude 설정 파일 형식이 올바르지 않아 고치지 않았습니다: {path}')
+        raise ValueError(T(f'Claude 설정 파일 형식이 올바르지 않아 고치지 않았습니다: {path}', f'The Claude settings file is not valid JSON, so it was left alone: {path}'))
     if not isinstance(data, dict):
-        raise ValueError(f'Claude 설정 파일 형식이 올바르지 않습니다: {path}')
+        raise ValueError(T(f'Claude 설정 파일 형식이 올바르지 않습니다: {path}', f'The Claude settings file has an unexpected format: {path}'))
     return data
 
 
@@ -136,7 +137,7 @@ def claude_install():
     _backup(claude_config())
     servers = data.setdefault('mcpServers', {})
     if not isinstance(servers, dict):
-        raise ValueError('Claude 설정의 mcpServers 형식이 올바르지 않습니다.')
+        raise ValueError(T('Claude 설정의 mcpServers 형식이 올바르지 않습니다.', 'mcpServers in the Claude settings has an unexpected format.'))
     servers[NAME] = _claude_entry()
     _write(claude_config(), json.dumps(data, indent=2, ensure_ascii=False))
 
@@ -223,7 +224,7 @@ def status():
 
 def install(target):
     if target not in TARGETS:
-        raise ValueError('알 수 없는 앱입니다.')
+        raise ValueError(T('알 수 없는 앱입니다.', 'Unknown app.'))
     copy_runtime()
     TARGETS[target][1]()
     return status()
@@ -231,6 +232,6 @@ def install(target):
 
 def remove(target):
     if target not in TARGETS:
-        raise ValueError('알 수 없는 앱입니다.')
+        raise ValueError(T('알 수 없는 앱입니다.', 'Unknown app.'))
     TARGETS[target][2]()   # server files stay: Claude Code or other apps may still use them
     return status()

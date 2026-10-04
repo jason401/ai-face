@@ -18,7 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let root = (Bundle.main.bundlePath as NSString).deletingLastPathComponent
         let script = (root as NSString).appendingPathComponent("core/run_server.py")
         guard FileManager.default.fileExists(atPath: script) else {
-            fail("AI Face.app을 AI Face 프로젝트 폴더(core 폴더가 있는 곳)에 두세요.")
+            fail(L("Keep AI Face.app in the AI Face project folder (next to the core folder)."))
             return
         }
         let face = StatusController()
@@ -32,6 +32,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         task.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
         task.arguments = [script]
         task.currentDirectoryURL = URL(fileURLWithPath: root)
+        // The server and the MCP server speak the language the app picked (en / ko).
+        var env = ProcessInfo.processInfo.environment
+        env["AIFACE_LANG"] = APP_LANGUAGE
+        task.environment = env
         task.standardOutput = output
         task.standardError = FileHandle(forWritingAtPath: logPath) ?? FileHandle.nullDevice
         // First line: the server's address; second line: the token for POST requests.
@@ -50,7 +54,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         do {
             try task.run()
         } catch {
-            fail("Python을 실행하지 못했습니다: \(error.localizedDescription)")
+            fail(L("Could not start Python: ") + error.localizedDescription)
             return
         }
         server = task
@@ -74,7 +78,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func serverEnded(_ code: Int32) {
         if code != 0 {
             let details = (try? String(contentsOfFile: logPath, encoding: .utf8)) ?? ""
-            fail(details.isEmpty ? "AI Face 서버가 멈췄습니다." : details)
+            fail(details.isEmpty ? L("The AI Face server stopped.") : details)
             return
         }
         NSApp.terminate(nil)
@@ -82,9 +86,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func fail(_ message: String) {
         let alert = NSAlert()
-        alert.messageText = "AI Face 실행 오류"
+        alert.messageText = L("AI Face could not start")
         alert.informativeText = String(message.suffix(3000))
-        alert.addButton(withTitle: "확인")
+        alert.addButton(withTitle: L("OK"))
         NSApp.activate(ignoringOtherApps: true)
         alert.runModal()
         NSApp.terminate(nil)

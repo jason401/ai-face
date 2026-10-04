@@ -45,6 +45,10 @@ if ! xcrun swiftc -swift-version 5 -O -target "$ARCH-apple-macos13.0" \
   exit 1
 fi
 mv -f "$APP/Contents/MacOS/AIFace.new" "$APP/Contents/MacOS/AIFace"
+# Translations (Localizable.strings per language): the app follows the Mac's language.
+rm -rf "$APP/Contents/Resources"
+mkdir -p "$APP/Contents/Resources"
+cp -R app/macos/Resources/*.lproj "$APP/Contents/Resources/"
 
 echo "3/4 앱 정보와 서명"
 # NSAllowsLocalNetworking: the menu bar face reads http://127.0.0.1 (the Python controller).
@@ -53,6 +57,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
 <key>CFBundleExecutable</key><string>AIFace</string>
+<key>CFBundleDevelopmentRegion</key><string>en</string>
+<key>CFBundleLocalizations</key><array><string>en</string><string>ko</string></array>
 <key>CFBundleIdentifier</key><string>local.aiface</string>
 <key>CFBundleName</key><string>AI Face</string>
 <key>CFBundleDisplayName</key><string>AI Face</string>
