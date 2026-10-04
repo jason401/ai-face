@@ -1,19 +1,24 @@
 #!/bin/zsh
 # Builds "AI Face.app" (menu bar face + settings window) from app/macos/*.swift into the
-# project folder, then starts it. Needs the Xcode Command Line Tools (swiftc). Run via 앱 빌드.command.
+# project folder, then starts it. Needs the Xcode Command Line Tools (swiftc). Run via "Build AI Face.command".
 cd "${0:A:h}/.." || exit 1
 APP="AI Face.app"
 LOG="app-build.log"
-echo "AI Face 앱 빌드"
+# Messages in Korean when the Mac's first language is Korean, else English (like the app).
+if defaults read -g AppleLanguages 2>/dev/null | sed -n 2p | grep -q '"\{0,1\}ko'; then KO=1; else KO=; fi
+msg() { if [ -n "$KO" ]; then echo "$1"; else echo "$2"; fi }
+ask() { if [ -n "$KO" ]; then read "?엔터를 누르면 창이 닫힙니다."; else read "?Press Return to close."; fi }
+msg "AI Face 앱 빌드" "Building AI Face"
 echo
 if ! xcode-select -p >/dev/null 2>&1; then
-  echo "Xcode Command Line Tools가 필요합니다. 설치 창이 뜨면 설치한 뒤 다시 실행하세요."
+  msg "Xcode Command Line Tools가 필요합니다. 설치 창이 뜨면 설치한 뒤 다시 실행하세요." \
+      "The Xcode Command Line Tools are needed. Install them from the window that opens, then run this again."
   xcode-select --install
-  read "?엔터를 누르면 창이 닫힙니다."
+  ask
   exit 1
 fi
 
-echo "1/4 실행 중인 앱 종료 (예전 ESP32 Controller 포함)"
+msg "1/4 실행 중인 앱 종료 (예전 ESP32 Controller 포함)" "1/4 Quitting the running app (and the old ESP32 Controller)"
 for id in local.aiface local.esp32.display; do
   osascript -e "tell application id \"$id\" to quit" >/dev/null 2>&1
 done
@@ -27,21 +32,22 @@ OLD_AGENT="$HOME/Library/LaunchAgents/local.esp32.display.plist"
 if [ -f "$OLD_AGENT" ]; then
   launchctl unload "$OLD_AGENT" >/dev/null 2>&1
   rm -f "$OLD_AGENT"
-  echo "   예전 앱의 로그인 자동 실행을 껐습니다."
+  msg "   예전 앱의 로그인 자동 실행을 껐습니다." "   The old app no longer opens at login."
 fi
 sleep 1
 
-echo "2/4 컴파일 (30초쯤 걸려요)"
+msg "2/4 컴파일 (30초쯤 걸려요)" "2/4 Compiling (about 30 seconds)"
 mkdir -p "$APP/Contents/MacOS"
 ARCH="$(uname -m)"
 if ! xcrun swiftc -swift-version 5 -O -target "$ARCH-apple-macos13.0" \
       -framework Cocoa -framework SwiftUI \
       -o "$APP/Contents/MacOS/AIFace.new" app/macos/*.swift >"$LOG" 2>&1; then
   echo
-  echo "빌드 실패. 아래 내용(또는 app-build.log)을 Claude에게 알려 주세요."
+  msg "빌드 실패. 아래 내용(또는 app-build.log)을 Claude에게 알려 주세요." \
+      "Build failed. The details are below (and in app-build.log)."
   echo "------------------------------------------------------------"
   cat "$LOG"
-  read "?엔터를 누르면 창이 닫힙니다."
+  ask
   exit 1
 fi
 mv -f "$APP/Contents/MacOS/AIFace.new" "$APP/Contents/MacOS/AIFace"
@@ -50,7 +56,7 @@ rm -rf "$APP/Contents/Resources"
 mkdir -p "$APP/Contents/Resources"
 cp -R app/macos/Resources/*.lproj "$APP/Contents/Resources/"
 
-echo "3/4 앱 정보와 서명"
+msg "3/4 앱 정보와 서명" "3/4 App info and signing"
 # NSAllowsLocalNetworking: the menu bar face reads http://127.0.0.1 (the Python controller).
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -72,9 +78,10 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 PLIST
 codesign --force --deep --sign - "$APP" >>"$LOG" 2>&1
 
-echo "4/4 앱 실행"
-echo "빌드 완료 $(date)" >>"$LOG"
+msg "4/4 앱 실행" "4/4 Starting the app"
+echo "Built $(date)" >>"$LOG"
 open "$APP"
 echo
-echo "완료: 메뉴바 오른쪽 위의 얼굴을 누르면 메뉴가, 설정…을 누르면 설정 창이 열려요."
+msg "완료: 메뉴바 오른쪽 위의 얼굴을 누르면 메뉴가, 설정…을 누르면 설정 창이 열려요." \
+    "Done: click the face at the top right of the menu bar for the menu; Settings… opens the settings."
 sleep 2
