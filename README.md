@@ -1,29 +1,53 @@
 # AI Face
 
-**A little face for your AI.** While you chat with Claude or ChatGPT/Codex, the AI picks a facial expression for each reply and it shows up as an animated round face in the macOS menu bar, and, if you build one, on a small round LCD on your desk.
+**A little face for your AI.** While you chat with Claude or ChatGPT (Codex), the AI picks a facial expression for each reply, and it shows up as an animated round face in your Mac's menu bar. Optionally, the same face can live on a small round LCD on your desk.
+
+No hardware needed: the menu bar face works on its own. Everything runs locally on your Mac.
+
+![Some of the faces](docs/표정-미리보기.png)
 
 [한국어 설명은 아래에 있어요.](#한국어)
 
-- 71 animated moods (happy, thinking, awkward, cheering, idea, ...), chosen by the AI through a local MCP server
-- The ring around the face shows who chose it: Claude (orange), GPT (green) or you (white). In monochrome mode the ring pattern shows it instead
-- Screen savers: sleepy → asleep, clock, photo, slideshow, pixel-art campfire
-- Countdown timer ring ("start a 25-minute pomodoro"), photo library, expression history and daily stats
-- Optional hardware: Seeed XIAO ESP32S3 + 1.28" GC9A01 240×240 round LCD, firmware included, 3D-printable case in `hardware/housing`
+## What you get
 
-## Install (macOS 13+)
+- **71 animated moods** (happy, thinking, awkward, cheering, idea, fingers crossed, ...). The AI chooses one per reply through a local [MCP](https://modelcontextprotocol.io) server, so the face follows the tone of the conversation.
+- **Who chose it**: the ring around the face is orange for Claude, green for GPT and white when you pick a face yourself. Monochrome mode shows it with ring patterns instead.
+- **Menu**: click the face for a timer (pomodoro), campfire, clock and every mood.
+- **Screen savers** when the face has not changed for a while: sleepy → asleep, clock, photo, slideshow, pixel-art campfire.
+- **History**: a daily log of which AI made which face, with stats and a timeline. Only the mood and the time are saved, never conversation text. AIs can read it too ("how were our faces today?").
+- **Round LCD (optional)**: Seeed XIAO ESP32S3 + 1.28" GC9A01 240×240 round display, firmware included (updated from the app, no Arduino IDE window needed) and a 3D-printable case in `hardware/housing`.
+- English and Korean, following your Mac's language.
+
+## Requirements
+
+- macOS 13 or later, and the Xcode Command Line Tools (the app is compiled on your Mac)
+- Claude desktop and/or Codex (Claude Code works too). Faces only change in chats on the Mac: the Claude mobile and web apps cannot reach a local MCP server.
+
+## Install
 
 1. Install the Xcode Command Line Tools if you do not have them: `xcode-select --install`
 2. Get the code: `git clone https://github.com/jason401/ai-face.git` (or download the ZIP).
 3. Double-click **`Build AI Face.command`**. It compiles `AI Face.app` in the folder and starts it: a face appears in the menu bar and the settings window opens. The app is built on your own Mac, so it opens without a Gatekeeper warning. (If you downloaded the ZIP, macOS may block the `.command` file the first time: right-click it → Open, or allow it in System Settings → Privacy & Security.)
-4. In **Settings → AI 연결 (AI apps)**, click **연결 (Connect)** next to Claude desktop and/or Codex, then quit (⌘Q) and reopen those apps.
+4. In **Settings → AI apps**, click **Connect** next to Claude desktop and/or Codex, then quit (⌘Q) and reopen those apps. For Claude Code, click **Copy command** in the same tab and paste it into a terminal.
 
-For Claude Code, use **등록 명령 복사 (Copy command)** in the same tab and paste it into a terminal.
+Keep `AI Face.app` in the project folder: it runs the Python code next to it.
 
 ### The round LCD (optional)
 
 - Board: Seeed XIAO ESP32S3; display: GC9A01 240×240 round SPI LCD (pins in `firmware/ESP32_Display/ESP32_Display.ino`).
-- Install Arduino IDE 2 with the ESP32 board package once. After that, **Settings → 보드 (Board) → 펌웨어 업데이트 (Update firmware)** compiles and uploads the firmware without opening the IDE.
+- Install Arduino IDE 2 with the ESP32 board package once. After that, **Settings → Board → Update firmware** compiles and uploads the firmware.
 - Plug the board in and the app connects to it by itself.
+
+## Privacy
+
+- Nothing leaves your Mac except what the AI apps already send: when an AI calls a tool, the result (for example the mood history) becomes part of that chat.
+- **Connect** adds one entry (`esp32-face`) to Claude desktop's and Codex's settings files, after making a backup copy; other settings are left alone.
+- Data (settings, photos, history) lives in `~/Library/Application Support/ESP32Face/`.
+
+## Uninstall
+
+1. Settings → AI apps → **Disconnect** for each app (or `python3 tools/install_mcp.py --remove`), and turn off **Open at login** in Settings → General.
+2. Quit AI Face from its menu, then delete the project folder and, if you want, `~/Library/Application Support/ESP32Face/`.
 
 ## How it works
 
@@ -78,10 +102,15 @@ Claude나 GPT와 대화하면 AI가 대답마다 표정을 골라서 **맥 메�
 - 대기 화면: 졸림→잠, 시계, 사진, 슬라이드쇼, 픽셀 모닥불
 - 타이머 링, 사진 보관함, 표정 기록과 하루 통계, 보드 펌웨어 업데이트(Arduino IDE 창 없이)
 
+보드 없이 메뉴바 얼굴만으로도 쓸 수 있고, 모든 게 맥 안에서만 돌아가요.
+
 ### 설치
 
-1. `Build AI Face.command` 더블클릭 → `AI Face.app`이 만들어지고 실행돼요(메뉴바 얼굴, 설정 창).
-2. 설정 → **AI 연결**에서 Claude 데스크톱 / Codex **연결**
-3. Claude(와 Codex)를 ⌘Q로 껐다가 다시 실행
+1. `xcode-select --install`로 Xcode 명령줄 도구 설치(없을 때만)
+2. `Build AI Face.command` 더블클릭 → `AI Face.app`이 만들어지고 실행돼요(메뉴바 얼굴, 설정 창).
+3. 설정 → **AI 연결**에서 Claude 데스크톱 / Codex **연결**
+4. Claude(와 Codex)를 ⌘Q로 껐다가 다시 실행
+
+앱은 맥 언어를 따라가요. 영어 맥에서 한국어로 쓰려면 시스템 설정 → 일반 → 언어 및 지역 → 앱에서 AI Face를 한국어로 고르세요.
 
 자세한 사용법은 [docs/사용방법.md](docs/사용방법.md)에 있어요.
