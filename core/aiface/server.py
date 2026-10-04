@@ -13,6 +13,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from . import VERSION
 from . import history
+from . import i18n
+from .i18n import T
 from . import integrations
 from . import library as photo_library
 from . import moods as face_modes
@@ -71,6 +73,7 @@ def main():
     device = Device()
     token = secrets.token_urlsafe(32)
     history.prune()
+    face_modes.save_settings(language=i18n.lang())   # the MCP server speaks the app's language
     try:
         integrations.refresh_runtime()   # an installed MCP server runs this version of the code
     except (OSError, ValueError):
@@ -146,7 +149,7 @@ def main():
                 try:
                     length = int(self.headers.get('Content-Length', 0))
                     if not 0 < length <= photo_library.MAX_BYTES:
-                        raise ValueError('사진 파일이 비어 있거나 너무 큽니다 (최대 60MB).')
+                        raise ValueError(T('사진 파일이 비어 있거나 너무 큽니다 (최대 60MB).', 'The photo file is empty or too big (max 60 MB).'))
                     name = urllib.parse.unquote(self.headers.get('X-File-Name', ''))
                     stored = photo_library.add(name, self.rfile.read(length))
                     return self.reply(200, {'name': stored, 'library': photo_library.listing()})
@@ -160,10 +163,10 @@ def main():
                 try:
                     length = int(self.headers.get('Content-Length', 0))
                     if not 0 < length <= 262144:   # a photo is ~154 KB as base64
-                        raise ValueError('잘못된 요청입니다.')
+                        raise ValueError(T('잘못된 요청입니다.', 'Bad request.'))
                     data = json.loads(self.rfile.read(length))
                     if not isinstance(data, dict):
-                        raise ValueError('잘못된 요청입니다.')
+                        raise ValueError(T('잘못된 요청입니다.', 'Bad request.'))
                     action = data.get('action')
                     # A board that was plugged in after the app started is picked up here.
                     if action not in ('connect', 'disconnect', 'quit', 'firmware', 'mcp_install', 'mcp_remove') \
@@ -178,13 +181,13 @@ def main():
                     elif action == 'emotion':
                         preset = next((m for m in face_modes.emotions() if m['id'] == data.get('id')), None)
                         if preset is None:
-                            raise ValueError('감정을 선택해 주세요.')
+                            raise ValueError(T('감정을 선택해 주세요.', 'Choose a mood.'))
                         # 'agent' is set by esp32_mcp.py; buttons in this app leave it out (white ring).
                         device.show_emotion(preset, data.get('agent', 'user'))
                     elif action == 'disconnect':
                         device.close()
                         device.paused = True   # until 'connect': lets Arduino IDE use the port
-                        device.message = 'USB 연결 해제 · 이제 Arduino 업로드가 가능합니다.'
+                        device.message = T('USB 연결 해제 · 이제 Arduino 업로드가 가능합니다.', 'USB released. You can upload with Arduino now.')
                     elif action == 'mode':
                         device.set_mode(data.get('mode'), data.get('time'))
                     elif action == 'timer':
@@ -194,7 +197,7 @@ def main():
                         data_id = data.get('id')   # replace this photo (fit changed), else add
                         data = data.get('data')
                         if not isinstance(data, str):
-                            raise ValueError('사진 데이터가 없습니다.')
+                            raise ValueError(T('사진 데이터가 없습니다.', 'No photo data.'))
                         device.upload_photo(base64.b64decode(data, validate=True), data_id)
                     elif action == 'photo_show':
                         device.show_photo(data.get('id'))
@@ -204,26 +207,26 @@ def main():
                         device.flash_firmware(data.get('port') or None)
                     elif action == 'library_delete':
                         photo_library.delete(data.get('name'))
-                        device.message = '보관함에서 사진을 지웠습니다.'
+                        device.message = T('보관함에서 사진을 지웠습니다.', 'Removed from the photo library.')
                     elif action == 'library_open':
                         photo_library.open_in_finder()
-                        device.message = 'Finder에서 사진 보관함을 열었습니다.'
+                        device.message = T('Finder에서 사진 보관함을 열었습니다.', 'Opened the photo library in Finder.')
                     elif action == 'saver':
                         device.set_saver(data.get('saver'))
                     elif action == 'style':
                         device.set_style(data.get('mono'))
                     elif action == 'mcp_install':
                         integrations.install(data.get('target'))
-                        device.message = '연결했습니다. 그 앱을 완전히 종료(Cmd+Q)한 뒤 다시 실행하세요.'
+                        device.message = T('연결했습니다. 그 앱을 완전히 종료(Cmd+Q)한 뒤 다시 실행하세요.', 'Connected. Quit that app completely (Cmd+Q) and open it again.')
                     elif action == 'mcp_remove':
                         integrations.remove(data.get('target'))
-                        device.message = '연결을 해제했습니다. 그 앱을 다시 실행하면 반영됩니다.'
+                        device.message = T('연결을 해제했습니다. 그 앱을 다시 실행하면 반영됩니다.', 'Disconnected. It takes effect when that app restarts.')
                     elif action == 'quit':
                         device.close()
-                        device.message = '종료되었습니다.'
+                        device.message = T('종료되었습니다.', 'Stopped.')
                         quitting = True
                     else:
-                        raise ValueError('알 수 없는 요청입니다.')
+                        raise ValueError(T('알 수 없는 요청입니다.', 'Unknown request.'))
                 except (OSError, ValueError, TypeError) as exc:
                     status = 400
                     if isinstance(exc, OSError):

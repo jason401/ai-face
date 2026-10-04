@@ -1,6 +1,15 @@
 // Talks to the Python server (core/aiface/server.py) on 127.0.0.1.
 import Foundation
 
+/// The text for `key` (English) in the app's language: Resources/<lang>.lproj/Localizable.strings.
+func L(_ key: String) -> String {
+    return NSLocalizedString(key, comment: "")
+}
+
+/// The language the app shows (the first of the Mac's preferred languages it has), e.g. "en", "ko".
+let APP_LANGUAGE = Bundle.main.preferredLocalizations.first ?? "en"
+let APP_LOCALE = Locale(identifier: APP_LANGUAGE)
+
 final class API {
     static let shared = API()
     var base: URL?          // http://127.0.0.1:<port>/
@@ -41,7 +50,7 @@ final class API {
     func call(_ action: String, _ params: [String: Any] = [:], timeout: TimeInterval = 60,
               done: ((Bool, [String: Any]) -> Void)? = nil) {
         guard ready, let u = url("api") else {
-            done?(false, ["message": "AI Face가 아직 시작 중이에요. 잠시 뒤 다시 해 주세요."])
+            done?(false, ["message": L("AI Face is still starting. Try again in a moment.")])
             return
         }
         var body = params
@@ -58,7 +67,7 @@ final class API {
                 reply = json
             }
             if code == 0 {
-                reply["message"] = err?.localizedDescription ?? "AI Face 서버에 연결하지 못했어요."
+                reply["message"] = err?.localizedDescription ?? L("Could not reach the AI Face server.")
             }
             DispatchQueue.main.async { done?(code == 200, reply) }
         }.resume()
@@ -66,7 +75,7 @@ final class API {
 
     /// Adds an original picture to the photo library (POST /library).
     func addToLibrary(name: String, data: Data, done: @escaping (Bool, String) -> Void) {
-        guard ready, let u = url("library") else { done(false, "AI Face가 아직 시작 중이에요."); return }
+        guard ready, let u = url("library") else { done(false, L("AI Face is still starting.")); return }
         var req = URLRequest(url: u, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 60)
         req.httpMethod = "POST"
         req.setValue(token, forHTTPHeaderField: "X-ESP-Token")
@@ -79,7 +88,7 @@ final class API {
             if let body = body, let json = try? JSONSerialization.jsonObject(with: body, options: []) as? [String: Any] {
                 message = (json["message"] as? String) ?? (json["name"] as? String) ?? ""
             }
-            if code == 0 { message = err?.localizedDescription ?? "저장하지 못했어요." }
+            if code == 0 { message = err?.localizedDescription ?? L("Could not save it.") }
             DispatchQueue.main.async { done(code == 200, message) }
         }.resume()
     }

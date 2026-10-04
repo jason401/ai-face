@@ -5,6 +5,7 @@ import json
 import os
 
 from . import paths
+from .i18n import T, lang
 
 FIELDS = ['move', 'hold', 'left', 'right', 'x', 'y', 'width', 'smile', 'open',
           'brow', 'lift', 'eyes', 'tilt', 'fx', 'color', 'shake']
@@ -58,18 +59,18 @@ def F(move, hold, l=100, r=100, x=0, y=0, w=70, s=18, o=0, **extra):
 
 
 def validate(mode):
-    if not isinstance(mode,dict): raise ValueError('모드 형식이 올바르지 않습니다.')
+    if not isinstance(mode,dict): raise ValueError(T('모드 형식이 올바르지 않습니다.','Invalid mode.'))
     slot=mode.get('slot');name=mode.get('name');frames=mode.get('frames')
-    if type(slot) is not int or not 0<=slot<SLOTS: raise ValueError('저장 위치는 1~9입니다.')
-    if not isinstance(name,str) or not 1<=len(name.strip())<=32: raise ValueError('이름을 1~32자로 입력하세요.')
-    if not isinstance(frames,list) or not 1<=len(frames)<=24: raise ValueError('동작은 1~24개로 구성하세요.')
+    if type(slot) is not int or not 0<=slot<SLOTS: raise ValueError(T('저장 위치는 1~9입니다.','The slot must be 1-9.'))
+    if not isinstance(name,str) or not 1<=len(name.strip())<=32: raise ValueError(T('이름을 1~32자로 입력하세요.','The name must be 1-32 characters.'))
+    if not isinstance(frames,list) or not 1<=len(frames)<=24: raise ValueError(T('동작은 1~24개로 구성하세요.','A mode has 1-24 frames.'))
     clean=[]
     for f in frames:
-        if not isinstance(f,dict): raise ValueError('동작 형식이 올바르지 않습니다.')
+        if not isinstance(f,dict): raise ValueError(T('동작 형식이 올바르지 않습니다.','Invalid frame.'))
         row={}
         for key,(lo,hi) in zip(FIELDS,LIMITS):
             value=f.get(key, 0 if key in OPTIONAL else None)
-            if type(value) is not int or not lo<=value<=hi: raise ValueError(f'{key}: {lo}~{hi} 범위의 정수가 필요합니다.')
+            if type(value) is not int or not lo<=value<=hi: raise ValueError(T(f'{key}: {lo}~{hi} 범위의 정수가 필요합니다.',f'{key}: needs a whole number from {lo} to {hi}.'))
             row[key]=value
         clean.append(row)
     return dict(slot=slot,name=name.strip(),frames=clean)
@@ -84,6 +85,87 @@ def validate(mode):
 # ---------------------------------------------------------------------------
 JOY, LOVE, WONDER, MIND, REST, SAD, TENSE, ANGRY, BODY = (
     '기쁨', '사랑·유대', '놀람·관심', '생각·대화', '평온·휴식', '슬픔', '불안·긴장', '분노·불쾌', '몸 상태')
+# Stable group ids (stats, colors) and English group names.
+GROUP_IDS = {JOY: 'joy', LOVE: 'love', WONDER: 'wonder', MIND: 'mind', REST: 'rest', SAD: 'sad',
+             TENSE: 'tense', ANGRY: 'angry', BODY: 'body', '자동': 'auto'}
+GROUP_EN = {'joy': 'Joy', 'love': 'Love & bond', 'wonder': 'Surprise & interest', 'mind': 'Thinking & talking',
+            'rest': 'Calm & rest', 'sad': 'Sadness', 'tense': 'Anxiety & tension', 'angry': 'Anger & dislike',
+            'body': 'Body', 'auto': 'Auto'}
+# English names and looks, by mood id.
+EN = {
+    'happy': ('Happy', 'Smiling and laughing, the odd wink'),
+    'excited': ('Excited', 'Big smile, sparkling with excitement'),
+    'playful': ('Playful', 'Winks one eye, then the other, with a grin'),
+    'laughing': ('Laughing', 'Eyes squeezed shut, laughing out loud'),
+    'proud': ('Proud', 'Chin up a little, a pleased smile'),
+    'content': ('Content', 'Eyes closed, a relaxed smile'),
+    'triumph': ('Triumph', 'Star eyes, cheering big'),
+    'singing': ('Humming', 'Eyes closed, humming along to a rhythm'),
+    'greeting': ('Hello', 'Raised brows and a wink: nice to see you'),
+    'cheering': ('Cheering', 'Determined brows and a big smile: you got this!'),
+    'farewell': ('Goodbye', 'Waves a hand with a smile'),
+    'affectionate': ('Affectionate', 'A soft smile and a slow blink'),
+    'shy': ('Shy', 'Blushing, looking down with a smile'),
+    'love': ('Love', 'Heart eyes, beaming love'),
+    'smitten': ('Smitten', 'Heart racing, looks away and back again'),
+    'grateful': ('Grateful', 'A little bow and a bright smile'),
+    'touched': ('Touched', 'Teary eyes and a smile'),
+    'sympathy': ('Sympathy', 'Worried brows, slow nods'),
+    'pleading': ('Pleading', 'Big shiny eyes, hoping hard'),
+    'surprised': ('Surprised', 'Brows jump up, a small open mouth'),
+    'curious': ('Curious', 'Looks around, wondering'),
+    'awe': ('Awe', 'Sparkling eyes, mouth open in wonder'),
+    'eager': ('Eager', 'Bouncing, can hardly wait'),
+    'idea': ('Idea', 'Looks up, then a light bulb: excited'),
+    'realization': ('Realization', 'A pause, then: got it!'),
+    'shocked': ('Shocked', 'Pinpoint eyes, jaw dropped'),
+    'confused': ('Confused', 'Mismatched eyes, a crooked mouth and a question mark'),
+    'determined': ('Determined', "Focused eyes, lips pressed: let's do this"),
+    'serious': ('Serious', 'A flat mouth, brows slightly drawn, calm'),
+    'thinking': ('Thinking', 'Looks up, deep in thought'),
+    'skeptical': ('Skeptical', 'Narrowed eyes, a twisted mouth'),
+    'focused': ('Focused', 'Narrowed eyes fixed on one spot'),
+    'listening': ('Listening', 'Nodding along, all ears'),
+    'talking': ('Talking', 'Mouth moving, talking'),
+    'processing': ('Processing', 'Eyes circling, working it out'),
+    'calm': ('Calm', 'Easy blinks and glances'),
+    'sleepy': ('Sleepy', 'Drooping eyes and a yawn'),
+    'bored': ('Bored', 'Half-open eyes, slowly looking around'),
+    'relieved': ('Relieved', 'A big "phew", relaxing'),
+    'goodnight': ('Good night', 'Eyes closed, a small smile: sleep well'),
+    'sleeping': ('Asleep', 'Eyes closed, sleeping softly'),
+    'waking': ('Waking up', 'Groggy eyes, a yawn, then bright'),
+    'dazed': ('Dazed', 'Small eyes staring into space'),
+    'sad': ('Sad', 'Drooping brows, slow moves'),
+    'crying': ('Crying', 'Tears falling, sobbing'),
+    'disappointed': ('Disappointed', 'A smile that slowly falls'),
+    'lonely': ('Lonely', 'Blue, gazing far away'),
+    'rueful': ('Rueful', 'Smiling but tilted, a drop of sweat: oh well'),
+    'apologetic': ('Sorry', 'Head down, sweating'),
+    'sulky': ('Sulky', 'Turns away with a pout'),
+    'exhausted': ('Exhausted', 'Droopy eyes and sweat, no energy left'),
+    'afraid': ('Afraid', 'Glancing left and right, shrinking back'),
+    'worried': ('Worried', 'Knitted brows, looking down'),
+    'nervous': ('Nervous', 'Cold sweat, trembling, an awkward smile'),
+    'flustered': ('Flustered', 'Face heating up, eyes wide'),
+    'hopeful': ('Fingers crossed', 'Hands together, eyes shut: hoping it works'),
+    'awkward': ('Awkward', 'A drop of sweat and a sheepish smile'),
+    'terrified': ('Terrified', 'Pale purple, shaking'),
+    'cringe': ('Cringe', '> < eyes squeezed shut, shuddering'),
+    'angry': ('Angry', 'Frowning brows, lips pressed'),
+    'furious': ('Furious', 'Bright red, shaking with rage'),
+    'annoyed': ('Annoyed', 'Rolls eyes and sighs'),
+    'disgusted': ('Disgusted', 'Squints and turns away'),
+    'contempt': ('Contempt', 'One corner of the mouth up, looking down'),
+    'jealous': ('Jealous', 'Side-eye and a pout, fuming'),
+    'sick': ('Sick', 'Green and queasy'),
+    'dizzy': ('Dizzy', 'Spinning spiral eyes'),
+    'cold': ('Cold', 'Blue, teeth chattering'),
+    'hot': ('Hot', 'Orange face, panting and sweating'),
+    'hungry': ('Hungry', 'Big eyes, looking around for food'),
+    'knocked_out': ('Knocked out', 'X eyes, stars circling'),
+    'auto': ('Auto', 'Calm, curious, happy, playful, love and sleepy in turn'),
+}
 
 CATALOG = [
   # ----- 기쁨 -----
@@ -359,9 +441,9 @@ def defaults():
 def load():
     if not PATH.exists(): return defaults()
     data=json.loads(PATH.read_text())
-    if not isinstance(data,list) or len(data)>SLOTS: raise ValueError('저장된 모드 파일 형식이 올바르지 않습니다.')
+    if not isinstance(data,list) or len(data)>SLOTS: raise ValueError(T('저장된 모드 파일 형식이 올바르지 않습니다.','The saved modes file is invalid.'))
     modes=[validate(m) for m in data]
-    if len({m['slot'] for m in modes})!=len(modes): raise ValueError('중복된 저장 위치가 있습니다.')
+    if len({m['slot'] for m in modes})!=len(modes): raise ValueError(T('중복된 저장 위치가 있습니다.','Two modes use the same slot.'))
     return modes
 
 
@@ -403,26 +485,29 @@ def idle_moods():
 
 def duration_text(seconds):
     h,rest=divmod(seconds,3600);m,sec=divmod(rest,60)
-    parts=[f'{h}시간' if h else '',f'{m}분' if m else '',f'{sec}초' if sec else '']
-    return ' '.join(x for x in parts if x) or '0초'
+    if lang()=='ko':
+        parts=[f'{h}시간' if h else '',f'{m}분' if m else '',f'{sec}초' if sec else '']
+        return ' '.join(x for x in parts if x) or '0초'
+    parts=[f'{h} h' if h else '',f'{m} min' if m else '',f'{sec} s' if sec else '']
+    return ' '.join(x for x in parts if x) or '0 s'
 
 
 def timer_command(left, total, color='blue'):
     """left/total in seconds; left=0 cancels the timer."""
     for v in (left,total):
-        if type(v) is not int or not 0<=v<=MAX_SECONDS: raise ValueError('타이머는 24시간 이하로 설정해 주세요.')
-    if left>total: raise ValueError('남은 시간이 전체 시간보다 깁니다.')
-    if color not in TIMER_COLORS: raise ValueError('타이머 색: '+', '.join(TIMER_COLORS))
+        if type(v) is not int or not 0<=v<=MAX_SECONDS: raise ValueError(T('타이머는 24시간 이하로 설정해 주세요.','Timers can be up to 24 hours.'))
+    if left>total: raise ValueError(T('남은 시간이 전체 시간보다 깁니다.','Time left is longer than the total.'))
+    if color not in TIMER_COLORS: raise ValueError(T('타이머 색: ','Timer colors: ')+', '.join(TIMER_COLORS))
     return f'TIMER:{left}:{total}:{TIMER_COLORS.index(color)}','OK TIMER'
 
 
 def validate_saver(saver):
-    if not isinstance(saver,dict): raise ValueError('대기 화면 설정 형식이 올바르지 않습니다.')
+    if not isinstance(saver,dict): raise ValueError(T('대기 화면 설정 형식이 올바르지 않습니다.','Invalid screen saver settings.'))
     v=dict(SAVER_DEFAULT,**{k:saver[k] for k in SAVER_DEFAULT if k in saver})
-    if type(v['after']) is not int or not 1<=v['after']<=1440: raise ValueError('대기 시간은 1~1440분 정수로 입력해 주세요.')
-    if v['type'] not in SAVER_TYPES: raise ValueError('대기 화면 종류: '+', '.join(SAVER_TYPES))
-    if type(v['clock']) is not bool: raise ValueError('시계 겹치기 값이 올바르지 않습니다.')
-    if type(v['slide']) is not int or not 5<=v['slide']<=3600: raise ValueError('슬라이드 간격은 5~3600초로 입력해 주세요.')
+    if type(v['after']) is not int or not 1<=v['after']<=1440: raise ValueError(T('대기 시간은 1~1440분 정수로 입력해 주세요.','The wait must be 1-1440 whole minutes.'))
+    if v['type'] not in SAVER_TYPES: raise ValueError(T('대기 화면 종류: ','Screen saver types: ')+', '.join(SAVER_TYPES))
+    if type(v['clock']) is not bool: raise ValueError(T('시계 겹치기 값이 올바르지 않습니다.','Invalid clock overlay value.'))
+    if type(v['slide']) is not int or not 5<=v['slide']<=3600: raise ValueError(T('슬라이드 간격은 5~3600초로 입력해 주세요.','Slides change every 5-3600 seconds.'))
     return v
 
 
@@ -450,7 +535,10 @@ def load_settings():
             and timer.get('color') in TIMER_COLORS):
         timer=None
     mono=data.get('mono') is True   # monochrome style: gray face, owner shown by ring pattern
-    return dict(saver=saver,timer=timer,mono=mono)
+    out=dict(saver=saver,timer=timer,mono=mono)
+    if isinstance(data.get('language'),str):
+        out['language']=data['language']   # written by the app's server for the MCP server
+    return out
 
 
 def save_settings(**changes):
@@ -463,21 +551,28 @@ def save_settings(**changes):
 
 
 def style_command(mono):
-    if type(mono) is not bool: raise ValueError('흑백 모드 값이 올바르지 않습니다.')
+    if type(mono) is not bool: raise ValueError(T('흑백 모드 값이 올바르지 않습니다.','Invalid monochrome value.'))
     return f'STYLE:{int(mono)}','OK STYLE'
 
 
 def owner_command(owner):
-    if owner not in OWNERS: raise ValueError('표정을 바꾼 주체는 user, claude, gpt 중 하나여야 합니다.')
+    if owner not in OWNERS: raise ValueError(T('표정을 바꾼 주체는 user, claude, gpt 중 하나여야 합니다.','Who chose the face must be user, claude or gpt.'))
     return f'OWNER:{OWNERS.index(owner)}','OK OWNER'
 
 
 def emotions():
     """Ready-to-play moods (71 + auto); every mood is its own animation loop.
     Stylized character states, not diagnostic human facial expressions."""
-    return [dict(id=m['id'],description=m['description'],icon=m['icon'],group=m['group'],
-                 **validate(dict(slot=m['slot'],name=m['name'],frames=m['frames'])))
-            for m in _catalog()]
+    ko=lang()=='ko'
+    out=[]
+    for m in _catalog():
+        name_en,desc_en=EN[m['id']]
+        gid=GROUP_IDS[m['group']]
+        mood=validate(dict(slot=m['slot'],name=m['name'] if ko else name_en,frames=m['frames']))
+        out.append(dict(id=m['id'],icon=m['icon'],group_id=gid,group=m['group'] if ko else GROUP_EN[gid],
+                        description=m['description'] if ko else desc_en,
+                        name_ko=m['name'],name_en=name_en,**mood))
+    return out
 
 
 def photo_checksum(data):
@@ -490,7 +585,7 @@ def photo_checksum(data):
 
 def check_photo(data):
     if not isinstance(data,(bytes,bytearray)) or len(data)!=PHOTO_BYTES:
-        raise ValueError('사진 데이터 크기가 올바르지 않습니다. 앱에서 다시 올려 주세요.')
+        raise ValueError(T('사진 데이터 크기가 올바르지 않습니다. 앱에서 다시 올려 주세요.','The photo data has the wrong size. Add it again in the app.'))
     return bytes(data)
 
 
@@ -515,5 +610,5 @@ def parse_photo_list(reply):
     try:
         mask,current=reply.split(':')[1:3]; mask=int(mask); current=int(current)
     except (ValueError,IndexError):
-        raise ValueError('보드의 사진 목록 응답이 올바르지 않습니다: '+reply)
+        raise ValueError(T('보드의 사진 목록 응답이 올바르지 않습니다: ','Unexpected photo list from the board: ')+reply)
     return [i for i in range(MAX_PHOTOS) if mask>>i&1],current

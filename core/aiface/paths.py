@@ -7,7 +7,8 @@ from pathlib import Path
 DATA = Path.home() / 'Library' / 'Application Support' / 'ESP32Face'
 SETTINGS = DATA / 'settings.json'
 DISCOVERY = DATA / 'controller.json'      # port/token of the running app, for the MCP server
-LIBRARY = DATA / '사진 보관함'              # originals of photos dropped into the app
+LIBRARY = DATA / 'Photo Library'          # originals of photos dropped into the app
+LIBRARY_KO = DATA / '사진 보관함'           # its name before the app had an English version
 SOURCE_INFO = DATA / 'source.json'        # project folder, recorded by tools/install_mcp.py
 LEGACY_PROJECT = Path.home() / 'Documents' / 'ESP32'
 

@@ -10,22 +10,26 @@ struct Choice<T: Hashable>: Hashable {
 }
 
 let SAVER_TYPES: [Choice<String>] = [
-    Choice(value: "sleep", label: "졸린 얼굴 → 잠든 얼굴"),
-    Choice(value: "clock", label: "시계"),
-    Choice(value: "photo", label: "사진"),
-    Choice(value: "slideshow", label: "사진 슬라이드쇼"),
-    Choice(value: "fire", label: "픽셀 모닥불"),
-    Choice(value: "off", label: "사용 안 함"),
+    Choice(value: "sleep", label: L("Sleepy face → asleep")),
+    Choice(value: "clock", label: L("Clock")),
+    Choice(value: "photo", label: L("Photos")),
+    Choice(value: "slideshow", label: L("Photo slideshow")),
+    Choice(value: "fire", label: L("Pixel campfire")),
+    Choice(value: "off", label: L("Off")),
 ]
 let SLIDE_CHOICES: [Choice<Int>] = [
-    Choice(value: 10, label: "10초"), Choice(value: 30, label: "30초"), Choice(value: 60, label: "1분"),
-    Choice(value: 300, label: "5분"), Choice(value: 900, label: "15분"),
+    Choice(value: 10, label: secondsText(10)), Choice(value: 30, label: secondsText(30)), Choice(value: 60, label: minutesText(1)),
+    Choice(value: 300, label: minutesText(5)), Choice(value: 900, label: minutesText(15)),
 ]
 
 func minutesText(_ m: Int) -> String {
-    if m >= 60 && m % 60 == 0 { return "\(m / 60)시간" }
-    if m > 60 { return "\(m / 60)시간 \(m % 60)분" }
-    return "\(m)분"
+    if m >= 60 && m % 60 == 0 { return String(format: L("%d h"), m / 60) }
+    if m > 60 { return String(format: L("%d h %d min"), m / 60, m % 60) }
+    return String(format: L("%d min"), m)
+}
+
+func secondsText(_ s: Int) -> String {
+    return String(format: L("%d s"), s)
 }
 
 struct OwnerStats: Equatable {
@@ -48,16 +52,22 @@ struct WeekRow: Identifiable, Equatable {
 }
 
 let OWNERS = ["claude", "gpt", "user"]
-let OWNER_LABEL = ["claude": "Claude", "gpt": "GPT", "user": "직접"]
+let OWNER_LABEL = ["claude": "Claude", "gpt": "GPT", "user": L("You")]
 let OWNER_COLOR: [String: Color] = [
     "claude": Color(red: 0xD9 / 255.0, green: 0x77 / 255.0, blue: 0x57 / 255.0),
     "gpt": Color(red: 0x10 / 255.0, green: 0xA3 / 255.0, blue: 0x7F / 255.0),
     "user": Color.gray,
 ]
-let GROUP_ORDER = ["기쁨", "사랑·유대", "놀람·관심", "생각·대화", "평온·휴식", "슬픔", "불안·긴장", "분노·불쾌", "몸 상태"]
+// Emotion groups by id (from the server), with their names and colors.
+let GROUP_ORDER = ["joy", "love", "wonder", "mind", "rest", "sad", "tense", "angry", "body"]
+let GROUP_LABEL: [String: String] = [
+    "joy": L("Joy"), "love": L("Love & bond"), "wonder": L("Surprise & interest"), "mind": L("Thinking & talking"),
+    "rest": L("Calm & rest"), "sad": L("Sadness"), "tense": L("Anxiety & tension"), "angry": L("Anger & dislike"),
+    "body": L("Body"), "other": L("Other"),
+]
 let GROUP_COLOR: [String: Color] = [
-    "기쁨": .yellow, "사랑·유대": .pink, "놀람·관심": .orange, "생각·대화": .blue, "평온·휴식": .mint,
-    "슬픔": .indigo, "불안·긴장": .purple, "분노·불쾌": .red, "몸 상태": .green,
+    "joy": .yellow, "love": .pink, "wonder": .orange, "mind": .blue, "rest": .mint,
+    "sad": .indigo, "tense": .purple, "angry": .red, "body": .green,
 ]
 
 struct LibraryItem: Identifiable, Hashable {
@@ -123,7 +133,7 @@ final class SettingsStore: NSObject, ObservableObject {
 
     var slideChoices: [Choice<Int>] {
         if SLIDE_CHOICES.contains(where: { $0.value == saverSlide }) { return SLIDE_CHOICES }
-        return SLIDE_CHOICES + [Choice(value: saverSlide, label: "\(saverSlide)초")]
+        return SLIDE_CHOICES + [Choice(value: saverSlide, label: secondsText(saverSlide))]
     }
 
     func start() {
@@ -196,8 +206,8 @@ final class SettingsStore: NSObject, ObservableObject {
 
     var historyDayText: String {
         let f = DateFormatter()
-        f.locale = Locale(identifier: "ko_KR")
-        f.dateFormat = "M월 d일 (E)"
+        f.locale = APP_LOCALE
+        f.setLocalizedDateFormatFromTemplate("MMMdE")
         return f.string(from: historyDay)
     }
 
@@ -257,7 +267,7 @@ final class SettingsStore: NSObject, ObservableObject {
             self.weekKey = key
             let rows = ((try? JSONSerialization.jsonObject(with: data, options: [])) as? [[String: Any]]) ?? []
             let weekday = DateFormatter()
-            weekday.locale = Locale(identifier: "ko_KR")
+            weekday.locale = APP_LOCALE
             weekday.dateFormat = "E"
             self.week = rows.map { r in
                 let d = (r["day"] as? String) ?? ""
@@ -280,12 +290,13 @@ final class SettingsStore: NSObject, ObservableObject {
 
     var saverHint: String {
         switch saverType {
-        case "sleep": return "표정이 \(minutesText(saverAfter)) 동안 안 바뀌면 졸린 얼굴, \(minutesText(saverAfter * 2)) 뒤 잠든 얼굴이 돼요."
-        case "clock": return "보드가 맥과 한 번도 연결되지 않아 시간을 모르면 졸린 얼굴로 대신해요."
-        case "photo": return "보드에 지금 선택된 사진을 띄워요. 사진이 없으면 졸린 얼굴로 대신해요. 메뉴바에는 잠든 얼굴로 보여요."
-        case "slideshow": return "보드에 저장된 사진을 돌아가며 띄워요. 메뉴바에는 잠든 얼굴로 보여요."
-        case "fire": return "밤하늘 아래 픽셀 모닥불이 타올라요. 메뉴바에도 작게 보여요."
-        default: return "마지막 표정을 그대로 둬요."
+        case "sleep": return String(format: L("If the face does not change for %@, it gets sleepy; after %@ it falls asleep."),
+                                    minutesText(saverAfter), minutesText(saverAfter * 2))
+        case "clock": return L("If the board has never been connected to the Mac it does not know the time, so it shows the sleepy face instead.")
+        case "photo": return L("Shows the selected photo. With no photos, the sleepy face is shown instead.")
+        case "slideshow": return L("Shows the stored photos in turn.")
+        case "fire": return L("A pixel-art campfire under the night sky, in the menu bar too.")
+        default: return L("Keeps the last face.")
         }
     }
 
@@ -325,10 +336,10 @@ final class SettingsStore: NSObject, ObservableObject {
     func addPictures(_ urls: [URL]) {
         let pictures = urls.filter { IMAGE_EXTENSIONS.contains($0.pathExtension.lowercased()) }
         if pictures.isEmpty {
-            notice = "사진 파일만 넣을 수 있어요."
+            notice = L("Only picture files can be added.")
             return
         }
-        notice = "보관함에 넣는 중…"
+        notice = L("Adding to the library…")
         var left = pictures.count
         for url in pictures {
             guard let data = try? Data(contentsOf: url) else { left -= 1; continue }
@@ -337,7 +348,7 @@ final class SettingsStore: NSObject, ObservableObject {
                 left -= 1
                 if !ok { self.notice = message }
                 if left <= 0 {
-                    if ok { self.notice = "보관함에 넣었어요. 사진을 누르면 보드에 띄워요." }
+                    if ok { self.notice = L("Added to the library. Click a photo to show it on the board.") }
                     self.refresh()
                 }
             }
@@ -354,24 +365,24 @@ final class SettingsStore: NSObject, ObservableObject {
     }
 
     func sendToBoard(_ item: LibraryItem) {
-        guard connected else { notice = "보드가 연결되어 있지 않아요. 보드를 꽂으면 자동으로 연결돼요."; return }
+        guard connected else { notice = L("No board is connected. Plug one in and it connects by itself."); return }
         guard sending.isEmpty else { return }
         sending = item.id
-        notice = "보드로 보내는 중… (몇 초 걸려요)"
+        notice = L("Sending to the board… (takes a few seconds)")
         API.shared.get("library/" + API.escape(item.name), timeout: 30) { [weak self] data in
             guard let self = self else { return }
-            guard let data = data else { self.sending = ""; self.notice = "보관함 사진을 읽지 못했어요."; return }
+            guard let data = data else { self.sending = ""; self.notice = L("Could not read the photo from the library."); return }
             DispatchQueue.global(qos: .userInitiated).async {
                 let photo = boardPhoto(data)
                 DispatchQueue.main.async {
                     guard let photo = photo else {
                         self.sending = ""
-                        self.notice = "이 사진 형식은 열 수 없어요. JPG나 PNG로 바꿔서 넣어 주세요."
+                        self.notice = L("This picture format cannot be opened. Convert it to JPG or PNG.")
                         return
                     }
                     API.shared.call("photo", ["data": photo.base64EncodedString()], timeout: 120) { ok, reply in
                         self.sending = ""
-                        self.notice = (reply["message"] as? String) ?? (ok ? "보드에 띄웠어요." : "실패했어요.")
+                        self.notice = (reply["message"] as? String) ?? (ok ? L("Shown on the board.") : L("That didn't work."))
                         self.forgetBoardThumbs()
                         self.refresh()
                     }
@@ -419,7 +430,7 @@ final class SettingsStore: NSObject, ObservableObject {
     }
 
     func setAI(_ target: String, on: Bool) {
-        aiNotice = "처리 중…"
+        aiNotice = L("Working…")
         API.shared.call(on ? "mcp_install" : "mcp_remove", ["target": target]) { [weak self] _, reply in
             self?.aiNotice = (reply["message"] as? String) ?? ""
             self?.refreshAI()
@@ -433,7 +444,7 @@ final class SettingsStore: NSObject, ObservableObject {
     func copyCommand() {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString("claude mcp add esp32-face -e ESP32_AGENT=claude -- " + otherAppCommand, forType: .string)
-        aiNotice = "Claude Code 등록 명령을 복사했어요. 터미널에 붙여 넣으세요."
+        aiNotice = L("Copied the Claude Code command. Paste it into a terminal.")
     }
 
     // MARK: Board
@@ -514,22 +525,22 @@ struct GeneralTab: View {
     var body: some View {
         Form {
             Section {
-                Toggle("로그인할 때 자동 실행", isOn: Binding(get: { store.loginItem }, set: { store.setLogin($0) }))
+                Toggle(L("Open at login"), isOn: Binding(get: { store.loginItem }, set: { store.setLogin($0) }))
             } footer: {
-                Text("켜 두면 맥을 켤 때 메뉴바에 얼굴이 바로 나타나요.").font(.caption).foregroundStyle(.secondary)
+                Text(L("The face appears in the menu bar as soon as you log in.")).font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Section {
-                Toggle("흑백 모드", isOn: Binding(get: { store.mono }, set: { store.setMono($0) }))
+                Toggle(L("Monochrome"), isOn: Binding(get: { store.mono }, set: { store.setMono($0) }))
             } footer: {
-                Text("얼굴을 흑백으로 그리고, 누가 고른 표정인지 테두리 무늬로 보여줘요. 직접 = 실선, Claude = 짧은 점선, GPT = 긴 조각 6개. 메뉴바와 보드 둘 다 바뀌어요.")
+                Text(L("Draws the face in grays and shows who chose it by the ring pattern: you = solid, Claude = short dashes, GPT = six long arcs. Applies to the menu bar and the board."))
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Section("정보") {
-                LabeledContent("버전", value: "AI Face " + store.version)
-                LabeledContent("설정 · 사진 보관함") {
-                    Button("Finder에서 열기") { store.openDataFolder() }
+            Section(L("About")) {
+                LabeledContent(L("Version"), value: "AI Face " + store.version)
+                LabeledContent(L("Settings and photo library")) {
+                    Button(L("Show in Finder")) { store.openDataFolder() }
                 }
             }
         }
@@ -547,18 +558,18 @@ struct SaverTab: View {
     var body: some View {
         Form {
             Section {
-                Picker("대기 화면", selection: bind(\.saverType)) {
+                Picker(L("Screen saver"), selection: bind(\.saverType)) {
                     ForEach(SAVER_TYPES, id: \.self) { c in Text(c.label).tag(c.value) }
                 }
-                Picker("기다리는 시간", selection: bind(\.saverAfter)) {
+                Picker(L("Wait"), selection: bind(\.saverAfter)) {
                     ForEach(store.afterChoices, id: \.self) { m in Text(minutesText(m)).tag(m) }
                 }
                 .disabled(store.saverType == "off")
                 if store.saverType == "photo" || store.saverType == "slideshow" {
-                    Toggle("사진 위에 시계 바늘 표시", isOn: bind(\.saverClock))
+                    Toggle(L("Clock hands over photos"), isOn: bind(\.saverClock))
                 }
                 if store.saverType == "slideshow" {
-                    Picker("넘김 간격", selection: bind(\.saverSlide)) {
+                    Picker(L("Change every"), selection: bind(\.saverSlide)) {
                         ForEach(store.slideChoices, id: \.self) { c in Text(c.label).tag(c.value) }
                     }
                 }
@@ -567,7 +578,7 @@ struct SaverTab: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             Section {
-                Text("표정이 한동안 안 바뀌면 대기 화면으로 바뀌어요. AI가 새 표정을 보내거나 타이머가 끝나면 다시 얼굴로 돌아와요. 설정은 보드에도 저장돼서 맥이 꺼져 있어도 동작해요.")
+                Text(L("When the face has not changed for a while, the screen saver starts. A new face from an AI or the end of a timer brings the face back. The board keeps this setting, so it works with the Mac off too."))
                     .font(.callout).foregroundStyle(.secondary)
             }
         }
@@ -583,14 +594,14 @@ struct PhotosTab: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("보드에 저장된 사진").font(.headline)
+                Text(L("Photos on the board")).font(.headline)
                 Text("\(store.photos.count)/10").foregroundStyle(.secondary)
                 Spacer()
             }
             if !store.connected {
-                Text("보드를 연결하면 여기에 보여요.").foregroundStyle(.secondary).frame(height: 64)
+                Text(L("They show up here when a board is connected.")).foregroundStyle(.secondary).frame(height: 64)
             } else if store.photos.isEmpty {
-                Text("아직 없어요. 아래 보관함에서 사진을 누르면 보드로 보내요.").foregroundStyle(.secondary).frame(height: 64)
+                Text(L("None yet. Click a photo in the library below to send it to the board.")).foregroundStyle(.secondary).frame(height: 64)
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 10) {
@@ -602,12 +613,12 @@ struct PhotosTab: View {
             }
             Divider()
             HStack {
-                Text("사진 보관함").font(.headline)
-                Text("\(store.library.count)장").foregroundStyle(.secondary)
+                Text(L("Photo library")).font(.headline)
+                Text(String(format: L("%d photos"), store.library.count)).foregroundStyle(.secondary)
                 Spacer()
-                Button("사진 추가…") { store.choosePictures() }
+                Button(L("Add photos…")) { store.choosePictures() }
                 Button { store.openLibraryFolder() } label: { Image(systemName: "folder") }
-                    .help("Finder에서 열기")
+                    .help(L("Show in Finder"))
             }
             ZStack {
                 ScrollView {
@@ -620,7 +631,7 @@ struct PhotosTab: View {
                     RoundedRectangle(cornerRadius: 12)
                         .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [6]))
                         .foregroundStyle(store.dropping ? Color.accentColor : Color.secondary.opacity(0.5))
-                        .overlay(Text("사진을 여기로 끌어다 놓으세요").foregroundStyle(.secondary))
+                        .overlay(Text(L("Drop pictures here")).foregroundStyle(.secondary))
                         .background(store.dropping ? Color.accentColor.opacity(0.08) : Color.clear)
                 }
             }
@@ -638,7 +649,7 @@ struct PhotosTab: View {
                 group.notify(queue: .main) { store.addPictures(urls) }
                 return true
             }
-            Text(store.notice.isEmpty ? "사진을 누르면 보드에 띄워요. 오른쪽 클릭으로 지울 수 있어요." : store.notice)
+            Text(store.notice.isEmpty ? L("Click a photo to show it on the board. Right-click to delete.") : store.notice)
                 .font(.caption).foregroundStyle(.secondary).lineLimit(2)
         }
         .padding(20)
@@ -657,10 +668,10 @@ struct PhotosTab: View {
             .overlay(Circle().stroke(id == store.currentPhoto ? Color.accentColor : Color.clear, lineWidth: 3))
         }
         .buttonStyle(.plain)
-        .help("이 사진 띄우기")
+        .help(L("Show this photo"))
         .contextMenu {
-            Button("보드에 띄우기") { store.showBoardPhoto(id) }
-            Button("보드에서 지우기") { store.deleteBoardPhoto(id) }
+            Button(L("Show on the board")) { store.showBoardPhoto(id) }
+            Button(L("Delete from the board")) { store.deleteBoardPhoto(id) }
         }
     }
 
@@ -683,8 +694,8 @@ struct PhotosTab: View {
         .buttonStyle(.plain)
         .help(item.name)
         .contextMenu {
-            Button("보드에 띄우기") { store.sendToBoard(item) }
-            Button("보관함에서 지우기") { store.deleteFromLibrary(item) }
+            Button(L("Show on the board")) { store.sendToBoard(item) }
+            Button(L("Remove from the library")) { store.deleteFromLibrary(item) }
         }
     }
 }
@@ -694,23 +705,23 @@ struct AITab: View {
 
     func statusText(_ s: String) -> String {
         switch s {
-        case "on": return "연결됨"
-        case "other": return "다른 위치로 연결됨"
-        case "error": return "설정 파일을 읽을 수 없음"
-        default: return "연결 안 됨"
+        case "on": return L("Connected")
+        case "other": return L("Connected to another location")
+        case "error": return L("Cannot read its settings file")
+        default: return L("Not connected")
         }
     }
 
     func row(_ title: String, _ status: String, _ target: String, available: Bool = true) -> some View {
         LabeledContent(title) {
             HStack(spacing: 10) {
-                Text(available ? statusText(status) : "설치되어 있지 않음")
+                Text(available ? statusText(status) : L("Not installed"))
                     .foregroundStyle(status == "on" ? Color.green : Color.secondary)
                 if available {
                     if status == "on" {
-                        Button("해제") { store.setAI(target, on: false) }
+                        Button(L("Disconnect")) { store.setAI(target, on: false) }
                     } else {
-                        Button("연결") { store.setAI(target, on: true) }
+                        Button(L("Connect")) { store.setAI(target, on: true) }
                     }
                 }
             }
@@ -720,22 +731,22 @@ struct AITab: View {
     var body: some View {
         Form {
             Section {
-                row("Claude 데스크톱", store.claude, "claude")
+                row(L("Claude desktop"), store.claude, "claude")
                 row("Codex (GPT)", store.codex, "codex", available: store.codexAvailable)
             } header: {
-                Text("AI 앱 연결")
+                Text(L("AI apps"))
             } footer: {
                 Text(store.aiNotice.isEmpty
-                     ? "연결하면 AI가 대답할 때마다 표정을 골라요. 연결하거나 해제한 뒤에는 그 앱을 완전히 종료(⌘Q)하고 다시 실행하세요. 테두리 색: Claude 주황, GPT 초록, 직접 고르면 흰색."
+                     ? L("Once connected, the AI picks a face for every reply. After connecting or disconnecting, quit that app (⌘Q) and open it again. Ring colors: Claude orange, GPT green, your own picks white.")
                      : store.aiNotice)
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Section("다른 앱") {
+            Section(L("Other apps")) {
                 LabeledContent("Claude Code") {
-                    Button("등록 명령 복사") { store.copyCommand() }
+                    Button(L("Copy command")) { store.copyCommand() }
                 }
-                LabeledContent("서버 명령") {
+                LabeledContent(L("Server command")) {
                     Text(store.otherAppCommand)
                         .font(.system(.caption, design: .monospaced))
                         .textSelection(.enabled)
@@ -753,24 +764,24 @@ struct BoardTab: View {
 
     var body: some View {
         Form {
-            Section("ESP32 화면") {
-                LabeledContent("상태") {
-                    Text(store.connected ? "연결됨" : (store.ports.isEmpty ? "연결 안 됨" : "연결 중이거나 오류"))
+            Section(L("ESP32 display")) {
+                LabeledContent(L("Status")) {
+                    Text(store.connected ? L("Connected") : (store.ports.isEmpty ? L("Not connected") : L("Connecting or error")))
                         .foregroundStyle(store.connected ? Color.green : Color.secondary)
                 }
                 if store.connected {
-                    LabeledContent("포트", value: store.port)
+                    LabeledContent(L("Port"), value: store.port)
                 }
                 if !store.message.isEmpty {
                     Text(store.message).font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
                 }
                 if !store.connected && !store.ports.isEmpty {
-                    Button("다시 연결") { store.reconnect() }
+                    Button(L("Reconnect")) { store.reconnect() }
                 }
             }
             Section {
                 HStack {
-                    Button("펌웨어 업데이트") { store.updateFirmware() }
+                    Button(L("Update firmware")) { store.updateFirmware() }
                         .disabled(store.ports.isEmpty || store.firmwareBusy || store.flashing)
                     if store.firmwareBusy || store.flashing {
                         ProgressView().controlSize(.small)
@@ -786,9 +797,9 @@ struct BoardTab: View {
                     .frame(height: 140)
                 }
             } header: {
-                Text("펌웨어")
+                Text(L("Firmware"))
             } footer: {
-                Text("프로젝트의 firmware/ESP32_Display를 컴파일해서 보드에 올려요. Arduino IDE 2가 응용 프로그램 폴더에 있어야 하고, 처음에는 1~2분 걸려요.")
+                Text(L("Compiles firmware/ESP32_Display from the project and uploads it to the board. Needs Arduino IDE 2 in Applications; the first time takes 1–2 minutes."))
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -824,12 +835,12 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         if window == nil {
             let tabs = NSTabViewController()
             tabs.tabStyle = .toolbar
-            tabs.addTabViewItem(tab(GeneralTab(store: store), "일반", "gearshape"))
-            tabs.addTabViewItem(tab(SaverTab(store: store), "대기 화면", "moon.zzz"))
-            tabs.addTabViewItem(tab(PhotosTab(store: store), "사진", "photo.on.rectangle"))
-            tabs.addTabViewItem(tab(HistoryTab(store: store), "기록", "chart.bar"))
-            tabs.addTabViewItem(tab(AITab(store: store), "AI 연결", "sparkles"))
-            tabs.addTabViewItem(tab(BoardTab(store: store), "보드", "cpu"))
+            tabs.addTabViewItem(tab(GeneralTab(store: store), L("General"), "gearshape"))
+            tabs.addTabViewItem(tab(SaverTab(store: store), L("Screen saver"), "moon.zzz"))
+            tabs.addTabViewItem(tab(PhotosTab(store: store), L("Photos"), "photo.on.rectangle"))
+            tabs.addTabViewItem(tab(HistoryTab(store: store), L("History"), "chart.bar"))
+            tabs.addTabViewItem(tab(AITab(store: store), L("AI apps"), "sparkles"))
+            tabs.addTabViewItem(tab(BoardTab(store: store), L("Board"), "cpu"))
             let w = NSWindow(contentViewController: tabs)
             w.styleMask = [.titled, .closable, .miniaturizable]
             w.setContentSize(SettingsWindowController.size)
@@ -863,16 +874,16 @@ struct HistoryTab: View {
                     Button { store.moveDay(1) } label: { Image(systemName: "chevron.right") }
                         .disabled(store.isToday)
                     Spacer()
-                    if !store.isToday { Button("오늘") { store.goToday() } }
-                    Text("총 \(store.dayTotal)번").foregroundStyle(.secondary)
+                    if !store.isToday { Button(L("Today")) { store.goToday() } }
+                    Text(String(format: L("%d changes"), store.dayTotal)).foregroundStyle(.secondary)
                 }
                 HStack(spacing: 10) {
                     ForEach(OWNERS, id: \.self) { owner in ownerCard(owner) }
                 }
-                section("감정 분포") { distribution }
-                section("하루 타임라인") { TimelineStrip(events: store.timeline, day: store.historyDay) }
-                section("최근 7일") { WeekChart(rows: store.week) }
-                Text("표정이 바뀔 때마다 시각, 누가 골랐는지, 무슨 표정인지만 맥에 저장해요. 대화 내용은 저장하지 않아요.")
+                section(L("Emotion groups")) { distribution }
+                section(L("Timeline")) { TimelineStrip(events: store.timeline, day: store.historyDay) }
+                section(L("Last 7 days")) { WeekChart(rows: store.week) }
+                Text(L("Each face change is saved on this Mac: only the time, who chose it and the mood. No conversation text is saved."))
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -918,7 +929,7 @@ struct HistoryTab: View {
                 }
             }
             if store.dayTotal == 0 {
-                Text("이 날은 기록이 없어요.").font(.caption).foregroundStyle(.secondary)
+                Text(L("Nothing recorded on this day.")).font(.caption).foregroundStyle(.secondary)
             } else {
                 Legend()
             }
@@ -933,12 +944,12 @@ struct GroupBar: View {
     var body: some View {
         GeometryReader { geo in
             HStack(spacing: 1) {
-                ForEach(GROUP_ORDER + ["기타"], id: \.self) { g in
+                ForEach(GROUP_ORDER + ["other"], id: \.self) { g in
                     let n = groups[g] ?? 0
                     if n > 0 {
                         Rectangle().fill(GROUP_COLOR[g] ?? .gray)
                             .frame(width: max(2, geo.size.width * CGFloat(n) / CGFloat(max(1, total)) - 1))
-                            .help("\(g) \(n)번")
+                            .help("\(GROUP_LABEL[g] ?? g) \(n)")
                     }
                 }
             }
@@ -954,7 +965,7 @@ struct Legend: View {
             ForEach(GROUP_ORDER, id: \.self) { g in
                 HStack(spacing: 4) {
                     RoundedRectangle(cornerRadius: 2).fill(GROUP_COLOR[g] ?? .gray).frame(width: 10, height: 10)
-                    Text(g).font(.caption2).foregroundStyle(.secondary)
+                    Text(GROUP_LABEL[g] ?? g).font(.caption2).foregroundStyle(.secondary)
                 }
             }
         }
@@ -983,9 +994,9 @@ struct TimelineStrip: View {
             }
             .frame(height: 30)
             HStack {
-                ForEach(["0시", "6시", "12시", "18시", "24시"], id: \.self) { label in
+                ForEach(["0:00", "6:00", "12:00", "18:00", "24:00"], id: \.self) { label in
                     Text(label).font(.caption2).foregroundStyle(.secondary)
-                    if label != "24시" { Spacer() }
+                    if label != "24:00" { Spacer() }
                 }
             }
         }

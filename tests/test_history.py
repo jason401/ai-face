@@ -28,7 +28,7 @@ class HistoryTests(unittest.TestCase):
         self.assertEqual(s['total'], 5)
         self.assertEqual(s['owners']['claude']['count'], 3)
         self.assertEqual(s['owners']['claude']['top'][0], dict(id='happy', name='행복', count=2))
-        self.assertEqual(s['owners']['claude']['groups'], {'기쁨': 2, '생각·대화': 1})
+        self.assertEqual(s['owners']['claude']['groups'], {'joy': 2, 'mind': 1})
         self.assertEqual([e['owner'] for e in s['timeline']], ['claude', 'claude', 'claude', 'gpt', 'user'])
         w = history.week('2026-10-04')
         self.assertEqual(len(w), 7)
