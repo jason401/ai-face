@@ -4,7 +4,7 @@
 
 No hardware needed: the menu bar face works on its own. Everything runs locally on your Mac.
 
-![Some of the faces](docs/표정-미리보기.png)
+![All 71 faces, drawn by the firmware](docs/faces-en.png)
 
 [한국어 설명은 아래에 있어요.](#한국어)
 
@@ -70,7 +70,7 @@ core/aiface/            Python core (standard library only)
   flasher.py            compile + upload the firmware with Arduino IDE's arduino-cli
 firmware/ESP32_Display/ ESP32 firmware
 hardware/housing/       3D-printable case
-tools/                  app build script, CLI installer, firmware simulator
+tools/                  app build script, CLI installer, firmware simulator, face preview (make_preview.py)
 tests/                  tests
 ```
 
@@ -103,6 +103,8 @@ Claude나 GPT와 대화하면 AI가 대답마다 표정을 골라서 **맥 메�
 - 타이머 링, 사진 보관함, 표정 기록과 하루 통계, 보드 펌웨어 업데이트(Arduino IDE 창 없이)
 
 보드 없이 메뉴바 얼굴만으로도 쓸 수 있고, 모든 게 맥 안에서만 돌아가요.
+
+![표정 71가지](docs/faces-ko.png)
 
 ### 설치
 
