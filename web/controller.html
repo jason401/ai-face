@@ -1,0 +1,165 @@
+<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ESP32 감정 모드</title>
+<style>*{box-sizing:border-box}body{margin:0;background:#10151f;color:#edf3ff;font:15px -apple-system,BlinkMacSystemFont,sans-serif}main{max-width:850px;margin:36px auto;padding:0 24px}h1{font-size:32px;letter-spacing:-1px;margin-bottom:8px}p{color:#adbed5;line-height:1.6}button,select{font:inherit;color:inherit;background:#26364d;border:1px solid #465b79;border-radius:12px;padding:12px;cursor:pointer}button:disabled{opacity:.45;cursor:default}.hero{display:flex;align-items:center;gap:35px;padding:26px;background:#192332;border-radius:24px;margin:25px 0}canvas{background:black;border-radius:50%;width:210px;height:210px}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.mood{padding:14px 12px;text-align:left;min-height:112px}.mood strong{display:block;font-size:18px;margin:6px 0}#search{width:100%;margin:14px 0 4px;font:inherit;color:inherit;background:#192332;border:1px solid #465b79;border-radius:12px;padding:11px 14px}.mood small{color:#b3c4dc;line-height:1.5}#filters button[aria-pressed=true]{background:#386fd8}.mood.active{background:#324f7d;outline:2px solid #9cbcff}.symbol{font-size:24px}.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.error{color:#ffaaaa!important}details{margin:25px 0;background:#192332;padding:18px;border-radius:14px}summary{cursor:pointer;margin-bottom:12px}footer{display:flex;justify-content:space-between;align-items:center;margin:24px 0;font-size:12px;color:#9aadc8}#status{min-height:24px;overflow-wrap:anywhere}.panel{background:#192332;padding:18px;border-radius:14px;margin:20px 0}.panel h3{margin:0 0 6px}.panel input[type=checkbox]{width:auto;padding:0;margin-right:6px}.library{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:12px;max-height:380px;overflow:auto;padding:8px 8px 4px 0;margin:6px 0}.lw{position:relative}.lthumb{padding:0;width:100%;aspect-ratio:1;border-radius:12px;overflow:hidden;display:block;background:#000}.lthumb img{width:100%;height:100%;object-fit:cover;display:block}.sub{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:18px 0 0}.sub h4{margin:0}.gallery{display:flex;gap:12px;flex-wrap:wrap;margin:4px 0 12px}.tw{position:relative}.thumb{padding:0;border-radius:50%;overflow:hidden;background:#000;display:block}.thumb canvas{width:72px;height:72px;display:block}.thumb.cur{outline:3px solid #9cbcff;outline-offset:2px}.del{position:absolute;top:-6px;right:-6px;width:24px;height:24px;padding:0;border-radius:50%;font-size:12px;line-height:22px}.panel input{width:76px;font:inherit;color:inherit;background:#10151f;border:1px solid #465b79;border-radius:10px;padding:10px}#tleft{font-variant-numeric:tabular-nums}#fwlog{white-space:pre-wrap;background:#10151f;border-radius:10px;padding:12px;font-size:12px;color:#ffcfcf;max-height:260px;overflow:auto}#drop{display:flex;align-items:center;justify-content:center;text-align:center;min-height:110px;border:2px dashed #465b79;border-radius:14px;color:#adbed5;cursor:pointer;padding:14px;margin:8px 0 10px}#drop.over,body.dragging #drop{border-color:#9cbcff;background:#22314a;color:#edf3ff}@media(max-width:650px){.grid{grid-template-columns:repeat(2,1fr)}.hero{gap:20px;padding:18px}canvas{width:135px;height:135px}h1{font-size:28px}}</style>
+<main><h1>오늘은 어떤 기분?</h1><p>감정 하나만 선택하세요. 눈빛과 표정은 알아서 변해요.</p>
+<section class="hero"><canvas id="face" width="240" height="240" aria-label="감정 움직임 미리보기"></canvas><div><h2 id="current">감정을 골라 주세요</h2><p id="description">선택하면 작은 화면에서<br>표정 변화가 계속 이어집니다.</p><small>화면은 애니메이션 미리보기입니다. 테두리: 흰색 = 앱에서 선택 · 주황 = Claude · 초록 = GPT</small></div></section>
+<div class="row" id="filters" aria-label="감정 분류"></div><input id="search" type="search" placeholder="감정 검색 (예: 사랑, 땀, 눈물)" aria-label="감정 검색"><p><small id="count">63가지 감정·상태 + 자동 · 누르면 바로 재생</small></p><div class="grid" id="moods"></div><p id="status" role="status">USB 연결 확인 중…</p>
+<div class="row"><button id="clock">◷ 시계로 바꾸기</button><button id="fire">🔥 모닥불 피우기</button><button id="connect">다시 연결</button></div>
+<section class="panel"><h3>🖼 사진</h3><p><small>어떤 크기의 사진이든 끌어다 놓으면 240×240 원형 화면에 맞춰 자동으로 줄여서 띄워요. 보드에 최대 10장 저장돼요. 아래 사진을 누르면 다시 띄우고, ✕로 지워요. AI가 표정을 바꾸면 얼굴로 돌아가요.</small></p>
+<div id="drop" role="button" tabindex="0">사진을 여기로 끌어다 놓거나 눌러서 선택하세요</div><input id="pfile" type="file" accept="image/*" hidden>
+<div class="sub"><h4>보드에 저장된 사진 <small id="pcount"></small></h4></div><div class="gallery" id="gallery"></div>
+<div class="row"><select id="pfit" aria-label="맞추는 방식"><option value="cover">꽉 채우기 (가장자리 잘림)</option><option value="contain">전체 보이기 (원 안에 다 들어감)</option></select></div>
+<div class="sub"><h4>📁 사진 보관함 <small id="lcount"></small></h4><button id="lopen">Finder에서 열기</button></div>
+<p><small>끌어다 놓은 사진의 원본이 ESP32 폴더의 '사진 보관함'에 모여요. 누르면 보드로 보내서 띄우고, ✕는 보관함에서 지워요. Finder로 직접 넣은 사진도 여기에 보여요.</small></p>
+<div class="library" id="library"></div></section>
+<section class="panel"><h3>⏱ 타이머</h3><p><small>테두리 안쪽 링이 12시 방향부터 시계 방향으로 줄어들고, 끝나면 깜빡이며 잠든 얼굴도 깨워요. 시계 화면에서는 바깥 테두리에 표시돼요.</small></p>
+<div class="row"><button class="tq" data-min="5">5분</button><button class="tq" data-min="25">25분</button><button class="tq" data-min="50">50분</button><input id="tmin" type="number" min="1" max="1440" value="15" aria-label="타이머 분"> 분<select id="tcolor" aria-label="타이머 색"></select><button id="tstart">시작</button><button id="tcancel">취소</button></div><p><small id="tleft">타이머 없음</small></p></section>
+<section class="panel"><h3>💤 대기 화면</h3><p><small>표정이 한동안 안 바뀌면 대기 화면으로 바뀌어요. AI가 새 표정을 보내거나 타이머가 끝나면 다시 얼굴로 돌아와요.</small></p>
+<div class="row">표정이<input id="safter" type="number" min="1" max="1440" aria-label="대기까지 분">분 동안 안 바뀌면<select id="stype" aria-label="대기 화면 종류"><option value="sleep">졸린 얼굴 → 잠든 얼굴</option><option value="clock">시계</option><option value="photo">사진</option><option value="slideshow">사진 슬라이드쇼</option><option value="fire">픽셀 모닥불</option><option value="off">사용 안 함</option></select></div>
+<div class="row" id="sphoto"><label><input type="checkbox" id="sclock">사진 위에 시계 바늘 표시</label><span id="sslidebox">· 넘김 간격 <select id="sslide" aria-label="슬라이드 간격"><option value="10">10초</option><option value="30">30초</option><option value="60">1분</option><option value="300">5분</option><option value="900">15분</option></select></span></div>
+<div class="row"><button id="ssave">저장</button><small id="shint"></small></div></section>
+<details><summary>연결 설정</summary><div class="row"><select id="ports" aria-label="USB 포트"></select><button id="disconnect">연결 해제 / 아두이노 업로드 준비</button><button id="firmware">펌웨어 업로드 (Arduino IDE 없이)</button></div><pre id="fwlog" hidden></pre><p>앱을 닫아도 전원이 연결되어 있으면 표정은 계속 움직여요.</p></details>
+<footer><span>감정을 누르면 자동으로 전송 · 저장 · 반복 재생</span><button id="quit">앱 종료</button></footer></main>
+<script>
+const TOKEN='__TOKEN__',$=id=>document.getElementById(id);let moods=[],busy=false,connected=false,attempted=false,selected=null,index=0,started=0,from=null,pose=null,stopped=false;
+function status(text,error=false){$('status').textContent=text;$('status').classList.toggle('error',error)}
+// Moods, clock, fire, timer and screen saver work without a board (the menu bar face shows
+// them); only the photos stored on the board need it plugged in.
+function buttons(){document.querySelectorAll('.mood').forEach(b=>{b.disabled=busy;b.classList.toggle('active',b.dataset.id===selected?.id)});$('clock').disabled=busy;$('fire').disabled=busy;$('disconnect').disabled=busy||!connected;$('firmware').disabled=busy||!$('ports').value;$('connect').disabled=busy||!$('ports').value;
+ document.querySelectorAll('.panel button').forEach(b=>b.disabled=busy);document.querySelectorAll('.thumb,.gallery .del,.lthumb').forEach(b=>b.disabled=busy||!connected)}
+function follow(id){let m=moods.find(x=>x.id===id);if(!m||selected?.id===id)return;selected=m;index=0;from=poseOf(m.frames[m.frames.length-1]);started=performance.now();$('current').textContent=m.name;$('description').textContent=m.description}
+// ----- photo: any image -> 240x240 RGB565 (little-endian), as the LCD stores it -----
+let photoShown=false,photoFile=null,photoFileId=null,photos=[],currentPhoto=-1,photoVer={},galleryKey='';
+async function loadImage(file){let url=URL.createObjectURL(file);try{let img=new Image();img.src=url;await img.decode();return img}finally{setTimeout(()=>URL.revokeObjectURL(url),1000)}}
+function scaled(img,fit){let w=img.naturalWidth,h=img.naturalHeight;
+ // cover: fill the square (the round screen cuts the corners); contain: whole picture inside the circle.
+ let k=fit==='contain'?240/Math.hypot(w,h):Math.max(240/w,240/h);
+ // Halve step by step first so big photos shrink smoothly instead of aliasing.
+ let src=img,sw=w,sh=h;while(sw*k<sw/2&&sw>2){let c=document.createElement('canvas');c.width=Math.ceil(sw/2);c.height=Math.ceil(sh/2);let x=c.getContext('2d');x.imageSmoothingQuality='high';x.drawImage(src,0,0,c.width,c.height);k*=sw/c.width;src=c;sw=c.width;sh=c.height}
+ let c=document.createElement('canvas');c.width=c.height=240;let x=c.getContext('2d');x.fillStyle='#000';x.fillRect(0,0,240,240);x.imageSmoothingQuality='high';
+ x.drawImage(src,(240-sw*k)/2,(240-sh*k)/2,sw*k,sh*k);return x.getImageData(0,0,240,240).data}
+function toRGB565(px){const B=[0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5];let out=new Uint8Array(240*240*2);
+ for(let y=0;y<240;y++)for(let x=0;x<240;x++){let i=(y*240+x)*4,d=B[(y&3)*4+(x&3)]/16-.5;   // ordered dithering hides 16-bit banding
+  let r=Math.min(31,Math.max(0,Math.round(px[i]/255*31+d))),g=Math.min(63,Math.max(0,Math.round(px[i+1]/255*63+d))),b=Math.min(31,Math.max(0,Math.round(px[i+2]/255*31+d)));
+  let v=(r<<11)|(g<<5)|b,o=(y*240+x)*2;out[o]=v&255;out[o+1]=v>>8}return out}
+function showRGB565(bytes){let c=$('face').getContext('2d'),im=c.createImageData(240,240);
+ for(let i=0;i<240*240;i++){let v=bytes[i*2]|bytes[i*2+1]<<8;im.data[i*4]=(v>>11)*255/31;im.data[i*4+1]=(v>>5&63)*255/63;im.data[i*4+2]=(v&31)*255/31;im.data[i*4+3]=255}
+ c.putImageData(im,0,0);selected=null;photoShown=true;$('current').textContent='사진';$('description').textContent='LCD에 사진을 띄웠어요. AI가 표정을 바꾸면 얼굴로 돌아가요.';buttons()}
+function b64(bytes){let s='';for(let i=0;i<bytes.length;i+=8192)s+=String.fromCharCode.apply(null,bytes.subarray(i,i+8192));return btoa(s)}
+const isImage=f=>f&&(f.type.startsWith('image/')||/\.(heic|heif|jpe?g|png|gif|webp|bmp|tiff?)$/i.test(f.name));
+// file: the picture; replace: board photo id to overwrite (fit changed); keep: also save the original in the library
+async function sendPhoto(file,replace=null,keep=true){if(!file)return;if(!isImage(file)){status('사진 파일만 올릴 수 있어요.',true);return}
+ if(keep)addToLibrary(file);
+ let bytes;try{bytes=toRGB565(scaled(await loadImage(file),$('pfit').value))}catch(e){status('이 사진 형식은 열 수 없어요. JPG나 PNG로 바꿔서 올려 주세요.',true);return}
+ status('사진 보내는 중… (몇 초 걸려요)');let req={data:b64(bytes)};if(replace!==null)req.id=replace;
+ if(await api('photo',req)){photoFile=file;photoFileId=currentPhoto;photoVer[currentPhoto]=(photoVer[currentPhoto]||0)+1;galleryKey='';renderGallery();showRGB565(bytes)}}
+// ----- photo library: originals in the "사진 보관함" folder -----
+let library=[],libraryKey='';
+async function loadLibrary(){try{let r=await fetch('/library');if(!r.ok)return;let list=await r.json(),key=JSON.stringify(list);if(key===libraryKey)return;libraryKey=key;library=list;renderLibrary()}catch(e){}}
+function renderLibrary(){let g=$('library');g.replaceChildren();
+ for(let it of library){let w=document.createElement('div');w.className='lw';let b=document.createElement('button');b.className='lthumb';b.title=it.name+' · 눌러서 보드에 띄우기';
+  let img=document.createElement('img');img.loading='lazy';img.alt=it.name;img.src='/library/'+encodeURIComponent(it.name)+'?t='+it.mtime;b.append(img);b.onclick=()=>sendFromLibrary(it.name);
+  let d=document.createElement('button');d.className='del';d.textContent='✕';d.title='보관함에서 지우기';
+  d.onclick=async()=>{if(!confirm(`'${it.name}'을(를) 보관함에서 지울까요? (보드에 보낸 사진은 그대로예요)`))return;await api('library_delete',{name:it.name});libraryKey='';loadLibrary()};
+  w.append(b,d);g.append(w)}
+ $('lcount').textContent=library.length?`${library.length}장`:'비어 있음';buttons()}
+async function addToLibrary(file){try{let r=await fetch('/library',{method:'POST',headers:{'X-ESP-Token':TOKEN,'X-File-Name':encodeURIComponent(file.name||'photo.jpg')},body:file});if(r.ok){libraryKey='';loadLibrary()}else{let e=await r.json();status(e.message||'보관함에 저장하지 못했어요.',true)}}catch(e){}}
+async function sendFromLibrary(name){if(!connected||busy)return;try{let r=await fetch('/library/'+encodeURIComponent(name));if(!r.ok)throw Error();let blob=await r.blob();await sendPhoto(new File([blob],name,{type:blob.type}),null,false)}catch(e){status('보관함 사진을 읽지 못했어요.',true)}}
+async function photoData(id){try{let r=await fetch('/photo/'+id+'?v='+(photoVer[id]||0));if(!r.ok)return null;let t=atob(await r.text()),b=new Uint8Array(t.length);for(let i=0;i<t.length;i++)b[i]=t.charCodeAt(i);return b.length===115200?b:null}catch(e){return null}}
+async function loadPhotoPreview(id=currentPhoto){let b=id>=0?await photoData(id):null;if(b)showRGB565(b);else{selected=null;photoShown=true;let c=$('face').getContext('2d');c.fillStyle='#000';c.fillRect(0,0,240,240);$('current').textContent='사진';$('description').textContent='LCD에 사진을 띄웠어요.'}}
+// Thumbnails of the photos stored on the board (from the Mac copies).
+function renderGallery(){let key=photos.join(',')+'|'+currentPhoto+'|'+JSON.stringify(photoVer);if(key===galleryKey)return;galleryKey=key;let g=$('gallery');g.replaceChildren();
+ for(let id of photos){let w=document.createElement('div');w.className='tw';let b=document.createElement('button');b.className='thumb'+(id===currentPhoto?' cur':'');b.title='이 사진 띄우기';let cv=document.createElement('canvas');cv.width=cv.height=240;b.append(cv);
+  b.onclick=async()=>{if(await api('photo_show',{id})){photoFile=null;loadPhotoPreview(id)}};
+  let d=document.createElement('button');d.className='del';d.textContent='✕';d.title='이 사진 지우기';d.onclick=async()=>{if(await api('photo_delete',{id})){if(photoFileId===id)photoFile=null}};
+  w.append(b,d);g.append(w);
+  photoData(id).then(px=>{if(!px)return;let x=cv.getContext('2d'),im=x.createImageData(240,240);for(let i=0;i<57600;i++){let v=px[i*2]|px[i*2+1]<<8;im.data[i*4]=(v>>11)*255/31;im.data[i*4+1]=(v>>5&63)*255/63;im.data[i*4+2]=(v&31)*255/31;im.data[i*4+3]=255}x.putImageData(im,0,0)})}
+ $('pcount').textContent=photos.length?`${photos.length}/10장 저장됨`:'저장된 사진 없음';buttons()}
+function saverUI(){let t=$('stype').value,n=Number($('safter').value)||0;$('sphoto').hidden=!(t==='photo'||t==='slideshow');$('sslidebox').hidden=t!=='slideshow';
+ $('shint').textContent=t==='sleep'?`${n}분 뒤 졸린 얼굴, ${n*2}분 뒤 잠든 얼굴`:(t==='photo'||t==='slideshow')&&!photos.length?'저장된 사진이 없으면 졸린 얼굴로 대신해요':t==='clock'?'맥과 한 번도 연결되지 않아 시간을 모르면 졸린 얼굴로 대신해요':''}
+const TCOLORS=[['blue','파랑'],['red','빨강'],['green','초록'],['yellow','노랑'],['orange','주황'],['purple','보라'],['pink','분홍'],['white','흰색']],TIDX={white:0,pink:1,blue:2,yellow:3,red:4,green:5,purple:6,orange:7};let timer=null,saverLoaded=false;
+function state(s){connected=s.connected;timer=s.timer?{end:performance.now()+s.timer.left*1000,total:s.timer.total*1000,color:s.timer.color}:null;if(s.saver&&!saverLoaded){saverLoaded=true;$('safter').value=s.saver.after;$('stype').value=s.saver.type;$('sclock').checked=s.saver.clock;if(![...$('sslide').options].some(o=>o.value==s.saver.slide))$('sslide').add(new Option(s.saver.slide+'초',s.saver.slide));$('sslide').value=String(s.saver.slide)}
+if(Array.isArray(s.photos)&&s.connected){photos=s.photos;currentPhoto=s.current_photo;renderGallery()}saverUI();if(s.owner&&s.owner!==ring.owner){ring.from=ring.owner;ring.owner=s.owner;ring.start=performance.now()}if(s.emotion){photoShown=false;follow(s.emotion)}else if(s.mode==='PHOTO'){if(!photoShown){photoShown=true;loadPhotoPreview(s.current_photo)}}else if(s.mode==='CLOCK'&&(selected||photoShown)){photoShown=false;selected=null;$('current').textContent='시계';$('description').textContent='LCD에 맥의 현재 시간을 표시합니다.'}let old=$('ports').value;$('ports').replaceChildren();for(let p of s.ports)$('ports').add(new Option(p,p));if(s.ports.includes(s.port||old))$('ports').value=s.port||old;status(s.message);buttons()}
+async function api(action,data={}){if(busy)return false;busy=true;buttons();status(action==='emotion'?'새로운 기분으로 바꾸는 중…':action==='connect'?'연결 처리 중…':action==='firmware'?'펌웨어 컴파일 · 업로드 중… (처음에는 몇 분 걸려요)':'처리 중…');try{let r=await fetch('/api',{method:'POST',headers:{'Content-Type':'application/json','X-ESP-Token':TOKEN},body:JSON.stringify({action,...data})});let s=await r.json();state(s);status(s.message,!r.ok);return r.ok}catch(e){status('앱과 연결이 끊어졌어요. 앱을 다시 실행해 주세요.',true);return false}finally{busy=false;buttons()}}
+async function choose(m){if(await api('emotion',{id:m.id})){selected=m;index=0;from=poseOf(m.frames[m.frames.length-1]);started=performance.now();$('current').textContent=m.name;$('description').textContent=m.description;buttons()}}
+async function poll(){if(busy||stopped)return;try{let r=await fetch('/state');let s=await r.json();state(s);if(!attempted&&s.ports.length===1){attempted=true;await api('connect',{port:s.ports[0]})}}catch(e){status('앱을 다시 실행해 주세요.',true)}}
+// Border ring = who chose the face: app (white), Claude (#D97757), GPT (#10A37F).
+// New color sweeps clockwise from 12 o'clock with a soft edge, as on the LCD.
+const OWNER_RGB={user:[255,255,255],claude:[0xD9,0x77,0x57],gpt:[0x10,0xA3,0x7F]},RING_BAND=60,RING_MS=1200;let ring={owner:null,from:null,start:0};
+function drawRing(c,now){if(!ring.owner)return;let n=OWNER_RGB[ring.owner],o=OWNER_RGB[ring.from]||n,t=Math.min(1,Math.max(0,(now-ring.start)/RING_MS));t=t*t*(3-2*t);let head=t*(360+RING_BAND);
+c.lineWidth=7;c.lineCap='butt';for(let i=0;i<180;i++){let u=t>=1?1:Math.min(1,Math.max(0,(head-(i*2+1))/RING_BAND));u=u*u*(3-2*u);
+c.strokeStyle=`rgb(${o.map((v,k)=>Math.round(v+(n[k]-v)*u)).join(',')})`;c.beginPath();c.arc(120,120,116,(i*2-90)*Math.PI/180,(i*2+2.4-90)*Math.PI/180);c.stroke()}}
+const PALETTE=[[255,255,255],[255,150,190],[120,180,255],[255,225,90],[255,70,60],[130,220,110],[190,140,255],[255,160,60]];
+const CONT=['left','right','x','y','width','smile','open','brow','lift','tilt','shake'];
+const FX={blush:1,tear:2,sweat:4,zzz:8,hearts:16,anger:32,question:64,exclaim:128,sparkle:256,note:512};
+function poseOf(f){let p={};for(let k of CONT)p[k]=f[k]||0;p.rgb=[...PALETTE[f.color||0]];p.eyes=f.eyes||0;p.fx=f.fx||0;return p}
+// Mirrors renderFace() in ESP32_Display.ino (screen coordinates, 240x240).
+function draw(p,now=performance.now()){let c=$('face').getContext('2d');c.fillStyle='#000';c.fillRect(0,0,240,240);
+const css=a=>`rgb(${a[0]|0},${a[1]|0},${a[2]|0})`,col=css(p.rgb),R=Math.round,T=Math.trunc;
+const rect=(x,y,w,h,k)=>{c.fillStyle=k;c.fillRect(x,y,w,h)},rr=(x,y,w,h,r,k)=>{c.fillStyle=k;c.beginPath();c.roundRect(x,y,w,h,r);c.fill()},
+circ=(x,y,r,k)=>{c.fillStyle=k;c.beginPath();c.arc(x+.5,y+.5,r+.5,0,7);c.fill()},tri=(a,b,d,e,g,h,k)=>{c.fillStyle=k;c.beginPath();c.moveTo(a+.5,b+.5);c.lineTo(d+.5,e+.5);c.lineTo(g+.5,h+.5);c.closePath();c.fill()},
+line=(a,b,d,e,k)=>{c.strokeStyle=k;c.lineWidth=1.3;c.beginPath();c.moveTo(a+.5,b+.5);c.lineTo(d+.5,e+.5);c.stroke()},thick=(a,b,d,e,t,k)=>{for(let i=0;i<t;i++)line(a,b+i,d,e+i,k)},
+heart=(x,y,s,k)=>{let r=Math.max(2,R(6*s)),dx=R(5*s),dy=R(4*s);circ(x-dx,y-dy,r,k);circ(x+dx,y-dy,r,k);tri(x-R(11*s),y-R(2*s),x+R(11*s),y-R(2*s),x,y+R(11*s),k)},
+drop=(x,y,k)=>{circ(x,y,4,k);tri(x-4,y-1,x+4,y-1,x,y-9,k)},star=(x,y,l,k)=>{tri(x,y-l,x-2,y,x+2,y,k);tri(x,y+l,x-2,y,x+2,y,k);tri(x-l,y,x,y-2,x,y+2,k);tri(x+l,y,x,y-2,x,y+2,k)},
+ph=(per,off)=>((now/per+off)%1+1)%1;
+let sx=R(p.shake*Math.sin(now*.071)),sy=R(p.shake*.6*Math.cos(now*.093)),ey=90+T(p.y)+sy,ex=[80+T(p.x)+sx,160+T(p.x)+sx];
+if(p.fx&FX.blush)for(let e=0;e<2;e++)rr(ex[e]-13,ey+17,26,8,4,'rgb(240,100,140)');
+for(let e=0;e<2;e++){let o=e?p.right:p.left,x=ex[e];
+ if(p.eyes&&o<20){rr(x-11,ey-2,22,4,2,col);continue}
+ switch(p.eyes){case 0:{let h=Math.max(2,R(15*o/100));rr(x-10,ey-h,20,h*2,Math.min(9,h),col);break}
+ case 1:for(let d=-11;d<=11;d++){let u=d/11;rect(x+d,ey+3-R(9*(1-u*u)),1,4,col)}break;
+ case 2:for(let d=-11;d<=11;d++){let u=d/11;rect(x+d,ey-5+R(9*(1-u*u)),1,4,col)}break;
+ case 3:for(let k=-1;k<=1;k++){line(x-10+k,ey-10,x+10+k,ey+10,col);line(x+10+k,ey-10,x-10+k,ey+10,col)}break;
+ case 4:heart(x,ey,1,'rgb(255,70,120)');break;
+ case 5:{let rot=now/180;for(let a=0;a<12.5;a+=.25){let r=a*1.05;rect(x+R(Math.cos(a+rot)*r)-1,ey+R(Math.sin(a+rot)*r)-1,2,2,col)}break}
+ case 6:star(x,ey,13,col);tri(x-4,ey,x,ey-4,x+4,ey,col);tri(x-4,ey,x,ey+4,x+4,ey,col);break;
+ case 7:circ(x,ey,4,col);break;
+ case 8:circ(x,ey,13,col);circ(x+4,ey-5,4,'#000');circ(x-5,ey+5,2,'#000');break;
+ case 9:{let d=e?-1:1,tip=x+7*d,back=x-7*d;for(let k=-1;k<=1;k++){line(back,ey-8+k,tip,ey+k,col);line(tip,ey+k,back,ey+8+k,col)}break}}}
+if(p.lift>=.5){let bY=ey-14-p.lift*1.5,d=p.brow*.6;for(let e=0;e<2;e++){let outer=e?ex[e]+11:ex[e]-11,inner=e?ex[e]-11:ex[e]+11;thick(outer,R(bY+d),inner,R(bY-d),4,col)}}
+let w=Math.max(5,T(T(p.width)/2)),mx=120+T(p.x*.3)+sx;
+for(let x=-w;x<=w;x++){let u=x/w,curve=1-u*u,y=142+sy+T(p.smile*curve-p.tilt*(u+1)*.5),o=T(p.open*curve);rect(mx+x,y-T(o/2)-2,1,o+5,col)}
+const water='rgb(90,170,255)',gold='rgb(255,235,140)',red='rgb(255,50,50)';
+if(p.fx&FX.tear)for(let e=0;e<2;e++)drop(e?ex[1]+7:ex[0]-7,ey+12+T(ph(1500,e*.5)*34),water);
+if(p.fx&FX.sweat)drop(186,70+T(ph(2200,0)*10),water);
+if(p.fx&FX.zzz)for(let i=0;i<3;i++){let q=ph(2400,i/3),zx=160+T(q*30),zy=88-T(q*42),s=5+T(q*6);thick(zx-s,zy-s,zx+s,zy-s,2,col);thick(zx+s,zy-s,zx-s,zy+s,2,col);thick(zx-s,zy+s,zx+s,zy+s,2,col)}
+if(p.fx&FX.hearts)for(let i=0;i<2;i++){let q=ph(2000,i*.5);heart(i?182:58,95-T(q*45),.5+q*.3,'rgb(255,90,140)')}
+if(p.fx&FX.anger){let s=1+.25*Math.sin(now/120),cx=178,cy=52,a=R(3*s),b=R(9*s);for(let qx of[-1,1])for(let qy of[-1,1]){let bx=cx+qx*a-(qx>0?0:2),by=cy+qy*a-(qy>0?0:2);rect(bx,Math.min(cy+qy*a,cy+qy*b),2,b-a,red);rect(Math.min(cx+qx*a,cx+qx*b),by,b-a,2,red)}}
+let bob=R(3*Math.sin(now/300));c.font='bold 26px monospace';c.textBaseline='top';
+if(p.fx&FX.question){c.fillStyle=col;c.fillText('?',178,38+bob)}
+if(p.fx&FX.exclaim){c.fillStyle='rgb(255,215,60)';c.fillText('!',p.fx&FX.question?156:182,38-bob)}
+if(p.fx&FX.sparkle)[[52,58],[192,100],[62,172]].forEach(([x,y],i)=>star(x,y,3+R(4*Math.abs(Math.sin(now/250+i*2))),gold));
+if(p.fx&FX.note)for(let i=0;i<2;i++){let q=ph(1800,i*.5),nx=i?184:54,ny=82-T(q*30);circ(nx,ny,4,col);rect(nx+3,ny-14,2,14,col);thick(nx+4,ny-14,nx+9,ny-9,2,col)}
+drawRing(c,now);drawTimer(c,now)}
+// Countdown ring just inside the owner ring (r 104-110), as on the LCD.
+function drawTimer(c,now){if(!timer)return;let col=PALETTE[TIDX[timer.color]],left=timer.end-now,cut=Math.min(180,Math.max(0,180-Math.floor(Math.max(0,left)/timer.total*180)))*2;
+c.lineWidth=6;c.strokeStyle=`rgb(${col.map(v=>v/6|0).join(',')})`;c.beginPath();c.arc(120,120,107,-Math.PI/2,(cut-90)*Math.PI/180);c.stroke();
+if(left<=0&&Math.floor(-left/400)%2)return;c.strokeStyle=`rgb(${col.join(',')})`;c.beginPath();c.arc(120,120,107,(cut-90)*Math.PI/180,1.5*Math.PI);c.stroke()}
+function fmt(ms){let s=Math.max(0,Math.ceil(ms/1000)),h=Math.floor(s/3600),m=Math.floor(s%3600/60),x=s%60,p=v=>String(v).padStart(2,'0');return (h?h+':'+p(m):m)+':'+p(x)}
+setInterval(()=>{let left=timer?timer.end-performance.now():0;$('tleft').textContent=timer?(left>0?'남은 시간 '+fmt(left)+' / '+fmt(timer.total):'⏰ 시간 끝!'):'타이머 없음'},250);
+let lastDraw=0;
+function animate(now){if(stopped)return;if(selected&&now-lastDraw>=40){lastDraw=now;let f=selected.frames[index],dt=now-started,t=Math.min(1,dt/f.move);t=t*t*(3-2*t);let target=poseOf(f);pose={};for(let k of CONT)pose[k]=from[k]+(target[k]-from[k])*t;pose.rgb=from.rgb.map((v,i)=>v+(target.rgb[i]-v)*t);pose.eyes=t<.5?from.eyes:target.eyes;pose.fx=t<.5?from.fx:target.fx;draw(pose,now);if(dt>=f.move+f.hold){from=pose;index=(index+1)%selected.frames.length;started=now}}requestAnimationFrame(animate)}
+$('drop').onclick=()=>{if(!busy)$('pfile').click()};$('drop').onkeydown=e=>{if(e.key==='Enter'||e.key===' ')$('drop').click()};$('pfile').onchange=()=>{let f=$('pfile').files[0];if(f&&!connected){addToLibrary(f);status('보관함에 저장했어요. ESP32를 연결하면 눌러서 보드에 띄울 수 있어요.')}else sendPhoto(f);$('pfile').value=''};
+$('pfit').onchange=()=>{if(photoFile&&photoShown&&photoFileId===currentPhoto)sendPhoto(photoFile,photoFileId)};
+// Drop anywhere on the page; the box lights up while dragging.
+let dragDepth=0;document.addEventListener('dragenter',e=>{e.preventDefault();dragDepth++;document.body.classList.add('dragging')});
+document.addEventListener('dragleave',()=>{if(--dragDepth<=0){dragDepth=0;document.body.classList.remove('dragging')}});
+document.addEventListener('dragover',e=>e.preventDefault());
+document.addEventListener('drop',e=>{e.preventDefault();dragDepth=0;document.body.classList.remove('dragging');let files=[...e.dataTransfer.files].filter(isImage);if(!files.length)return;
+ // Every dropped picture goes into the library; the first one is also shown on the board.
+ for(let f of files.slice(1))addToLibrary(f);
+ if(!connected||busy){addToLibrary(files[0]);status(`보관함에 ${files.length}장 저장했어요. ESP32를 연결한 뒤 눌러서 띄우세요.`);return}
+ sendPhoto(files[0]);if(files.length>1)status(`보관함에 ${files.length}장 저장 · 첫 번째 사진을 보드에 보내는 중…`)});
+$('lopen').onclick=()=>api('library_open');setInterval(loadLibrary,5000);
+for(let [id,name] of TCOLORS)$('tcolor').add(new Option(name,id));
+const startTimer=min=>{min=Number(min);if(!(min>0&&min<=1440)){status('타이머는 1~1440분으로 입력해 주세요.',true);return}api('timer',{seconds:Math.round(min*60),color:$('tcolor').value})};
+document.querySelectorAll('.tq').forEach(b=>b.onclick=()=>startTimer(b.dataset.min));$('tstart').onclick=()=>startTimer($('tmin').value);$('tcancel').onclick=()=>api('timer',{seconds:0});
+$('firmware').onclick=async()=>{$('fwlog').hidden=true;let ok=await api('firmware',{port:$('ports').value});if(!ok){$('fwlog').textContent=$('status').textContent;$('fwlog').hidden=false}};
+$('stype').onchange=saverUI;$('safter').oninput=saverUI;
+$('ssave').onclick=()=>{let after=Number($('safter').value);if(!Number.isInteger(after)||after<1||after>1440){status('대기 시간은 1~1440분 정수로 입력해 주세요.',true);return}api('saver',{saver:{after,type:$('stype').value,clock:$('sclock').checked,slide:Number($('sslide').value)}})};
+$('connect').onclick=()=>api('connect',{port:$('ports').value});$('disconnect').onclick=()=>api('disconnect');$('fire').onclick=async()=>{if(await api('mode',{mode:'FIRE'})){selected=null;photoShown=false;$('current').textContent='모닥불';$('description').textContent='LCD에서 픽셀 모닥불이 타오르고 있어요. AI가 표정을 바꾸면 얼굴로 돌아가요.';let c=$('face').getContext('2d');c.fillStyle='#000';c.fillRect(0,0,240,240);c.font='90px sans-serif';c.textAlign='center';c.fillText('🔥',120,150);buttons()}};
+$('clock').onclick=async()=>{if(await api('mode',{mode:'CLOCK'})){selected=null;$('current').textContent='시계';$('description').textContent='LCD에 맥의 현재 시간을 표시합니다.';let c=$('face').getContext('2d');c.fillStyle='#000';c.fillRect(0,0,240,240);c.fillStyle='#fff';c.font='26px sans-serif';c.textAlign='center';c.fillText('CLOCK',120,130);buttons()}};$('quit').onclick=async()=>{if(await api('quit')){stopped=true;document.body.innerHTML='<main><h1>종료되었습니다.</h1><p>이 탭을 닫아도 됩니다.</p></main>'}};
+let activeGroup='전체';
+function applyFilter(){let q=$('search').value.trim().toLowerCase();document.querySelectorAll('.mood').forEach(b=>b.hidden=(activeGroup!=='전체'&&b.dataset.group!==activeGroup)||(q&&!b.dataset.text.includes(q)))}
+async function init(){try{let r=await fetch('/emotions');if(!r.ok)throw Error();moods=await r.json();for(let [i,m] of moods.entries()){let b=document.createElement('button');b.className='mood';b.dataset.id=m.id;b.dataset.group=m.group;b.dataset.text=(m.name+' '+m.description+' '+m.group).toLowerCase();let icon=document.createElement('span');icon.className='symbol';icon.textContent=m.icon||'◡';let title=document.createElement('strong');title.textContent=m.name;let desc=document.createElement('small');desc.textContent=m.description;b.append(icon,title,desc);b.onclick=()=>choose(m);$('moods').append(b)}for(let group of ['전체',...new Set(moods.map(m=>m.group))]){let filter=document.createElement('button');filter.textContent=group;filter.onclick=()=>{activeGroup=group;applyFilter();document.querySelectorAll('#filters button').forEach(b=>b.setAttribute('aria-pressed',String(b===filter)))};$('filters').append(filter)}$('count').textContent=`${moods.length-1}가지 감정·상태 + 자동 · 누르면 바로 재생`;$('search').oninput=applyFilter;draw(poseOf(moods[0].frames[0]));loadLibrary();await poll()}catch(e){status('감정 목록을 읽지 못했어요. 앱을 다시 실행해 주세요.',true)}}
+init();setInterval(poll,2000);requestAnimationFrame(animate);
+</script></html>

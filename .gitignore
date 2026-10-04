@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.log
+*.app/
+.DS_Store
+.import.tgz
+fw.cpp
+tools/firmware_sim/test_core
+tools/firmware_sim/test_fire
+tools/firmware_sim/test_notice
+tools/firmware_sim/render_fire
