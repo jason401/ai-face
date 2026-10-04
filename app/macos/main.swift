@@ -2,7 +2,7 @@
 // bar (even with no ESP32 plugged in) and owns the settings window.
 //
 // The Python server is the source of truth: /emotions (every mood's frames), /view (what
-// the face shows now), /status, and POST /api for changes. Build: 앱 빌드.command.
+// the face shows now), /status, and POST /api for changes. Build: "Build AI Face.command".
 import Cocoa
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
