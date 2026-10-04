@@ -267,7 +267,7 @@ func drawExtraEffects(_ p: Pose, _ now: Double) {
         NSBezierPath(ovalIn: NSRect(x: hx - 10, y: hy - 10, width: 20, height: 20)).fill()
     }
     if p.fx & FX_BULB != 0 {
-        let bx = 182.0, by = 52.0, glass = rgb(255, 225, 90)
+        let bx = 190.0, by = 60.0, glass = rgb(255, 225, 90)
         let pulse = 0.5 + 0.5 * sin(now * 1000 / 180)
         glass.setStroke(); glass.setFill()
         for k in 0..<5 {

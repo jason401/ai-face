@@ -16,13 +16,13 @@ int main(){ static uint16_t fb[240*240]; tft.fb=fb; setup();
   CHECK(cmd("FRAME:400,800,100,100,0,0,70,18,0,0,0,0,0,8192,0,0")=="ERR FRAME");
   CHECK(cmd("OWNER:1")=="OK OWNER"); CHECK(cmd("PLAY:0")=="OK PLAY"); run(1500);
   FILE*o=fopen("style_color.raw","wb"); fwrite(fb,2,240*240,o); fclose(o);
-  uint16_t glass=at(fb,182,52); CHECK(glass!=0 && !gray(glass));          // yellow bulb
+  uint16_t glass=at(fb,190,60); CHECK(glass!=0 && !gray(glass));          // yellow bulb
   CHECK(at(fb,113,195)!=0);                                               // praying hands
   // owner ring: Claude orange in color
   CHECK(ringColor(1)!=0xFFFF);
   // monochrome: grays only, patterned ring, kept across restarts
   CHECK(cmd("STYLE:1")=="OK STYLE"); CHECK(cmd("STYLE:2")=="ERR COMMAND"); run(500);
-  glass=at(fb,182,52); CHECK(glass!=0 && gray(glass));
+  glass=at(fb,190,60); CHECK(glass!=0 && gray(glass));
   int on=0; for(int i=0;i<180;i++) on+=ringColor(i*2+1.0f)==0xFFFF;
   CHECK(on>100 && on<125);                                                // Claude: dashes
   CHECK(cmd("OWNER:2")=="OK OWNER"); run(2000);

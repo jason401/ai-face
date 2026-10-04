@@ -636,7 +636,7 @@ void waveHand(uint32_t now,uint16_t c) {
 }
 // Light bulb above the right eye, its rays pulsing.
 void bulb(uint32_t now) {
-  int bx=182, by=52;
+  int bx=190, by=60;   // inside the face canvas (it starts at y 30)
   uint16_t glass=rgb(255,225,90), base=rgb(170,170,170);
   float pulse=0.5f+0.5f*sinf(now/180.0f);
   for(int k=0;k<5;k++) {
