@@ -15,9 +15,9 @@ PACKAGE = Path(__file__).resolve().parent  # core/aiface in the project, or the 
 
 
 def project_root():
-    """The AI Face project folder (with firmware/ and web/), or None if unknown."""
+    """The AI Face project folder (with firmware/ and core/), or None if unknown."""
     here = PACKAGE.parents[1]
-    if (here / 'firmware').is_dir() and (here / 'web').is_dir():
+    if (here / 'firmware').is_dir() and (here / 'core').is_dir():
         return here
     try:
         root = Path(json.loads(SOURCE_INFO.read_text())['source'])
