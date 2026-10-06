@@ -96,3 +96,22 @@ echo
 msg "완료: 메뉴바 오른쪽 위의 얼굴을 누르면 메뉴가, 설정…을 누르면 설정 창이 열려요." \
     "Done: click the face at the top right of the menu bar for the menu; Settings… opens the settings."
 sleep 2
+# Close the Terminal window that double-clicking the .command file opened (Terminal keeps it
+# open by default). Only on success: a failed build leaves its log on screen. The closer is
+# detached from the window (new session) and waits until this script has ended, so Terminal
+# has nothing running in the window and closes it without asking.
+if [ "$TERM_PROGRAM" = "Apple_Terminal" ]; then
+  CLOSER=$(cat <<'PY'
+import os, subprocess, time
+if os.fork():
+    os._exit(0)
+os.setsid()
+for fd in (0, 1, 2):
+    os.dup2(os.open(os.devnull, os.O_RDWR), fd)
+time.sleep(1.5)
+subprocess.run(['osascript', '-e', 'tell application "Terminal" to close '
+                '(every window whose name contains "Build AI Face.command")'])
+PY
+)
+  /usr/bin/python3 -c "$CLOSER" </dev/null >/dev/null 2>&1
+fi
