@@ -14,7 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var received = Data()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        background = CommandLine.arguments.contains("--background")
+        background = CommandLine.arguments.contains("--background") || launchedAtLogin()
         LoginItem.refresh()
         let root = (Bundle.main.bundlePath as NSString).deletingLastPathComponent
         let script = (root as NSString).appendingPathComponent("core/run_server.py")
@@ -59,6 +59,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         server = task
+    }
+
+    /// Started by macOS as a login item: the "open application" event says so ('prdt' = 'lgit').
+    private func launchedAtLogin() -> Bool {
+        guard let event = NSAppleEventManager.shared().currentAppleEvent,
+              let prop = event.paramDescriptor(forKeyword: AEKeyword(0x7072_6474)) else { return false }
+        return prop.enumCodeValue == OSType(0x6C67_6974)
     }
 
     private func serverOutput(_ data: Data, handle: FileHandle) {

@@ -40,7 +40,7 @@ msg "2/4 컴파일 (30초쯤 걸려요)" "2/4 Compiling (about 30 seconds)"
 mkdir -p "$APP/Contents/MacOS"
 ARCH="$(uname -m)"
 if ! xcrun swiftc -swift-version 5 -O -target "$ARCH-apple-macos13.0" \
-      -framework Cocoa -framework SwiftUI \
+      -framework Cocoa -framework SwiftUI -framework ServiceManagement \
       -o "$APP/Contents/MacOS/AIFace.new" app/macos/*.swift >"$LOG" 2>&1; then
   echo
   msg "빌드 실패. 아래 내용(또는 app-build.log)을 Claude에게 알려 주세요." \

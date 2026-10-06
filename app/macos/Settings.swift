@@ -1,6 +1,7 @@
 // The settings window: toolbar tabs (일반 · 대기 화면 · 사진 · AI 연결 · 보드), each a
 // SwiftUI form, like the settings of RunCat and other menu bar apps.
 import Cocoa
+import ServiceManagement
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -509,35 +510,38 @@ final class SettingsStore: NSObject, ObservableObject {
     }
 }
 
-/// Launch at login: a per-user LaunchAgent that starts the app in the background.
+/// Open at login: the app itself as a login item (System Settings → General → Login Items →
+/// Open at Login, with its name and icon).
+///
+/// Older versions used a LaunchAgent instead. macOS showed that one as a bare "AIFace / exec"
+/// background item: it can only link a LaunchAgent to its app through a developer Team ID,
+/// which a self-built app does not have. refresh() moves such a setup to a real login item.
 enum LoginItem {
-    static var path: String {
+    static var legacyAgent: String {
         return NSHomeDirectory() + "/Library/LaunchAgents/local.aiface.plist"
     }
 
-    /// Rewrites an existing login item (new app location, keys added in newer versions).
     static func refresh() {
-        if enabled { enabled = true }
+        guard FileManager.default.fileExists(atPath: legacyAgent) else { return }
+        try? FileManager.default.removeItem(atPath: legacyAgent)
+        enabled = true
     }
 
     static var enabled: Bool {
-        get { return FileManager.default.fileExists(atPath: path) }
+        get { return SMAppService.mainApp.status == .enabled }
         set {
-            if !newValue {
-                try? FileManager.default.removeItem(atPath: path)
-                return
+            do {
+                if newValue {
+                    try SMAppService.mainApp.register()
+                } else {
+                    try SMAppService.mainApp.unregister()
+                }
+            } catch {
+                NSLog("AI Face: login item: \(error.localizedDescription)")
             }
-            guard let exe = Bundle.main.executablePath else { return }
-            // AssociatedBundleIdentifiers: System Settings → Login Items shows it as
-            // "AI Face" with the app icon instead of the bare executable.
-            let plist: NSDictionary = ["Label": "local.aiface",
-                                       "ProgramArguments": [exe, "--background"],
-                                       "RunAtLoad": true,
-                                       "ProcessType": "Interactive",
-                                       "AssociatedBundleIdentifiers": [Bundle.main.bundleIdentifier ?? "local.aiface"]]
-            try? FileManager.default.createDirectory(atPath: (path as NSString).deletingLastPathComponent,
-                                                     withIntermediateDirectories: true, attributes: nil)
-            plist.write(toFile: path, atomically: true)
+            if newValue && SMAppService.mainApp.status == .requiresApproval {
+                SMAppService.openSystemSettingsLoginItems()
+            }
         }
     }
 }
