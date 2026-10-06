@@ -1,5 +1,5 @@
 """Photo library: originals of every picture dropped into the controller app, kept in
-~/Library/Application Support/ESP32Face/사진 보관함 so they can be sent to the board again
+~/Library/Application Support/AI Face/Photo Library so they can be sent to the board again
 later. Pictures copied into that folder in Finder show up too. Python standard library only.
 """
 import hashlib

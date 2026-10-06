@@ -32,6 +32,8 @@ No hardware needed: the menu bar face works on its own. Everything runs locally 
 
 Keep `AI Face.app` in the project folder: it runs the Python code next to it.
 
+The face only changes while AI Face is running. When it is quit, the AI's face tools quietly do nothing and the chat carries on as usual (the board, if any, keeps its last face).
+
 ### The round LCD (optional)
 
 - Board: Seeed XIAO ESP32S3; display: GC9A01 240×240 round SPI LCD (pins in `firmware/ESP32_Display/ESP32_Display.ino`).
@@ -41,27 +43,28 @@ Keep `AI Face.app` in the project folder: it runs the Python code next to it.
 ## Privacy
 
 - Nothing leaves your Mac except what the AI apps already send: when an AI calls a tool, the result (for example the mood history) becomes part of that chat.
-- **Connect** adds one entry (`esp32-face`) to Claude desktop's and Codex's settings files, after making a backup copy; other settings are left alone.
-- Data (settings, photos, history) lives in `~/Library/Application Support/ESP32Face/`.
+- **Connect** adds one entry (`ai-face`) to Claude desktop's and Codex's settings files, after making a backup copy; other settings are left alone.
+- Data (settings, photos, history) lives in `~/Library/Application Support/AI Face/`.
 
 ## Uninstall
 
 1. Settings → AI apps → **Disconnect** for each app (or `python3 tools/install_mcp.py --remove`), and turn off **Open at login** in Settings → General.
-2. Quit AI Face from its menu, then delete the project folder and, if you want, `~/Library/Application Support/ESP32Face/`.
+2. Quit AI Face from its menu, then delete the project folder and, if you want, `~/Library/Application Support/AI Face/`.
 
 ## How it works
 
 ```
-Claude / Codex ──MCP (stdio)──▶ core/aiface/mcp_server.py ──HTTP (127.0.0.1)──▶ AI Face.app
-                                                                                 ├─ menu bar face
-                                                                                 └─ USB serial ─▶ ESP32 LCD
+Claude / Codex ──MCP (stdio)──▶ ai_face_mcp.py ──HTTP (127.0.0.1)──▶ AI Face.app
+                                                                      ├─ menu bar face
+                                                                      └─ USB serial ─▶ ESP32 LCD (optional)
 ```
 
 ```
 app/macos/*.swift       menu bar app (Swift): starts the server, menu bar face and menu, SwiftUI settings
+core/ai_face_mcp.py     MCP stdio server ("ai-face"): one file that only forwards set_expression,
+                        get_expression, start_timer, show_photo, ... to the running app
 core/aiface/            Python core (standard library only)
   server.py             local server (127.0.0.1, random port + token), connects the board automatically
-  mcp_server.py         MCP stdio server: set_expression, get_expression, start_timer, show_photo, ...
   integrations.py       registers the MCP server with Claude desktop / Codex
   board.py              ESP32 over USB serial (protocol FACE8)
   moods.py              the 71 mood animations (+ auto), settings
@@ -74,7 +77,7 @@ tools/                  app build script, CLI installer, firmware simulator, fac
 tests/                  tests
 ```
 
-User data lives in `~/Library/Application Support/ESP32Face/` (settings, photos, history).
+User data lives in `~/Library/Application Support/AI Face/` (settings, photos, history). The registered MCP server is a copy of `core/ai_face_mcp.py` in the same folder (chat apps may not start programs in `~/Documents`); it reads the mood list (`moods.json`) and the app's address (`controller.json`) that the app writes there.
 
 ## Development
 
@@ -83,7 +86,7 @@ python3 -m unittest discover -s tests     # Python tests + firmware simulator
 bash tools/firmware_sim/run.sh            # firmware simulator only (needs a C++ compiler)
 ```
 
-- After changing code, run `Build AI Face.command` again. The app also refreshes the installed MCP server code when it starts.
+- After changing code, run `Build AI Face.command` again. The app also refreshes the installed MCP server file when it starts, and moves data and registrations from older versions (`ESP32Face`, `esp32-face`) over to the new names.
 - The app is built with `xcrun swiftc -swift-version 5` (no Xcode project). Do not use SwiftUI macros such as `@State`: the Command Line Tools do not ship the macro plugin.
 - Languages: the app follows the Mac's preferred languages (English and Korean so far; anything else falls back to English). App texts are English in the code with translations in `app/macos/Resources/<lang>.lproj/Localizable.strings`; Python messages use `T(korean, english)` from `core/aiface/i18n.py`, and mood names are in `moods.EN`. The app passes its language to the server (`AIFACE_LANG`), which saves it for the MCP server.
 - In the firmware, every struct used in a function signature must be declared above the `RingColorFn` typedef (where the Arduino builder inserts prototypes). The simulator follows the same rule.
@@ -112,6 +115,8 @@ Claude나 GPT와 대화하면 AI가 대답마다 표정을 골라서 **맥 메�
 2. `Build AI Face.command` 더블클릭 → `AI Face.app`이 만들어지고 실행돼요(메뉴바 얼굴, 설정 창).
 3. 설정 → **AI 연결**에서 Claude 데스크톱 / Codex **연결**
 4. Claude(와 Codex)를 ⌘Q로 껐다가 다시 실행
+
+AI Face가 켜져 있을 때만 얼굴이 바뀌어요. 꺼져 있으면 AI의 표정 도구는 조용히 아무것도 하지 않고 대화는 평소처럼 이어져요.
 
 앱은 맥 언어를 따라가요. 영어 맥에서 한국어로 쓰려면 시스템 설정 → 일반 → 언어 및 지역 → 앱에서 AI Face를 한국어로 고르세요.
 

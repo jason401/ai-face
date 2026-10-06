@@ -461,7 +461,7 @@ final class SettingsStore: NSObject, ObservableObject {
 
     func copyCommand() {
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString("claude mcp add esp32-face -e ESP32_AGENT=claude -- " + otherAppCommand, forType: .string)
+        NSPasteboard.general.setString("claude mcp add ai-face -e AIFACE_AGENT=claude -- " + otherAppCommand, forType: .string)
         aiNotice = L("Copied the Claude Code command. Paste it into a terminal.")
     }
 
@@ -505,7 +505,7 @@ final class SettingsStore: NSObject, ObservableObject {
 
     func openDataFolder() {
         let folder = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/ESP32Face")
+            .appendingPathComponent("Library/Application Support/AI Face")
         NSWorkspace.shared.open(folder)
     }
 }
