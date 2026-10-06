@@ -18,9 +18,9 @@ sys.path.insert(0, str(ROOT / 'core'))
 import ai_face_mcp as mcp  # noqa: E402
 from aiface import history, server  # noqa: E402
 
-CATALOG = [{'id': 'happy', 'name_en': 'Happy', 'name_ko': '행복', 'group_en': 'Joy', 'description_en': 'smile'},
-           {'id': 'thinking', 'name_en': 'Thinking', 'name_ko': '생각', 'group_en': 'Thinking & talking',
-            'description_en': 'eyes up'}]
+CATALOG = [{'id': 'happy', 'name_en': 'Happy', 'name_ko': '행복', 'group_en': 'Joy', 'hint': ''},
+           {'id': 'greeting', 'name_en': 'Hello', 'name_ko': '반가움', 'group_en': 'Joy', 'hint': 'hello'},
+           {'id': 'thinking', 'name_en': 'Thinking', 'name_ko': '생각', 'group_en': 'Thinking & talking', 'hint': ''}]
 
 
 def call(method, params=None, rid=1):
@@ -92,14 +92,13 @@ class ProtocolTests(Base):
         tools = {t['name']: t for t in call('tools/list')['result']['tools']}
         self.assertEqual(set(tools), {'set_expression', 'get_expression', 'show_clock', 'start_timer',
                                       'cancel_timer', 'show_photo', 'update_firmware'})
-        self.assertEqual(tools['set_expression']['inputSchema']['properties']['emotion']['enum'], ['happy', 'thinking'])
-        self.assertIn('thinking: Thinking / 생각 (Thinking & talking) - eyes up', tools['set_expression']['description'])
+        self.assertTrue(tools['set_expression']['description'].endswith(
+            'Moods:\nJoy: happy, greeting\nThinking & talking: thinking\nNotes: greeting = hello'))
         self.assertEqual(call('ping')['result'], {})
 
     def test_without_catalog_any_mood_is_passed_on(self):
         mcp.CATALOG.unlink()
         schema = call('tools/list')['result']['tools'][0]
-        self.assertNotIn('enum', schema['inputSchema']['properties']['emotion'])
         self.assertIn('Start the AI Face app', schema['description'])
 
     def test_notifications_and_errors(self):
@@ -136,7 +135,7 @@ class NotRunningTests(Base):
 class ForwardingTests(Base):
     def test_every_tool_goes_to_the_app(self):
         app = self.run_app()
-        self.assertIn('Happy', tool('set_expression', emotion='happy')['content'][0]['text'])
+        self.assertEqual(tool('set_expression', emotion='happy')['content'][0]['text'], 'ok')
         tool('start_timer', minutes=0.5, color='red')
         tool('cancel_timer')
         tool('show_clock')
@@ -213,7 +212,7 @@ class EndToEndTests(unittest.TestCase):
                 self.assertTrue((data / 'moods.json').is_file())
                 on = subprocess.run(shim, input=stdin, env=env, capture_output=True, text=True, timeout=20)
                 replies = [json.loads(line) for line in on.stdout.splitlines()]
-                self.assertEqual(replies[1]['result']['content'][0]['text'], 'Face set to Happy (happy).')
+                self.assertEqual(replies[1]['result']['content'][0]['text'], 'ok')
                 import urllib.request
                 view = json.loads(urllib.request.urlopen(base + '/view', timeout=5).read())
                 self.assertEqual((view['emotion'], view['owner']), ('happy', 'claude'))

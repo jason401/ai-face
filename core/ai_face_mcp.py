@@ -71,87 +71,74 @@ def moods():
 
 
 INSTRUCTIONS = (
-    "This user has AI Face: a small animated face in the macOS menu bar (and maybe a round "
-    "LCD on their desk) that shows your expression. In every reply, call set_expression "
-    "exactly once, choosing the mood that best matches the emotional tone of YOUR reply (how "
-    "you, the assistant, would look while saying it). Examples: good news or success -> "
-    "happy/triumph/proud; thanks -> grateful; asking a question -> curious; explaining -> "
-    "talking; careful reasoning -> thinking; long tool work -> processing; an error or mistake "
-    "-> awkward/apologetic; sad topic -> sympathy/sad; greeting -> greeting. Vary moods "
-    "naturally; do not mention the tool call in your reply unless asked. If AI Face is not "
-    "running the tools do nothing, which is fine: carry on normally. start_timer / "
-    "cancel_timer are only for when the user asks for a timer, a pomodoro or a countdown; "
-    "still call set_expression as usual. show_photo is only for when the user asks to see "
-    "their photo; it stays until your next set_expression, so in that reply skip "
-    "set_expression. get_expression reads the current face and the recent history of faces "
-    "(yours, the other AI's and the user's picks); use it when the user asks about the face "
-    "or how the day went, or when reacting to the face another AI just showed would make "
-    "your reply better."
+    "The user has AI Face: a small animated face in the macOS menu bar (and maybe a round LCD) "
+    "that shows your expression. In every reply, call set_expression once with the mood that fits "
+    "the tone of YOUR reply, e.g. success -> happy/triumph/proud, thanks -> grateful, a question "
+    "-> curious, explaining -> talking, reasoning -> thinking, long tool work -> processing, a "
+    "mistake -> awkward/apologetic, sad news -> sympathy. Vary moods naturally and don't mention "
+    "the call. If AI Face is not running the tools do nothing; carry on normally."
 )
 
 NO_ARGS = {'type': 'object', 'properties': {}, 'additionalProperties': False}
 SAFE = {'readOnlyHint': False, 'destructiveHint': False, 'idempotentHint': True, 'openWorldHint': False}
 
 
+def mood_list(catalog):
+    """Mood ids by group on one line each, plus a note for the few whose id is ambiguous."""
+    groups, hints = {}, []
+    for m in catalog:
+        groups.setdefault(m.get('group_en') or 'Other', []).append(m['id'])
+        if m.get('hint'):
+            hints.append(f"{m['id']} = {m['hint']}")
+    lines = [f"{g}: {', '.join(ids)}" for g, ids in groups.items()]
+    if hints:
+        lines.append('Notes: ' + '; '.join(hints))
+    return '\n'.join(lines)
+
+
 def tools():
     catalog = moods()
-    emotion = {'type': 'string', 'description': 'Mood id, e.g. happy, thinking, curious, apologetic.'}
+    emotion = {'type': 'string'}   # no enum: the ids are listed below, and checked in set_expression
     if catalog:
-        emotion['enum'] = [m['id'] for m in catalog]
-        listing = '\n'.join(f"{m['id']}: {m.get('name_en', m['id'])} / {m.get('name_ko', '')} "
-                            f"({m.get('group_en', '')}) - {m.get('description_en', '')}" for m in catalog)
+        listing = mood_list(catalog)
     else:
         listing = '(Start the AI Face app once to load the list of moods.)'
     return [
         {'name': 'set_expression', 'title': 'Set AI Face expression',
-         'description': ("Show a facial expression on the user's AI Face (menu bar face, and the round "
-                         "LCD if one is connected). Call once per reply with the mood matching the tone "
-                         "of your answer. Available moods (id: English / Korean name (group) - look):\n"
-                         + listing),
+         'description': "Show your expression on the user's AI Face. Call once per reply. Moods:\n" + listing,
          'inputSchema': {'type': 'object', 'properties': {'emotion': emotion}, 'required': ['emotion'],
                          'additionalProperties': False},
          'annotations': SAFE},
         {'name': 'get_expression', 'title': 'Read AI Face expressions',
-         'description': ("Read what the user's AI Face shows now and the recent history of expressions: "
-                         "which mood, who chose it (claude, gpt, or user = picked by hand) and when, plus "
-                         "today's counts per AI and their most frequent moods. Only moods are recorded, "
-                         "never conversation content. Use when the user asks about the face, today's "
-                         "expressions, or to react to another AI's face."),
+         'description': ("The face shown now and recent changes (mood, who chose it: claude, gpt or user, "
+                         "when), plus today's counts. Use when the user asks about the face or the day's "
+                         "moods, or to react to another AI's face."),
          'inputSchema': {'type': 'object', 'properties': {
-             'limit': {'type': 'integer', 'minimum': 1, 'maximum': 50,
-                       'description': 'How many recent changes to list (default 10).'}},
+             'limit': {'type': 'integer', 'minimum': 1, 'maximum': 50, 'description': 'Recent changes (default 10).'}},
              'additionalProperties': False},
          'annotations': {'readOnlyHint': True, 'destructiveHint': False, 'idempotentHint': True,
                          'openWorldHint': False}},
         {'name': 'start_timer', 'title': 'Start a timer',
-         'description': ("Start a countdown on the user's AI Face: a ring empties clockwise from 12 "
-                         "o'clock and blinks when time is up (it also wakes a sleeping face). Use only "
-                         "when the user asks for a timer, pomodoro, or countdown. A new timer replaces "
-                         "the old one."),
+         'description': ("Countdown ring on the face; blinks when done. Only when the user asks for a "
+                         "timer or pomodoro. Replaces any running timer."),
          'inputSchema': {'type': 'object', 'properties': {
-             'minutes': {'type': 'number', 'exclusiveMinimum': 0, 'maximum': 1440,
-                         'description': 'Length in minutes (decimals allowed, e.g. 0.5 = 30 s).'},
-             'color': {'type': 'string', 'enum': TIMER_COLORS,
-                       'description': 'Ring color. Default blue. e.g. red = focus, green = break.'}},
+             'minutes': {'type': 'number', 'exclusiveMinimum': 0, 'maximum': 1440},
+             'color': {'type': 'string', 'enum': TIMER_COLORS, 'description': 'Default blue.'}},
              'required': ['minutes'], 'additionalProperties': False},
          'annotations': dict(SAFE, idempotentHint=False)},
         {'name': 'cancel_timer', 'title': 'Cancel the timer',
-         'description': "Remove the countdown ring from the user's AI Face. Use only when the user asks.",
+         'description': 'Remove the timer ring. Only when the user asks.',
          'inputSchema': NO_ARGS, 'annotations': SAFE},
         {'name': 'show_photo', 'title': 'Show a photo',
-         'description': ("Show the current photo on the user's AI Face (photos are added in the AI Face "
-                         "app). Use only when the user asks to see it. The next set_expression replaces "
-                         "it, so skip set_expression in that reply."),
+         'description': ("Show the user's photo on the face. Only when asked. It stays until the next "
+                         "set_expression, so skip set_expression in that reply."),
          'inputSchema': NO_ARGS, 'annotations': SAFE},
         {'name': 'show_clock', 'title': 'Show the clock',
-         'description': "Switch the user's AI Face to the analog clock. Use only when the user asks for the clock.",
+         'description': 'Show an analog clock on the face. Only when asked.',
          'inputSchema': NO_ARGS, 'annotations': SAFE},
         {'name': 'update_firmware', 'title': 'Update the board firmware',
-         'description': ("Compile the ESP32 firmware in the user's AI Face project and upload it to the "
-                         "round LCD board over USB (through the AI Face app; takes up to a few minutes). On "
-                         "failure the compiler or upload errors are returned so they can be fixed. Use only "
-                         "when the user asks to upload/flash the firmware, or agreed to it after the "
-                         "firmware was changed."),
+         'description': ("Compile the round LCD board's firmware and upload it over USB (takes minutes); "
+                         "returns compiler errors on failure. Only when the user asks to flash it."),
          'inputSchema': NO_ARGS, 'annotations': SAFE},
     ]
 
@@ -204,10 +191,10 @@ def _api(payload, timeout=20):
 def set_expression(emotion):
     catalog = {m['id']: m for m in moods()}
     if catalog and emotion not in catalog:
-        raise Failed(T(f'알 수 없는 표정입니다: {emotion}', f'Unknown mood: {emotion}'))
+        raise Failed(T(f'알 수 없는 표정입니다: {emotion}. 목록의 id 중 하나를 쓰세요.',
+                       f'Unknown mood: {emotion}. Use one of the listed ids.'))
     _api({'action': 'emotion', 'id': emotion, 'agent': agent()})
-    name = catalog.get(emotion, {}).get('name_ko' if _korean() else 'name_en', emotion)
-    return T(f"표정을 '{name}'({emotion})(으)로 바꿨습니다.", f'Face set to {name} ({emotion}).')
+    return 'ok'
 
 
 def get_expression(limit=10):

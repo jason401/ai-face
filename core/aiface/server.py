@@ -31,7 +31,7 @@ def write_catalog():
     """The moods, for the MCP server's tool list (it has no copy of the mood code)."""
     catalog = [dict(id=m['id'], name_en=m['name_en'], name_ko=m['name_ko'],
                     group_en=face_modes.GROUP_EN.get(m.get('group_id'), ''),
-                    description_en=face_modes.EN[m['id']][1])
+                    hint=face_modes.HINTS.get(m['id'], ''))
                for m in face_modes.emotions()]
     paths.CATALOG.parent.mkdir(parents=True, exist_ok=True)
     temp = paths.CATALOG.with_suffix('.tmp')
