@@ -23,7 +23,7 @@ uint32_t clockStartMillis=0, lastClockUpdate=0;
 int oldHX=CX, oldHY=CY, oldMX=CX, oldMY=CY, oldSX=CX, oldSY=CY;
 
 // ===== FACE8 = FACE3 frames + owner ring + countdown timer ring + photos + screen saver
-// + monochrome style (FACE8) + wave / light bulb / praying hands effects (FACE8).
+// + monochrome style (FACE8) + wave / light bulb / praying hands / salute / facepalm effects (FACE8).
 // Frame: 16 integers, data only (no executable code uploaded) =====
 // 0 move ms, 1 hold ms, 2 left eye %, 3 right eye %, 4 gaze x, 5 gaze y,
 // 6 mouth width, 7 smile, 8 mouth open, 9 brow tilt, 10 brow lift (0=hidden),
@@ -31,7 +31,7 @@ int oldHX=CX, oldHY=CY, oldMX=CX, oldMY=CY, oldSX=CX, oldSY=CY;
 enum { F_MOVE, F_HOLD, F_LEFT, F_RIGHT, F_X, F_Y, F_WIDTH, F_SMILE, F_OPEN,
        F_BROW, F_LIFT, F_EYES, F_TILT, F_FX, F_COLOR, F_SHAKE, F_COUNT };
 const int32_t LO[F_COUNT]={80,0,0,0,-15,-10,10,-28,0,-10,0,0,-10,0,0,0};
-const int32_t HI[F_COUNT]={5000,10000,100,100,15,10,100,28,30,10,12,9,10,8191,7,6};
+const int32_t HI[F_COUNT]={5000,10000,100,100,15,10,100,28,30,10,12,9,10,32767,7,6};
 
 // Eye shapes
 enum { EYE_NORMAL, EYE_HAPPY, EYE_CALM, EYE_CROSS, EYE_HEART, EYE_SPIRAL,
@@ -39,7 +39,7 @@ enum { EYE_NORMAL, EYE_HAPPY, EYE_CALM, EYE_CROSS, EYE_HEART, EYE_SPIRAL,
 // Effect bits
 enum { FX_BLUSH=1, FX_TEAR=2, FX_SWEAT=4, FX_ZZZ=8, FX_HEARTS=16, FX_ANGER=32,
        FX_QUESTION=64, FX_EXCLAIM=128, FX_SPARKLE=256, FX_NOTE=512,
-       FX_WAVE=1024, FX_BULB=2048, FX_PRAY=4096 };
+       FX_WAVE=1024, FX_BULB=2048, FX_PRAY=4096, FX_SALUTE=8192, FX_PALM=16384 };
 // Face colors: white, pink, blue, yellow, red, green, purple, orange
 const uint8_t PALETTE[8][3]={{255,255,255},{255,150,190},{120,180,255},{255,225,90},
                              {255,70,60},{130,220,110},{190,140,255},{255,160,60}};
@@ -653,6 +653,22 @@ void prayHands(uint32_t now,uint16_t c) {
   sStroke(107,198+y,117,166+y,8,c); sStroke(133,198+y,123,166+y,8,c);   // two palms leaning in
   sLine(120,160+y,120,209,C_BLACK);                                    // the gap between them
 }
+// Salute at the right brow: fingers together as a flat blade, palm and forearm going down.
+void saluteHand(uint32_t now,uint16_t c) {
+  float y=2*sinf(now/200.0f);
+  sStroke(162,60+y,202,70+y,7,c);    // fingers
+  sStroke(200,70+y,210,88+y,9,c);    // palm
+  sStroke(212,88+y,218,124,6,c);     // forearm
+}
+// Facepalm: a flat hand over the left eye, fingers together up across the forehead, wrist
+// down-left, pressing a little.
+void palmHand(uint32_t now,uint16_t c) {
+  float hx=84, hy=80+1.5f*sinf(now/400.0f);
+  const float a[4]={0.42f,0.62f,0.82f,1.02f}, len[4]={24,30,30,25};
+  for(int k=0;k<4;k++) sStroke(hx+sinf(a[k])*14,hy-cosf(a[k])*14,hx+sinf(a[k])*(14+len[k]),hy-cosf(a[k])*(14+len[k]),5,c);
+  sStroke(72,hy+14,38,150,9,c);      // wrist and forearm
+  sCircle((int)hx,(int)roundf(hy),19,c);
+}
 
 void drawEye(int e,float open,int shape,int ex,int ey,uint16_t col,uint32_t now) {
   if(shape!=EYE_NORMAL && open<20) { sRound(ex-11,ey-2,22,4,2,col); return; }
@@ -729,6 +745,8 @@ void renderFace(const Pose &p,uint32_t now) {
   if(p.fx&FX_WAVE) waveHand(now,col);
   if(p.fx&FX_BULB) bulb(now);
   if(p.fx&FX_PRAY) prayHands(now,col);
+  if(p.fx&FX_SALUTE) saluteHand(now,col);
+  if(p.fx&FX_PALM) palmHand(now,col);
 }
 // Monochrome style: the face canvas in grays (luminance) just before it goes to the LCD.
 void toGray(uint16_t *px,int n) {
@@ -814,7 +832,7 @@ void command(char *line) {
     Frame f; char *cursor=line+6; bool valid=true;
     for(int i=0;i<F_COUNT;i++) {
       char *end; long value=strtol(cursor,&end,10);
-      if(end==cursor || value < -10000 || value > 10000 || (i<F_COUNT-1 ? *end!=',' : *end!='\0')) { valid=false;break; }
+      if(end==cursor || value < -32768 || value > 32767 || (i<F_COUNT-1 ? *end!=',' : *end!='\0')) { valid=false;break; }
       f.v[i]=(int16_t)value;cursor=end+1;
     }
     if(uploadSlot<0 || !valid || !validFrame(f) || received>=(int)staging.count) {

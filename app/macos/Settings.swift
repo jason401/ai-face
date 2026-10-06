@@ -60,15 +60,15 @@ let OWNER_COLOR: [String: Color] = [
     "user": Color.gray,
 ]
 // Emotion groups by id (from the server), with their names and colors.
-let GROUP_ORDER = ["joy", "love", "wonder", "mind", "rest", "sad", "tense", "angry", "body"]
+let GROUP_ORDER = ["joy", "love", "wonder", "work", "stance", "oops", "rest", "sad", "tense", "angry", "body"]
 let GROUP_LABEL: [String: String] = [
-    "joy": L("Joy"), "love": L("Love & bond"), "wonder": L("Surprise & interest"), "mind": L("Thinking & talking"),
-    "rest": L("Calm & rest"), "sad": L("Sadness"), "tense": L("Anxiety & tension"), "angry": L("Anger & dislike"),
-    "body": L("Body"), "other": L("Other"),
+    "joy": L("Joy"), "love": L("Love & bond"), "wonder": L("Surprise & interest"), "work": L("Working"),
+    "stance": L("Stance"), "oops": L("Oops"), "rest": L("Calm & rest"), "sad": L("Sadness"),
+    "tense": L("Anxiety & tension"), "angry": L("Anger & dislike"), "body": L("Body"), "other": L("Other"),
 ]
 let GROUP_COLOR: [String: Color] = [
-    "joy": .yellow, "love": .pink, "wonder": .orange, "mind": .blue, "rest": .mint,
-    "sad": .indigo, "tense": .purple, "angry": .red, "body": .green,
+    "joy": .yellow, "love": .pink, "wonder": .orange, "work": .blue, "stance": .teal, "oops": .brown,
+    "rest": .mint, "sad": .indigo, "tense": .purple, "angry": .red, "body": .green,
 ]
 
 struct LibraryItem: Identifiable, Hashable {

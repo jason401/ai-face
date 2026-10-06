@@ -108,6 +108,19 @@ def auto_connect(device, stop, interval=3, retry=30):
             device.lock.release()
 
 
+def expire_working(device, stop, interval=10):
+    """Return to calm when an AI left a working mood on (see Device.expire_working)."""
+    while not stop.wait(interval):
+        if not device.lock.acquire(blocking=False):
+            continue   # busy (e.g. a firmware upload)
+        try:
+            device.expire_working()
+        except (OSError, ValueError, TimeoutError):
+            pass
+        finally:
+            device.lock.release()
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--no-browser', action='store_true')   # accepted for old launchers
@@ -181,6 +194,8 @@ def main():
                 if self.path.startswith('/history/week'):
                     return self.reply(200, history.week(day))
                 return self.reply(200, history.summary(day, face_modes.emotions()))
+            if self.path == '/recent':   # the menu's "Recent": moods picked by hand
+                return self.reply(200, history.picks(5, {m['id'] for m in face_modes.emotions()}))
             if self.path.startswith('/expression'):   # for the MCP server's get_expression
                 query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
                 try:
@@ -300,6 +315,7 @@ def main():
     write_discovery(server.server_port, token)
     stop = threading.Event()
     threading.Thread(target=auto_connect, args=(device, stop), daemon=True).start()
+    threading.Thread(target=expire_working, args=(device, stop), daemon=True).start()
     try:
         server.serve_forever()
     except KeyboardInterrupt:

@@ -16,6 +16,9 @@ from .i18n import T
 from . import moods as face_modes
 
 
+WORKING_LIMIT = 180   # seconds a working mood may stay before the face returns to calm
+
+
 def ports():
     return sorted(set(glob.glob('/dev/cu.usbmodem*') +
                       glob.glob('/dev/cu.usbserial*') + glob.glob('/dev/cu.wchusbserial*') +
@@ -304,7 +307,7 @@ class Device:
         self.mode = mode['name']
         self.message = mode['name'] + T(' 재생 중', ' playing')
 
-    def show_emotion(self, preset, owner='user'):
+    def show_emotion(self, preset, owner='user', record=True):
         """Show a mood: on the board when one is connected, and always in the menu bar."""
         face_modes.owner_command(owner)   # validate
         if self.fd is None and ports():
@@ -318,10 +321,24 @@ class Device:
             except OSError:
                 self.close()
         self.owner, self.emotion, self.screen, self.changed = owner, preset['id'], 'face', time.time()
-        history.record(owner, preset['id'])
+        if record:
+            history.record(owner, preset['id'])
         self.mode = preset['name']
         self.message = preset['name'] + (T(' 재생 중', ' playing') if self.fd is not None
                                           else T(' · 보드 없이 메뉴바에 표시 중', ' · in the menu bar (no board)'))
+
+    def expire_working(self, now=None, limit=WORKING_LIMIT):
+        """An AI left a working mood (thinking, processing, ...) on for `limit` seconds: it
+        probably forgot its closing set_expression, so go back to calm. Not logged."""
+        now = time.time() if now is None else now
+        if self.screen != 'face' or self.emotion not in face_modes.WORKING or self.owner == 'user' \
+                or now - self.changed < limit:
+            return False
+        calm = next(m for m in face_modes.emotions() if m['id'] == 'calm')
+        changed = self.changed
+        self.show_emotion(calm, self.owner, record=False)
+        self.changed = changed   # the screen saver keeps counting from the AI's last change
+        return True
 
     def view(self, now=None):
         """What the menu bar face should show now (mirrors the board, screen saver included)."""
