@@ -33,21 +33,9 @@ PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05']
 DATA = Path.home() / 'Library' / 'Application Support' / 'AI Face'
 DISCOVERY = DATA / 'controller.json'   # port and token of the running app
 CATALOG = DATA / 'moods.json'          # the moods, written by the app when it starts
-SETTINGS = DATA / 'settings.json'      # the app's language
 TIMER_COLORS = ['white', 'pink', 'blue', 'yellow', 'red', 'green', 'purple', 'orange']
 GPT_ALIASES = ('gpt', 'chatgpt', 'codex', 'openai')
 CLIENT_NAME = ''   # the chat app's name from "initialize"
-
-
-def _korean():
-    try:
-        return str(json.loads(SETTINGS.read_text()).get('language', '')).startswith('ko')
-    except (OSError, ValueError, AttributeError):
-        return False
-
-
-def T(ko, en):
-    return ko if _korean() else en
 
 
 def agent():
@@ -76,36 +64,33 @@ INSTRUCTIONS = (
     "the tone of YOUR reply, e.g. success -> happy/triumph/proud, thanks -> grateful, a question "
     "-> curious, explaining -> talking, reasoning -> thinking, long tool work -> processing, a "
     "mistake -> awkward/apologetic, sad news -> sympathy. Vary moods naturally and don't mention "
-    "the call. If AI Face is not running the tools do nothing; carry on normally."
+    "the call. Replies: ok = shown; app_not_running = AI Face is closed and nothing was shown "
+    "(carry on normally); error: ... = it failed."
 )
 
 NO_ARGS = {'type': 'object', 'properties': {}, 'additionalProperties': False}
 SAFE = {'readOnlyHint': False, 'destructiveHint': False, 'idempotentHint': True, 'openWorldHint': False}
 
 
-def mood_list(catalog):
-    """Mood ids by group on one line each, plus a note for the few whose id is ambiguous."""
-    groups, hints = {}, []
-    for m in catalog:
-        groups.setdefault(m.get('group_en') or 'Other', []).append(m['id'])
-        if m.get('hint'):
-            hints.append(f"{m['id']} = {m['hint']}")
-    lines = [f"{g}: {', '.join(ids)}" for g, ids in groups.items()]
-    if hints:
-        lines.append('Notes: ' + '; '.join(hints))
-    return '\n'.join(lines)
+def mood_notes(catalog):
+    """Meanings of the few moods whose id alone is ambiguous (the ids themselves are in the enum)."""
+    return '; '.join(f"{m['id']} = {m['hint']}" for m in catalog if m.get('hint'))
 
 
 def tools():
     catalog = moods()
-    emotion = {'type': 'string'}   # no enum: the ids are listed below, and checked in set_expression
+    emotion = {'type': 'string'}
+    rule = ("Call once per reply. Match the tone of YOUR reply, not the user's mood. Skip when "
+            "showing a photo. Shows your expression on the user's AI Face.")
     if catalog:
-        listing = mood_list(catalog)
+        emotion['enum'] = [m['id'] for m in catalog]   # grouped order: similar moods sit together
+        notes = mood_notes(catalog)
+        description = rule + (' Notes: ' + notes if notes else '')
     else:
-        listing = '(Start the AI Face app once to load the list of moods.)'
+        description = rule + ' (Start the AI Face app once to load the list of moods.)'
     return [
         {'name': 'set_expression', 'title': 'Set AI Face expression',
-         'description': "Show your expression on the user's AI Face. Call once per reply. Moods:\n" + listing,
+         'description': description,
          'inputSchema': {'type': 'object', 'properties': {'emotion': emotion}, 'required': ['emotion'],
                          'additionalProperties': False},
          'annotations': SAFE},
@@ -191,8 +176,7 @@ def _api(payload, timeout=20):
 def set_expression(emotion):
     catalog = {m['id']: m for m in moods()}
     if catalog and emotion not in catalog:
-        raise Failed(T(f'알 수 없는 표정입니다: {emotion}. 목록의 id 중 하나를 쓰세요.',
-                       f'Unknown mood: {emotion}. Use one of the listed ids.'))
+        raise Failed(f'unknown mood {emotion}')
     _api({'action': 'emotion', 'id': emotion, 'agent': agent()})
     return 'ok'
 
@@ -205,11 +189,11 @@ def get_expression(limit=10):
 
 def start_timer(minutes, color='blue'):
     if isinstance(minutes, bool) or not isinstance(minutes, (int, float)) or not 0 < minutes <= 1440:
-        raise Failed(T('minutes는 0보다 크고 1440 이하인 숫자여야 합니다.',
-                       'minutes must be a number above 0 and up to 1440.'))
+        raise Failed('minutes must be above 0 and at most 1440')
     if color not in TIMER_COLORS:
         raise Failed('color: ' + ', '.join(TIMER_COLORS))
-    return _api({'action': 'timer', 'seconds': max(1, int(round(minutes * 60))), 'color': color})
+    _api({'action': 'timer', 'seconds': max(1, int(round(minutes * 60))), 'color': color})
+    return 'ok'
 
 
 def call_tool(name, args):
@@ -222,14 +206,16 @@ def call_tool(name, args):
     if name == 'start_timer':
         return start_timer(args.get('minutes'), args.get('color', 'blue'))
     if name == 'cancel_timer':
-        return _api({'action': 'timer', 'seconds': 0})
-    if name == 'show_clock':
-        return _api({'action': 'mode', 'mode': 'CLOCK'})
-    if name == 'show_photo':
-        return _api({'action': 'photo_show'})
-    if name == 'update_firmware':
-        return _api({'action': 'firmware'}, timeout=1200)   # the first compile takes a while
-    raise KeyError(name)
+        _api({'action': 'timer', 'seconds': 0})
+    elif name == 'show_clock':
+        _api({'action': 'mode', 'mode': 'CLOCK'})
+    elif name == 'show_photo':
+        _api({'action': 'photo_show'})
+    elif name == 'update_firmware':
+        _api({'action': 'firmware'}, timeout=1200)   # the first compile takes a while
+    else:
+        raise KeyError(name)
+    return 'ok'
 
 
 # ----- JSON-RPC / MCP ------------------------------------------------------
@@ -278,11 +264,10 @@ def handle(message):
         except ValueError as exc:
             return _error(rid, -32602, str(exc))
         except NotRunning:
-            # Not an error: the user simply has AI Face closed.
-            return _text(rid, T('AI Face가 꺼져 있어서 아무것도 하지 않았어요.',
-                                'AI Face is not running, so nothing was shown.'))
+            # Not an error: the user simply has AI Face closed, and nothing was shown.
+            return _text(rid, 'app_not_running')
         except Failed as exc:
-            return _text(rid, 'AI Face: ' + str(exc), error=True)
+            return _text(rid, 'error: ' + str(exc), error=True)
     return _error(rid, -32601, f'Method not found: {method}')
 
 

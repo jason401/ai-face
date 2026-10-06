@@ -70,7 +70,7 @@ class Base(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.dir = Path(tmp.name)
-        for name in ('DISCOVERY', 'CATALOG', 'SETTINGS'):
+        for name in ('DISCOVERY', 'CATALOG'):
             p = patch.object(mcp, name, self.dir / (name.lower() + '.json')); p.start(); self.addCleanup(p.stop)
         mcp.CATALOG.write_text(json.dumps(CATALOG))
         p = patch.object(mcp, 'CLIENT_NAME', ''); p.start(); self.addCleanup(p.stop)
@@ -87,18 +87,23 @@ class ProtocolTests(Base):
         r = call('initialize', {'protocolVersion': '2025-03-26', 'clientInfo': {'name': 't'}})['result']
         self.assertEqual(r['protocolVersion'], '2025-03-26')
         self.assertEqual(r['serverInfo']['name'], 'ai-face')
-        self.assertIn('not running', r['instructions'])
+        self.assertIn('app_not_running', r['instructions'])
         self.assertEqual(call('initialize', {'protocolVersion': '1999'})['result']['protocolVersion'], mcp.PROTOCOLS[0])
         tools = {t['name']: t for t in call('tools/list')['result']['tools']}
         self.assertEqual(set(tools), {'set_expression', 'get_expression', 'show_clock', 'start_timer',
                                       'cancel_timer', 'show_photo', 'update_firmware'})
-        self.assertTrue(tools['set_expression']['description'].endswith(
-            'Moods:\nJoy: happy, greeting\nThinking & talking: thinking\nNotes: greeting = hello'))
+        desc = tools['set_expression']['description']
+        self.assertTrue(desc.startswith('Call once per reply. Match the tone of YOUR reply'))
+        self.assertTrue(desc.endswith('Notes: greeting = hello'))
+        self.assertNotIn('thinking', desc)   # the ids are in the enum only
+        self.assertEqual(tools['set_expression']['inputSchema']['properties']['emotion']['enum'],
+                         ['happy', 'greeting', 'thinking'])
         self.assertEqual(call('ping')['result'], {})
 
     def test_without_catalog_any_mood_is_passed_on(self):
         mcp.CATALOG.unlink()
         schema = call('tools/list')['result']['tools'][0]
+        self.assertNotIn('enum', schema['inputSchema']['properties']['emotion'])
         self.assertIn('Start the AI Face app', schema['description'])
 
     def test_notifications_and_errors(self):
@@ -119,27 +124,22 @@ class NotRunningTests(Base):
                            ('show_clock', {}), ('update_firmware', {})]:
             r = tool(name, **args)
             self.assertFalse(r['isError'], name)
-            self.assertIn('not running', r['content'][0]['text'])
+            self.assertEqual(r['content'][0]['text'], 'app_not_running')
 
     def test_stale_discovery_file_too(self):
         mcp.DISCOVERY.write_text(json.dumps({'port': 1, 'token': 'x'}))   # nothing listens there
         r = tool('set_expression', emotion='happy')
         self.assertFalse(r['isError'])
-        self.assertIn('not running', r['content'][0]['text'])
-
-    def test_korean_when_the_app_speaks_korean(self):
-        mcp.SETTINGS.write_text(json.dumps({'language': 'ko'}))
-        self.assertIn('꺼져', tool('set_expression', emotion='happy')['content'][0]['text'])
+        self.assertEqual(r['content'][0]['text'], 'app_not_running')
 
 
 class ForwardingTests(Base):
     def test_every_tool_goes_to_the_app(self):
         app = self.run_app()
         self.assertEqual(tool('set_expression', emotion='happy')['content'][0]['text'], 'ok')
-        tool('start_timer', minutes=0.5, color='red')
-        tool('cancel_timer')
-        tool('show_clock')
-        tool('show_photo')
+        for name, args in [('start_timer', {'minutes': 0.5, 'color': 'red'}), ('cancel_timer', {}),
+                           ('show_clock', {}), ('show_photo', {})]:
+            self.assertEqual(tool(name, **args)['content'][0]['text'], 'ok')
         self.assertEqual(tool('get_expression', limit=3)['content'][0]['text'], 'Now showing: Happy')
         self.assertEqual(app.calls, [
             {'action': 'emotion', 'id': 'happy', 'agent': 'gpt'},
@@ -153,7 +153,9 @@ class ForwardingTests(Base):
         self.run_app()
         r = tool('update_firmware')
         self.assertTrue(r['isError'])
-        self.assertIn('compile error: line 3', r['content'][0]['text'])
+        self.assertEqual(r['content'][0]['text'], 'error: compile error: line 3')
+        r = tool('set_expression', emotion='not-a-mood')
+        self.assertEqual((r['isError'], r['content'][0]['text']), (True, 'error: unknown mood not-a-mood'))
 
 
 class AgentTests(unittest.TestCase):
@@ -200,7 +202,7 @@ class EndToEndTests(unittest.TestCase):
 
             off = subprocess.run(shim, input=stdin, env=env, capture_output=True, text=True, timeout=20)
             replies = [json.loads(line) for line in off.stdout.splitlines()]
-            self.assertIn('not running', replies[1]['result']['content'][0]['text'])
+            self.assertEqual(replies[1]['result']['content'][0]['text'], 'app_not_running')
 
             app = subprocess.Popen([sys.executable, str(ROOT / 'core' / 'run_server.py')], env=env,
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
