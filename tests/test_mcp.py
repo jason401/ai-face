@@ -1,11 +1,11 @@
+"""The MCP server (core/ai_face_mcp.py): a thin bridge that only forwards to the running app."""
 import json
 import os
-import pty
 import subprocess
 import sys
 import tempfile
 import threading
-import tty
+import time
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -15,79 +15,26 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'tests'))
 import isolate  # noqa: E402,F401  (temporary HOME for the whole test run)
 sys.path.insert(0, str(ROOT / 'core'))
-from aiface import mcp_server as esp32_mcp  # noqa: E402
-from aiface import board as esp_display  # noqa: E402
-from aiface import server  # noqa: E402
+import ai_face_mcp as mcp  # noqa: E402
+from aiface import history, server  # noqa: E402
+
+CATALOG = [{'id': 'happy', 'name_en': 'Happy', 'name_ko': '행복', 'group_en': 'Joy', 'description_en': 'smile'},
+           {'id': 'thinking', 'name_en': 'Thinking', 'name_ko': '생각', 'group_en': 'Thinking & talking',
+            'description_en': 'eyes up'}]
 
 
 def call(method, params=None, rid=1):
-    return esp32_mcp.handle({'jsonrpc': '2.0', 'id': rid, 'method': method, 'params': params or {}})
+    return mcp.handle({'jsonrpc': '2.0', 'id': rid, 'method': method, 'params': params or {}})
 
 
-class ProtocolTests(unittest.TestCase):
-    def test_initialize_and_tools(self):
-        r = call('initialize', {'protocolVersion': '2025-03-26', 'capabilities': {}, 'clientInfo': {'name': 't'}})['result']
-        self.assertEqual(r['protocolVersion'], '2025-03-26')
-        self.assertIn('tools', r['capabilities'])
-        self.assertIn('set_expression', r['instructions'])
-        unknown = call('initialize', {'protocolVersion': '1999-01-01'})['result']
-        self.assertEqual(unknown['protocolVersion'], esp32_mcp.PROTOCOLS[0])
-        tools = {t['name']: t for t in call('tools/list')['result']['tools']}
-        self.assertEqual(set(tools), {'set_expression', 'get_expression', 'show_clock', 'start_timer', 'cancel_timer', 'show_photo',
-                                      'update_firmware'})
-        self.assertIn('red', tools['start_timer']['inputSchema']['properties']['color']['enum'])
-        enum = tools['set_expression']['inputSchema']['properties']['emotion']['enum']
-        self.assertEqual(len(enum), 72)
-        self.assertIn('triumph', enum)
-        self.assertEqual(call('ping')['result'], {})
-
-    def test_notifications_and_errors(self):
-        self.assertIsNone(esp32_mcp.handle({'jsonrpc': '2.0', 'method': 'notifications/initialized'}))
-        self.assertEqual(call('nope')['error']['code'], -32601)
-        self.assertEqual(call('tools/call', {'name': 'set_expression', 'arguments': {}})['error']['code'], -32602)
-        self.assertEqual(esp32_mcp.handle(['bad'])['error']['code'], -32600)
-        r = call('tools/call', {'name': 'set_expression', 'arguments': {'emotion': 'not-a-mood'}})['result']
-        self.assertTrue(r['isError'])
-
-    def test_stdio_end_to_end_without_board(self):
-        lines = [
-            {'jsonrpc': '2.0', 'id': 1, 'method': 'initialize', 'params': {'protocolVersion': '2025-06-18'}},
-            {'jsonrpc': '2.0', 'method': 'notifications/initialized'},
-            {'jsonrpc': '2.0', 'id': 2, 'method': 'tools/list'},
-            {'jsonrpc': '2.0', 'id': 3, 'method': 'tools/call', 'params': {'name': 'set_expression', 'arguments': {'emotion': 'happy'}}},
-        ]
-        with tempfile.TemporaryDirectory() as tmp:
-            # Install into a throwaway home (no running app, no Claude config) and run the
-            # installed server exactly as Claude would.
-            env = dict(os.environ, HOME=tmp)
-            install = subprocess.run([sys.executable, str(ROOT / 'tools' / 'install_mcp.py')], env=env,
-                                     capture_output=True, text=True, timeout=30)
-            self.assertEqual(install.returncode, 0, install.stdout + install.stderr)
-            runtime = Path(tmp) / 'Library' / 'Application Support' / 'ESP32Face'
-            config = json.loads((Path(tmp) / 'Library' / 'Application Support' / 'Claude' / 'claude_desktop_config.json').read_text())
-            self.assertEqual(config['mcpServers']['esp32-face']['args'], [str(runtime / 'esp32_mcp.py')])
-            self.assertTrue((runtime / 'aiface' / 'mcp_server.py').is_file())
-            self.assertEqual(json.loads((runtime / 'source.json').read_text())['source'], str(ROOT))
-            proc = subprocess.run([sys.executable, str(runtime / 'esp32_mcp.py')], env=env,
-                                  input='\n'.join(json.dumps(l) for l in lines) + '\nnot json\n',
-                                  capture_output=True, text=True, timeout=30)
-            # Removing the server keeps settings and photos in the same folder.
-            (runtime / 'settings.json').write_text('{}')
-            subprocess.run([sys.executable, str(ROOT / 'tools' / 'install_mcp.py'), '--remove'], env=env,
-                           capture_output=True, text=True, timeout=30)
-            self.assertFalse((runtime / 'aiface').exists())
-            self.assertTrue((runtime / 'settings.json').exists())
-        out = [json.loads(l) for l in proc.stdout.splitlines()]
-        self.assertEqual([o.get('id') for o in out], [1, 2, 3, None])
-        self.assertTrue(out[2]['result']['isError'])  # no ESP32 attached in the test environment
-        self.assertEqual(out[3]['error']['code'], -32700)
+def tool(name, **args):
+    return call('tools/call', {'name': name, 'arguments': args})['result']
 
 
 class FakeApp:
-    """Mimics the controller app's /state and /api endpoints."""
-    def __init__(self, connected=True):
+    """Mimics the app's POST /api and GET /expression."""
+    def __init__(self):
         self.calls = []
-        self.state = dict(ports=['/dev/cu.usbmodem1'], connected=connected, port='', mode='', emotion='', message='')
         app = self
 
         class H(BaseHTTPRequestHandler):
@@ -98,25 +45,18 @@ class FakeApp:
                 self.send_response(code); self.send_header('Content-Length', str(len(body))); self.end_headers()
                 self.wfile.write(body)
 
-            def ok(self):
-                return (self.headers.get('Host') == f'127.0.0.1:{self.server.server_port}'
-                        and self.headers.get('X-ESP-Token') == 'secret')
-
             def do_GET(self):
-                self.send(200 if self.ok() else 403, app.state)
+                app.calls.append(('GET', self.path))
+                self.send(200, {'text': 'Now showing: Happy'})
 
             def do_POST(self):
-                if not self.ok():
+                if self.headers.get('X-ESP-Token') != 'secret':
                     return self.send(403, {'message': 'token'})
                 data = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
                 app.calls.append(data)
-                if data['action'] == 'connect':
-                    app.state['connected'] = True
-                elif data['action'] == 'emotion':
-                    app.state['emotion'] = data['id']   # works without a board (menu bar)
-                elif data['action'] == 'mode' and not app.state['ports']:
-                    return self.send(400, dict(app.state, message='보드 오류'))
-                self.send(200, dict(app.state, message='ok'))
+                if data['action'] == 'firmware':
+                    return self.send(400, {'message': 'compile error: line 3'})
+                self.send(200, {'message': 'ok'})
 
         self.server = ThreadingHTTPServer(('127.0.0.1', 0), H)
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
@@ -125,162 +65,164 @@ class FakeApp:
         self.server.shutdown(); self.server.server_close()
 
 
-class DeliveryTests(unittest.TestCase):
+class Base(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory()
-        self.discovery = Path(self.tmp.name) / '.controller.json'
-        p = patch.object(esp32_mcp, 'DISCOVERY', self.discovery); p.start(); self.addCleanup(p.stop)
-        self.addCleanup(self.tmp.cleanup)
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.dir = Path(tmp.name)
+        for name in ('DISCOVERY', 'CATALOG', 'SETTINGS'):
+            p = patch.object(mcp, name, self.dir / (name.lower() + '.json')); p.start(); self.addCleanup(p.stop)
+        mcp.CATALOG.write_text(json.dumps(CATALOG))
+        p = patch.object(mcp, 'CLIENT_NAME', ''); p.start(); self.addCleanup(p.stop)
 
-    def test_forwards_to_running_app(self):
-        app = FakeApp(connected=False); self.addCleanup(app.close)
-        self.discovery.write_text(json.dumps({'port': app.server.server_port, 'token': 'secret'}))
-        with patch.object(esp32_mcp, '_direct', side_effect=AssertionError('should not open USB')):
-            r = call('tools/call', {'name': 'set_expression', 'arguments': {'emotion': 'love'}})['result']
-        self.assertFalse(r['isError'], r)
-        self.assertEqual([c['action'] for c in app.calls], ['emotion'])   # the app connects by itself
-        self.assertIn(app.calls[0]['agent'], ('claude', 'gpt'))
-        self.assertEqual(app.state['emotion'], 'love')
+    def run_app(self):
+        app = FakeApp()
+        self.addCleanup(app.close)
+        mcp.DISCOVERY.write_text(json.dumps({'port': app.server.server_port, 'token': 'secret'}))
+        return app
+
+
+class ProtocolTests(Base):
+    def test_initialize_and_tools(self):
+        r = call('initialize', {'protocolVersion': '2025-03-26', 'clientInfo': {'name': 't'}})['result']
+        self.assertEqual(r['protocolVersion'], '2025-03-26')
+        self.assertEqual(r['serverInfo']['name'], 'ai-face')
+        self.assertIn('not running', r['instructions'])
+        self.assertEqual(call('initialize', {'protocolVersion': '1999'})['result']['protocolVersion'], mcp.PROTOCOLS[0])
+        tools = {t['name']: t for t in call('tools/list')['result']['tools']}
+        self.assertEqual(set(tools), {'set_expression', 'get_expression', 'show_clock', 'start_timer',
+                                      'cancel_timer', 'show_photo', 'update_firmware'})
+        self.assertEqual(tools['set_expression']['inputSchema']['properties']['emotion']['enum'], ['happy', 'thinking'])
+        self.assertIn('thinking: Thinking / 생각 (Thinking & talking) - eyes up', tools['set_expression']['description'])
+        self.assertEqual(call('ping')['result'], {})
+
+    def test_without_catalog_any_mood_is_passed_on(self):
+        mcp.CATALOG.unlink()
+        schema = call('tools/list')['result']['tools'][0]
+        self.assertNotIn('enum', schema['inputSchema']['properties']['emotion'])
+        self.assertIn('Start the AI Face app', schema['description'])
+
+    def test_notifications_and_errors(self):
+        self.assertIsNone(mcp.handle({'jsonrpc': '2.0', 'method': 'notifications/initialized'}))
+        self.assertEqual(call('nope')['error']['code'], -32601)
+        self.assertEqual(call('tools/call', {'name': 'set_expression', 'arguments': {}})['error']['code'], -32602)
+        self.assertEqual(call('tools/call', {'name': 'zap'})['error']['code'], -32602)
+        self.assertEqual(mcp.handle(['bad'])['error']['code'], -32600)
+        self.run_app()
+        self.assertTrue(tool('set_expression', emotion='not-a-mood')['isError'])
+        self.assertTrue(tool('start_timer', minutes=0)['isError'])
+        self.assertTrue(tool('start_timer', minutes=5, color='beige')['isError'])
+
+
+class NotRunningTests(Base):
+    def test_no_app_is_quiet_not_an_error(self):
+        for name, args in [('set_expression', {'emotion': 'happy'}), ('get_expression', {}),
+                           ('show_clock', {}), ('update_firmware', {})]:
+            r = tool(name, **args)
+            self.assertFalse(r['isError'], name)
+            self.assertIn('not running', r['content'][0]['text'])
+
+    def test_stale_discovery_file_too(self):
+        mcp.DISCOVERY.write_text(json.dumps({'port': 1, 'token': 'x'}))   # nothing listens there
+        r = tool('set_expression', emotion='happy')
+        self.assertFalse(r['isError'])
+        self.assertIn('not running', r['content'][0]['text'])
+
+    def test_korean_when_the_app_speaks_korean(self):
+        mcp.SETTINGS.write_text(json.dumps({'language': 'ko'}))
+        self.assertIn('꺼져', tool('set_expression', emotion='happy')['content'][0]['text'])
+
+
+class ForwardingTests(Base):
+    def test_every_tool_goes_to_the_app(self):
+        app = self.run_app()
+        self.assertIn('Happy', tool('set_expression', emotion='happy')['content'][0]['text'])
+        tool('start_timer', minutes=0.5, color='red')
+        tool('cancel_timer')
+        tool('show_clock')
+        tool('show_photo')
+        self.assertEqual(tool('get_expression', limit=3)['content'][0]['text'], 'Now showing: Happy')
+        self.assertEqual(app.calls, [
+            {'action': 'emotion', 'id': 'happy', 'agent': 'gpt'},
+            {'action': 'timer', 'seconds': 30, 'color': 'red'},
+            {'action': 'timer', 'seconds': 0},
+            {'action': 'mode', 'mode': 'CLOCK'},
+            {'action': 'photo_show'},
+            ('GET', '/expression?limit=3')])
 
     def test_app_error_is_reported(self):
-        app = FakeApp(); self.addCleanup(app.close)
-        app.state['ports'] = []; app.state['connected'] = False
-        self.discovery.write_text(json.dumps({'port': app.server.server_port, 'token': 'secret'}))
-        r = call('tools/call', {'name': 'show_clock', 'arguments': {}})['result']
+        self.run_app()
+        r = tool('update_firmware')
         self.assertTrue(r['isError'])
-        self.assertIn('보드 오류', r['content'][0]['text'])   # the app's own error is passed on
-
-    def test_stale_discovery_falls_back_to_usb(self):
-        app = FakeApp(); port = app.server.server_port; app.close()   # app no longer running
-        self.discovery.write_text(json.dumps({'port': port, 'token': 'secret'}))
-        used = []
-        with patch.object(esp32_mcp, '_direct', side_effect=lambda action: used.append(action) or 'ok'):
-            r = call('tools/call', {'name': 'set_expression', 'arguments': {'emotion': 'happy'}})['result']
-        self.assertFalse(r['isError'])
-        self.assertEqual(len(used), 1)
-
-    def test_direct_usb_upload_and_release(self):
-        master, slave = pty.openpty(); tty.setraw(slave)
-        name = os.ttyname(slave)
-        from aiface import moods as face_modes
-        sleepy, sleeping = face_modes.idle_moods()
-        replies = {'HELLO': 'OK FACE8', 'BEGIN': 'OK BEGIN', 'FRAME': 'OK FRAME', 'COMMIT': 'OK COMMIT',
-                   'PLAY': 'OK PLAY', 'OWNER': 'OK OWNER', 'TIME': 'OK TIME', 'SAVER': 'OK SAVER', 'STYLE': 'OK STYLE', 'PHOTO:LIST': 'OK LIST:0:-1',
-                   # sleepy already on the board, sleeping not yet
-                   'SUM:3': f'OK SUM:{face_modes.checksum(sleepy)}', 'SUM:8': 'OK SUM:0'}
-        seen = []
-
-        def board():
-            buf = b''
-            while True:
-                try:
-                    chunk = os.read(master, 4096)
-                except OSError:
-                    return
-                if not chunk:
-                    return
-                buf += chunk
-                while b'\n' in buf:
-                    line, buf = buf.split(b'\n', 1)
-                    text = line.decode(); seen.append(text)
-                    key = text if text.startswith('SUM:') or text.startswith('PHOTO:') else text.split(':')[0]
-                    os.write(master, (replies[key] + '\r\n').encode())
-                    if key == 'OWNER':
-                        return
-
-        worker = threading.Thread(target=board, daemon=True); worker.start()
-        tmp = tempfile.TemporaryDirectory(); self.addCleanup(tmp.cleanup)
-        with patch.object(esp_display, 'ports', return_value=[name]), patch.object(esp_display.time, 'sleep'), \
-                patch.dict(os.environ, {'ESP32_AGENT': 'gpt'}), \
-                patch.object(face_modes, 'SETTINGS', Path(tmp.name) / 'settings.json'):
-            r = call('tools/call', {'name': 'set_expression', 'arguments': {'emotion': 'thinking'}})['result']
-        worker.join(2); os.close(master); os.close(slave)
-        self.assertFalse(r['isError'], r)
-        self.assertEqual(seen[0], 'HELLO')
-        self.assertEqual(seen[-2], 'PLAY:7')
-        self.assertEqual(seen[-1], 'OWNER:2')  # GPT ring, sent after the face starts
-        frames = esp32_mcp.BY_ID['thinking']['frames']
-        self.assertEqual(sum(s.startswith('FRAME:') for s in seen), len(frames) + len(sleeping['frames']))
-        self.assertIn('SAVER:600:0:0:60', seen)
-        self.assertEqual([s for s in seen if s.startswith('BEGIN')][0], f"BEGIN:8:{len(sleeping['frames'])}")
+        self.assertIn('compile error: line 3', r['content'][0]['text'])
 
 
 class AgentTests(unittest.TestCase):
-    def setUp(self):
-        p = patch.object(esp32_mcp, 'CLIENT_NAME', ''); p.start(); self.addCleanup(p.stop)
-
-    def detect(self, client, env=None):
-        environ = {k: v for k, v in os.environ.items() if k != 'ESP32_AGENT'}
-        if env is not None:
-            environ['ESP32_AGENT'] = env
-        with patch.dict(os.environ, environ, clear=True):
-            call('initialize', {'protocolVersion': '2025-06-18', 'clientInfo': {'name': client}})
-            return esp32_mcp.agent()
+    def agent(self, env, client=''):
+        with patch.dict(os.environ, env, clear=False), patch.object(mcp, 'CLIENT_NAME', client):
+            for k in ('AIFACE_AGENT', 'ESP32_AGENT'):
+                if k not in env:
+                    os.environ.pop(k, None)
+            return mcp.agent()
 
     def test_environment_variable_wins(self):
-        self.assertEqual(self.detect('claude-ai', 'gpt'), 'gpt')
-        self.assertEqual(self.detect('codex-mcp-client', 'Claude'), 'claude')
-        self.assertEqual(self.detect('whatever', 'codex'), 'gpt')
+        self.assertEqual(self.agent({'AIFACE_AGENT': 'claude'}, 'codex-mcp-client'), 'claude')
+        self.assertEqual(self.agent({'AIFACE_AGENT': 'Codex'}, 'claude-ai'), 'gpt')
+        self.assertEqual(self.agent({'ESP32_AGENT': 'claude'}), 'claude')   # older registrations
 
     def test_client_name_fallback(self):
-        self.assertEqual(self.detect('claude-ai'), 'claude')
-        self.assertEqual(self.detect('claude-code'), 'claude')
-        self.assertEqual(self.detect('codex-mcp-client'), 'gpt')
-        self.assertEqual(self.detect('openai-mcp'), 'gpt')
-
-    def test_agent_is_forwarded_to_app(self):
-        app = FakeApp(); self.addCleanup(app.close)
-        with tempfile.TemporaryDirectory() as tmp:
-            discovery = Path(tmp) / 'c.json'
-            discovery.write_text(json.dumps({'port': app.server.server_port, 'token': 'secret'}))
-            with patch.object(esp32_mcp, 'DISCOVERY', discovery), patch.dict(os.environ, {'ESP32_AGENT': 'claude'}):
-                r = call('tools/call', {'name': 'set_expression', 'arguments': {'emotion': 'happy'}})['result']
-        self.assertFalse(r['isError'], r)
-        self.assertEqual(app.calls[-1], {'action': 'emotion', 'id': 'happy', 'agent': 'claude'})
+        self.assertEqual(self.agent({}, 'claude-ai'), 'claude')
+        self.assertEqual(self.agent({}, 'codex-mcp-client'), 'gpt')
 
 
-class TimerToolTests(unittest.TestCase):
-    def test_timer_tools_are_forwarded_to_app(self):
-        app = FakeApp(); self.addCleanup(app.close)
-        with tempfile.TemporaryDirectory() as tmp:
-            discovery = Path(tmp) / 'c.json'
-            discovery.write_text(json.dumps({'port': app.server.server_port, 'token': 'secret'}))
-            with patch.object(esp32_mcp, 'DISCOVERY', discovery):
-                r = call('tools/call', {'name': 'start_timer', 'arguments': {'minutes': 25, 'color': 'red'}})['result']
-                self.assertFalse(r['isError'], r); self.assertIn('25분', r['content'][0]['text'])
-                r = call('tools/call', {'name': 'start_timer', 'arguments': {'minutes': 0.5}})['result']
-                self.assertFalse(r['isError'], r)
-                r = call('tools/call', {'name': 'cancel_timer', 'arguments': {}})['result']
-                self.assertFalse(r['isError'], r)
-        self.assertEqual(app.calls, [{'action': 'timer', 'seconds': 1500, 'color': 'red'},
-                                     {'action': 'timer', 'seconds': 30, 'color': 'blue'},
-                                     {'action': 'timer', 'seconds': 0}])
+class ExpressionTextTests(unittest.TestCase):
+    def test_text_has_now_recent_and_today(self):
+        history.clear()
+        now = time.time()
+        history.record('claude', 'happy', now - 60)
+        history.record('gpt', 'thinking', now - 30)
+        text = server.expression_text({'name': '생각', 'owner': 'gpt', 'board': False}, 5, now)
+        self.assertIn('지금 얼굴: 생각 (고른 쪽: GPT, 보드 없음)', text)
+        self.assertIn('최근 2번의 변화', text)
+        self.assertIn('GPT: 생각 중 (thinking)', text)
+        self.assertIn('오늘 합계 2번', text)
 
-    def test_show_photo_is_forwarded(self):
-        app = FakeApp(); self.addCleanup(app.close)
-        with tempfile.TemporaryDirectory() as tmp:
-            discovery = Path(tmp) / 'c.json'
-            discovery.write_text(json.dumps({'port': app.server.server_port, 'token': 'secret'}))
-            with patch.object(esp32_mcp, 'DISCOVERY', discovery):
-                r = call('tools/call', {'name': 'show_photo', 'arguments': {}})['result']
-        self.assertFalse(r['isError'], r)
-        self.assertEqual(app.calls[-1], {'action': 'photo_show'})
 
-    def test_update_firmware_goes_through_app(self):
-        app = FakeApp(); self.addCleanup(app.close)
-        with tempfile.TemporaryDirectory() as tmp:
-            discovery = Path(tmp) / 'c.json'
-            discovery.write_text(json.dumps({'port': app.server.server_port, 'token': 'secret'}))
-            with patch.object(esp32_mcp, 'DISCOVERY', discovery):
-                r = call('tools/call', {'name': 'update_firmware', 'arguments': {}})['result']
-        self.assertFalse(r['isError'], r)
-        self.assertEqual(app.calls[-1], {'action': 'firmware'})
+class EndToEndTests(unittest.TestCase):
+    def test_real_app_and_server_file(self):
+        """The app server and the MCP server file as separate processes, in a throwaway home."""
+        with tempfile.TemporaryDirectory() as home:
+            env = dict(os.environ, HOME=home, AIFACE_LANG='en', AIFACE_TEST_HOME=home)
+            shim = [sys.executable, str(ROOT / 'core' / 'ai_face_mcp.py')]
+            hello = [{'jsonrpc': '2.0', 'id': 1, 'method': 'initialize', 'params': {'clientInfo': {'name': 'claude-ai'}}},
+                     {'jsonrpc': '2.0', 'id': 2, 'method': 'tools/call',
+                      'params': {'name': 'set_expression', 'arguments': {'emotion': 'happy'}}}]
+            stdin = ''.join(json.dumps(m) + '\n' for m in hello)
 
-    def test_bad_timer_arguments(self):
-        for args in ({'minutes': 0}, {'minutes': 2000}, {'minutes': '5'}, {'minutes': True}, {'minutes': 5, 'color': 'navy'}):
-            with self.subTest(args=args), patch.object(esp32_mcp, 'deliver', side_effect=AssertionError('not sent')):
-                r = call('tools/call', {'name': 'start_timer', 'arguments': args})['result']
-                self.assertTrue(r['isError'])
+            off = subprocess.run(shim, input=stdin, env=env, capture_output=True, text=True, timeout=20)
+            replies = [json.loads(line) for line in off.stdout.splitlines()]
+            self.assertIn('not running', replies[1]['result']['content'][0]['text'])
+
+            app = subprocess.Popen([sys.executable, str(ROOT / 'core' / 'run_server.py')], env=env,
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            try:
+                base = app.stdout.readline().strip()
+                app.stdout.readline()
+                self.assertTrue(base.startswith('http://127.0.0.1:'))
+                data = Path(home) / 'Library' / 'Application Support' / 'AI Face'
+                self.assertTrue((data / 'moods.json').is_file())
+                on = subprocess.run(shim, input=stdin, env=env, capture_output=True, text=True, timeout=20)
+                replies = [json.loads(line) for line in on.stdout.splitlines()]
+                self.assertEqual(replies[1]['result']['content'][0]['text'], 'Face set to Happy (happy).')
+                import urllib.request
+                view = json.loads(urllib.request.urlopen(base + '/view', timeout=5).read())
+                self.assertEqual((view['emotion'], view['owner']), ('happy', 'claude'))
+                text = json.loads(urllib.request.urlopen(base + '/expression?limit=2', timeout=5).read())['text']
+                self.assertIn('Now showing: Happy (chosen by Claude', text)
+            finally:
+                app.terminate()
+                app.wait(10)
+                app.stdout.close(); app.stderr.close()
 
 
 class DiscoveryFileTests(unittest.TestCase):

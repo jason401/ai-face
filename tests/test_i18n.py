@@ -8,7 +8,8 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import isolate  # noqa: E402,F401  (temporary HOME for the whole test run)
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'core'))
-from aiface import board, i18n, mcp_server, moods, paths  # noqa: E402
+from aiface import board, i18n, moods, paths, server  # noqa: E402
+import ai_face_mcp  # noqa: E402
 
 
 class LanguageTests(unittest.TestCase):
@@ -53,9 +54,14 @@ class LanguageTests(unittest.TestCase):
             self.assertEqual(i18n.lang(), 'en')
 
     def test_tool_catalog_is_bilingual(self):
-        text = mcp_server.TOOLS[0]['description']
-        self.assertIn('hopeful: Fingers crossed / 조마조마 (Anxiety & tension)', text)
-
+        # The app writes the moods for the MCP server, whatever language the app speaks.
+        with tempfile.TemporaryDirectory() as tmp, patch.object(paths, 'CATALOG', Path(tmp) / 'moods.json'), \
+                patch.object(ai_face_mcp, 'CATALOG', Path(tmp) / 'moods.json'):
+            server.write_catalog()
+            tools = ai_face_mcp.tools()
+        text = tools[0]['description']
+        self.assertIn('hopeful: Fingers crossed / 조마조마 (Anxiety & tension) - ', text)
+        self.assertEqual(len(tools[0]['inputSchema']['properties']['emotion']['enum']), len(moods.emotions()))
 
 if __name__ == '__main__':
     unittest.main()

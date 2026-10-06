@@ -3,6 +3,7 @@ and the MCP server. Started by the macOS app (core/run_server.py); listens on 12
 only, and changes need the token printed on the second line of output."""
 import argparse
 import base64
+import datetime
 import json
 import os
 import secrets
@@ -21,9 +22,50 @@ from . import moods as face_modes
 from . import paths
 from .board import Device, ports
 
-# Lets esp32_mcp.py (the AI chat bridge) reach this app while it owns the USB port.
-# Kept outside ~/Documents so the MCP server (launched by the chat app) can read it.
+# Lets the MCP server (ai_face_mcp.py, started by each chat app) find this app.
+# Kept outside ~/Documents so the MCP server can read it.
 DISCOVERY = paths.DISCOVERY
+
+
+def write_catalog():
+    """The moods, for the MCP server's tool list (it has no copy of the mood code)."""
+    catalog = [dict(id=m['id'], name_en=m['name_en'], name_ko=m['name_ko'],
+                    group_en=face_modes.GROUP_EN.get(m.get('group_id'), ''),
+                    description_en=face_modes.EN[m['id']][1])
+               for m in face_modes.emotions()]
+    paths.CATALOG.parent.mkdir(parents=True, exist_ok=True)
+    temp = paths.CATALOG.with_suffix('.tmp')
+    temp.write_text(json.dumps(catalog, ensure_ascii=False, indent=1))
+    temp.replace(paths.CATALOG)
+
+
+def _who(owner):
+    return {'claude': 'Claude', 'gpt': 'GPT'}.get(owner) or T('사용자(직접)', 'the user (by hand)')
+
+
+def expression_text(view, limit=10, now=None):
+    """What get_expression tells the AI: the face now, recent changes, today's counts."""
+    now = time.time() if now is None else now
+    names = {m['id']: m['name'] for m in face_modes.emotions()}
+    recent = history.recent(limit, now)
+    what = view.get('name') or view.get('emotion') or view.get('kind')
+    board = T('연결됨', 'connected') if view.get('board') else T('없음', 'none')
+    lines = [T(f"지금 얼굴: {what} (고른 쪽: {_who(view.get('owner'))}, 보드 {board})",
+               f"Now showing: {what} (chosen by {_who(view.get('owner'))}, board {board})"),
+             '',
+             T(f'최근 {len(recent)}번의 변화 (최신순):', f'Last {len(recent)} changes (newest first):')]
+    for e in recent:
+        stamp = datetime.datetime.fromtimestamp(e['t']).strftime('%m-%d %H:%M')
+        lines.append(f"- {stamp} {_who(e['owner'])}: {names.get(e['emotion'], e['emotion'])} ({e['emotion']})")
+    today = history.summary(datetime.date.fromtimestamp(now).isoformat(), face_modes.emotions())
+    lines.append('')
+    lines.append(T(f"오늘 합계 {today['total']}번:", f"Today: {today['total']} changes"))
+    for owner in history.OWNERS:
+        info = today['owners'][owner]
+        top = ', '.join(f"{t['name']} {t['count']}" for t in info['top']) or '-'
+        lines.append(T(f"- {_who(owner)}: {info['count']}번 (많이 지은 표정: {top})",
+                       f"- {_who(owner)}: {info['count']} (most often: {top})"))
+    return '\n'.join(lines)
 
 
 def write_discovery(port, token):
@@ -70,12 +112,17 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--no-browser', action='store_true')   # accepted for old launchers
     parser.parse_args()
+    try:
+        paths.migrate_data()   # ESP32Face -> AI Face (earlier versions)
+    except OSError:
+        pass
     device = Device()
     token = secrets.token_urlsafe(32)
     history.prune()
     face_modes.save_settings(language=i18n.lang())   # the MCP server speaks the app's language
     try:
-        integrations.refresh_runtime()   # an installed MCP server runs this version of the code
+        write_catalog()
+        integrations.refresh()   # current server file; apps registered by older versions move over
     except (OSError, ValueError):
         pass
 
@@ -134,6 +181,14 @@ def main():
                 if self.path.startswith('/history/week'):
                     return self.reply(200, history.week(day))
                 return self.reply(200, history.summary(day, face_modes.emotions()))
+            if self.path.startswith('/expression'):   # for the MCP server's get_expression
+                query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                try:
+                    limit = int((query.get('limit') or ['10'])[0])
+                except ValueError:
+                    limit = 10
+                limit = limit if 1 <= limit <= 50 else 10
+                return self.reply(200, {'text': expression_text(device.view(), limit)})
             if self.path == '/mcp':
                 return self.reply(200, integrations.status())
             if self.path == '/state':
@@ -182,7 +237,7 @@ def main():
                         preset = next((m for m in face_modes.emotions() if m['id'] == data.get('id')), None)
                         if preset is None:
                             raise ValueError(T('감정을 선택해 주세요.', 'Choose a mood.'))
-                        # 'agent' is set by esp32_mcp.py; buttons in this app leave it out (white ring).
+                        # 'agent' is set by the MCP server; buttons in this app leave it out (white ring).
                         device.show_emotion(preset, data.get('agent', 'user'))
                     elif action == 'disconnect':
                         device.close()

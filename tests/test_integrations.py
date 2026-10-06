@@ -18,9 +18,9 @@ class IntegrationTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         home = Path(self.tmp.name)
-        data = home / 'Library' / 'Application Support' / 'ESP32Face'
+        data = home / 'Library' / 'Application Support' / 'AI Face'
         for p in [patch.object(Path, 'home', return_value=home), patch.object(paths, 'DATA', data),
-                  patch.object(paths, 'SOURCE_INFO', data / 'source.json')]:
+                  patch.object(paths, 'LEGACY_DATA', home / 'Library' / 'Application Support' / 'ESP32Face')]:
             p.start()
             self.addCleanup(p.stop)
         self.home = home
@@ -37,20 +37,32 @@ class IntegrationTests(unittest.TestCase):
         data = json.loads(cfg.read_text())
         self.assertEqual(data['theme'], 'dark')
         self.assertIn('other', data['mcpServers'])
-        self.assertEqual(data['mcpServers']['esp32-face']['env'], {'ESP32_AGENT': 'claude'})
+        entry = data['mcpServers']['ai-face']
+        self.assertEqual(entry['env'], {'AIFACE_AGENT': 'claude'})
+        self.assertEqual(entry['args'], [str(paths.DATA / 'ai_face_mcp.py')])
         self.assertEqual(integrations.claude_status(), 'on')
-        self.assertTrue((paths.DATA / 'aiface' / 'mcp_server.py').is_file())
-        self.assertTrue(integrations.server_path().is_file())
-        self.assertEqual(json.loads(paths.SOURCE_INFO.read_text())['source'], str(ROOT))
+        # One standalone file: the same as core/ai_face_mcp.py, no copy of the package.
+        self.assertEqual(integrations.server_path().read_text(), (ROOT / 'core' / 'ai_face_mcp.py').read_text())
+        self.assertFalse((paths.DATA / 'aiface').exists())
+        self.assertTrue(list(cfg.parent.glob('claude_desktop_config.json.backup-*')))
         integrations.remove('claude')
         self.assertEqual(json.loads(cfg.read_text())['mcpServers'], {'other': {'command': 'x'}})
         self.assertEqual(integrations.claude_status(), 'off')
 
-    def test_claude_other_path_and_bad_file(self):
+    def test_claude_old_name_is_replaced(self):
         cfg = integrations.claude_config()
         cfg.parent.mkdir(parents=True)
-        cfg.write_text(json.dumps({'mcpServers': {'esp32-face': {'command': 'p', 'args': ['/old/esp_mcp.py']}}}))
+        cfg.write_text(json.dumps({'mcpServers': {'esp32-face': {'command': 'p', 'args': ['/old/esp32_mcp.py']},
+                                                  'other': {'command': 'x'}}}))
         self.assertEqual(integrations.claude_status(), 'other')
+        integrations.refresh()
+        servers = json.loads(cfg.read_text())['mcpServers']
+        self.assertEqual(sorted(servers), ['ai-face', 'other'])
+        self.assertEqual(integrations.claude_status(), 'on')
+
+    def test_claude_bad_file(self):
+        cfg = integrations.claude_config()
+        cfg.parent.mkdir(parents=True)
         cfg.write_text('{broken')
         self.assertEqual(integrations.claude_status(), 'error')
         with self.assertRaises(ValueError):
@@ -67,13 +79,15 @@ class IntegrationTests(unittest.TestCase):
         integrations.install('codex')
         text = cfg.read_text()
         self.assertEqual(integrations.codex_status(), 'on')
-        self.assertEqual(text.count('[mcp_servers.esp32-face]'), 1)
+        self.assertEqual(text.count('[mcp_servers.ai-face]'), 1)
+        self.assertIn('[mcp_servers.ai-face.env]\nAIFACE_AGENT = "gpt"', text)
+        self.assertNotIn('esp32-face', text)
         self.assertNotIn('/old', text)
         self.assertIn('model = "gpt-5"', text)
         self.assertIn('[mcp_servers.notion]\ncommand = "n"', text)
         integrations.remove('codex')
         text = cfg.read_text()
-        self.assertNotIn('esp32-face', text)
+        self.assertNotIn('ai-face', text)
         self.assertIn('[mcp_servers.notion]', text)
         self.assertEqual(integrations.codex_status(), 'off')
 
@@ -82,6 +96,30 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual((s['claude'], s['codex'], s['codex_available']), ('off', 'off', False))
         with self.assertRaises(ValueError):
             integrations.install('word')
+
+    def test_data_folder_migrates_and_old_files_go(self):
+        old = paths.LEGACY_DATA
+        (old / 'aiface').mkdir(parents=True)
+        (old / 'aiface' / 'mcp_server.py').write_text('old')
+        (old / 'esp32_mcp.py').write_text('old')
+        (old / 'settings.json').write_text('{"saver": "clock"}')
+        (old / 'Photo Library').mkdir()
+        (old / 'Photo Library' / 'a.jpg').write_bytes(b'jpg')
+        self.assertTrue(paths.migrate_data())
+        self.assertFalse(old.exists())
+        self.assertFalse(paths.migrate_data())   # only once
+        integrations.refresh()   # nothing registered: old server files are still cleaned up
+        self.assertEqual((paths.DATA / 'settings.json').read_text(), '{"saver": "clock"}')
+        self.assertTrue((paths.DATA / 'Photo Library' / 'a.jpg').is_file())
+        self.assertFalse((paths.DATA / 'aiface').exists())
+        self.assertFalse((paths.DATA / 'esp32_mcp.py').exists())
+        self.assertFalse(integrations.server_path().exists())
+
+    def test_existing_new_folder_is_not_replaced(self):
+        paths.LEGACY_DATA.mkdir(parents=True)
+        paths.DATA.mkdir(parents=True)
+        self.assertFalse(paths.migrate_data())
+        self.assertTrue(paths.LEGACY_DATA.exists())
 
 
 class AutoConnectTests(unittest.TestCase):
