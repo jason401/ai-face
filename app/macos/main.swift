@@ -15,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         background = CommandLine.arguments.contains("--background")
+        LoginItem.refresh()
         let root = (Bundle.main.bundlePath as NSString).deletingLastPathComponent
         let script = (root as NSString).appendingPathComponent("core/run_server.py")
         guard FileManager.default.fileExists(atPath: script) else {

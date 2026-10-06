@@ -498,6 +498,11 @@ enum LoginItem {
         return NSHomeDirectory() + "/Library/LaunchAgents/local.aiface.plist"
     }
 
+    /// Rewrites an existing login item (new app location, keys added in newer versions).
+    static func refresh() {
+        if enabled { enabled = true }
+    }
+
     static var enabled: Bool {
         get { return FileManager.default.fileExists(atPath: path) }
         set {
@@ -506,10 +511,13 @@ enum LoginItem {
                 return
             }
             guard let exe = Bundle.main.executablePath else { return }
+            // AssociatedBundleIdentifiers: System Settings → Login Items shows it as
+            // "AI Face" with the app icon instead of the bare executable.
             let plist: NSDictionary = ["Label": "local.aiface",
                                        "ProgramArguments": [exe, "--background"],
                                        "RunAtLoad": true,
-                                       "ProcessType": "Interactive"]
+                                       "ProcessType": "Interactive",
+                                       "AssociatedBundleIdentifiers": [Bundle.main.bundleIdentifier ?? "local.aiface"]]
             try? FileManager.default.createDirectory(atPath: (path as NSString).deletingLastPathComponent,
                                                      withIntermediateDirectories: true, attributes: nil)
             plist.write(toFile: path, atomically: true)

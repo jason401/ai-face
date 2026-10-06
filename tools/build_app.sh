@@ -55,6 +55,15 @@ mv -f "$APP/Contents/MacOS/AIFace.new" "$APP/Contents/MacOS/AIFace"
 rm -rf "$APP/Contents/Resources"
 mkdir -p "$APP/Contents/Resources"
 cp -R app/macos/Resources/*.lproj "$APP/Contents/Resources/"
+# App icon: AppIcon.png (1024, tools/make_icon.py) -> AppIcon.icns.
+ICONSET="$(mktemp -d)/AppIcon.iconset"
+mkdir -p "$ICONSET"
+for s in 16 32 128 256 512; do
+  sips -z $s $s app/macos/Resources/AppIcon.png --out "$ICONSET/icon_${s}x${s}.png" >/dev/null 2>&1
+  sips -z $((s * 2)) $((s * 2)) app/macos/Resources/AppIcon.png --out "$ICONSET/icon_${s}x${s}@2x.png" >/dev/null 2>&1
+done
+iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns" >>"$LOG" 2>&1
+rm -rf "$(dirname "$ICONSET")"
 
 msg "3/4 앱 정보와 서명" "3/4 App info and signing"
 # NSAllowsLocalNetworking: the menu bar face reads http://127.0.0.1 (the Python controller).
@@ -63,6 +72,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
 <key>CFBundleExecutable</key><string>AIFace</string>
+<key>CFBundleIconFile</key><string>AppIcon</string>
 <key>CFBundleDevelopmentRegion</key><string>en</string>
 <key>CFBundleLocalizations</key><array><string>en</string><string>ko</string></array>
 <key>CFBundleIdentifier</key><string>local.aiface</string>
@@ -80,6 +90,7 @@ codesign --force --deep --sign - "$APP" >>"$LOG" 2>&1
 
 msg "4/4 앱 실행" "4/4 Starting the app"
 echo "Built $(date)" >>"$LOG"
+touch "$APP"   # Finder and System Settings pick up the new icon
 open "$APP"
 echo
 msg "완료: 메뉴바 오른쪽 위의 얼굴을 누르면 메뉴가, 설정…을 누르면 설정 창이 열려요." \
