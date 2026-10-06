@@ -38,6 +38,14 @@ class HistoryTests(unittest.TestCase):
         self.assertEqual([e['emotion'] for e in r], ['calm', 'sad', 'happy'])
         self.assertEqual(history.summary('bad-day', [])['total'], 0)
 
+    def test_clear(self):
+        history.record('claude', 'happy', time.time() - 3 * 86400)
+        history.record('gpt', 'sad')
+        history.record('user', 'calm')
+        self.assertEqual(history.clear(), 3)
+        self.assertEqual(history.recent(10), [])
+        self.assertEqual(history.clear(), 0)
+
     def test_prune(self):
         history.record('user', 'calm', time.time() - 500 * 86400)
         history.record('user', 'calm')

@@ -108,6 +108,23 @@ def week(day):
     return out
 
 
+def clear():
+    """Delete the whole history. Returns how many changes were removed."""
+    removed = 0
+    try:
+        names = os.listdir(FOLDER)
+    except OSError:
+        return 0
+    for name in names:
+        if name.endswith('.jsonl'):
+            removed += len(events(name[:-6]))
+            try:
+                (FOLDER / name).unlink()
+            except OSError:
+                pass
+    return removed
+
+
 def prune(now=None):
     """Remove day files older than KEEP_DAYS."""
     now = time.time() if now is None else now

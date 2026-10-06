@@ -222,6 +222,23 @@ final class SettingsStore: NSObject, ObservableObject {
         loadHistory()
     }
 
+    func clearHistory() {
+        let alert = NSAlert()
+        alert.messageText = L("Delete all history?")
+        alert.informativeText = L("Every recorded face change, from all days, is deleted from this Mac. This cannot be undone.")
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: L("Delete"))
+        alert.addButton(withTitle: L("Cancel"))
+        alert.buttons.first?.hasDestructiveAction = true
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        API.shared.call("history_clear") { [weak self] _, _ in
+            guard let self = self else { return }
+            self.historyKey = ""
+            self.weekKey = ""
+            self.loadHistory()
+        }
+    }
+
     func goToday() {
         historyDay = Calendar.current.startOfDay(for: Date())
         historyKey = ""
@@ -891,9 +908,13 @@ struct HistoryTab: View {
                 section(L("Emotion groups")) { distribution }
                 section(L("Timeline")) { TimelineStrip(events: store.timeline, day: store.historyDay) }
                 section(L("Last 7 days")) { WeekChart(rows: store.week) }
-                Text(L("Each face change is saved on this Mac: only the time, who chose it and the mood. No conversation text is saved."))
-                    .font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                HStack(alignment: .top) {
+                    Text(L("Each face change is saved on this Mac: only the time, who chose it and the mood. No conversation text is saved."))
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer()
+                    Button(L("Delete all history…")) { store.clearHistory() }
+                }
             }
             .padding(20)
         }
