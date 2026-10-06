@@ -91,6 +91,19 @@ GROUP_IDS = {JOY: 'joy', LOVE: 'love', WONDER: 'wonder', MIND: 'mind', REST: 're
 GROUP_EN = {'joy': 'Joy', 'love': 'Love & bond', 'wonder': 'Surprise & interest', 'mind': 'Thinking & talking',
             'rest': 'Calm & rest', 'sad': 'Sadness', 'tense': 'Anxiety & tension', 'angry': 'Anger & dislike',
             'body': 'Body', 'auto': 'Auto'}
+# Short notes for the AI on moods whose id alone is ambiguous (the MCP tool list shows only
+# ids by group, to keep it small).
+HINTS = {
+    'greeting': 'hello, nice to see you', 'farewell': 'waves goodbye',
+    'smitten': 'flustered crush', 'pleading': 'please?', 'idea': 'light bulb',
+    'realization': 'oh, got it', 'dazed': 'spaced out', 'waking': 'just woke up',
+    'rueful': 'smiling but oh well', 'sulky': 'hurt, pouting',
+    'hopeful': 'fingers crossed, praying hands', 'awkward': 'awkward smile',
+    'cringe': 'secondhand embarrassment', 'contempt': 'scornful smirk',
+    'cold': 'shivering', 'hot': 'sweating in the heat', 'knocked_out': 'X eyes, KO',
+    'auto': 'cycles calm, curious, happy, playful, love, sleepy',
+}
+
 # English names and looks, by mood id.
 EN = {
     'happy': ('Happy', 'Smiling and laughing, the odd wink'),

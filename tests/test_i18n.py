@@ -53,15 +53,19 @@ class LanguageTests(unittest.TestCase):
             i18n._current = None
             self.assertEqual(i18n.lang(), 'en')
 
-    def test_tool_catalog_is_bilingual(self):
+    def test_tool_catalog_is_compact_english(self):
         # The app writes the moods for the MCP server, whatever language the app speaks.
         with tempfile.TemporaryDirectory() as tmp, patch.object(paths, 'CATALOG', Path(tmp) / 'moods.json'), \
                 patch.object(ai_face_mcp, 'CATALOG', Path(tmp) / 'moods.json'):
             server.write_catalog()
             tools = ai_face_mcp.tools()
         text = tools[0]['description']
-        self.assertIn('hopeful: Fingers crossed / 조마조마 (Anxiety & tension) - ', text)
-        self.assertEqual(len(tools[0]['inputSchema']['properties']['emotion']['enum']), len(moods.emotions()))
+        self.assertIn('\nAnxiety & tension: afraid, worried, ', text)
+        self.assertIn('hopeful = fingers crossed', text)
+        for m in moods.emotions():   # every mood is listed, under English group names
+            self.assertRegex(text, r'[:,] %s(,|\n)' % m['id'])
+        self.assertNotIn('조마조마', text)
+        self.assertLess(len(text), 1800)   # small: it is sent with every request
 
 if __name__ == '__main__':
     unittest.main()
