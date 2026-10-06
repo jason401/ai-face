@@ -41,7 +41,9 @@ final class StatusController: NSObject, NSMenuDelegate {
     var board = false
     var moods: [String: [String: Any]] = [:]
     var moodList: [[String: Any]] = []
+    var recent: [String] = []            // moods picked by hand, newest first (menu "Recent")
     var openSettings: (() -> Void)?
+    private var icons: [String: NSImage] = [:]
 
     private let menu = NSMenu()
     private let header = MenuHeader()
@@ -98,6 +100,8 @@ final class StatusController: NSObject, NSMenuDelegate {
                 }
                 self.moods = map
                 self.moodList = list
+                self.icons = [:]
+                self.loadRecent()
                 self.rebuildMenu()
                 self.applyEmotion(self.pendingEmotion)
             }
@@ -110,6 +114,32 @@ final class StatusController: NSObject, NSMenuDelegate {
     }
 
     private var pendingEmotion = ""
+
+    private func loadRecent() {
+        API.shared.getJSON("recent") { [weak self] json in
+            guard let self = self, let list = json as? [String] else { return }
+            self.recent = list
+        }
+    }
+
+    /// A small still of the mood for its menu item: its most telling frame, like the preview sheet.
+    private func icon(_ mood: [String: Any]) -> NSImage? {
+        guard let id = mood["id"] as? String else { return nil }
+        let key = id + (view.mono ? "|mono" : "")
+        if let cached = icons[key] { return cached }
+        let frames = framesOf(mood)
+        guard !frames.isEmpty else { return nil }
+        func score(_ f: Frame) -> Int {
+            return (f.v[F.fx] != 0 ? 2 : 0) + (f.v[F.eyes] != 0 ? 1 : 0) + (f.v[F.left] > 30 ? 1 : 0)
+        }
+        var best = frames[0]
+        for f in frames where score(f) > score(best) { best = f }
+        var still = FaceView()
+        still.mono = view.mono
+        let image = renderFace(side: 18, inset: 0, view: still, pose: poseOf(best), fire: fire, now: 0)
+        icons[key] = image
+        return image
+    }
 
     private func applyEmotion(_ id: String) {
         pendingEmotion = id
@@ -143,6 +173,7 @@ final class StatusController: NSObject, NSMenuDelegate {
         if !lastChange.isEmpty && change != lastChange {
             bounceStart = now
             bounceShake = StatusController.SHAKE_MOODS.contains(emotion)
+            if view.owner == "user" { loadRecent() }
         }
         lastChange = change
         name = (v["name"] as? String) ?? ""
@@ -257,10 +288,17 @@ final class StatusController: NSObject, NSMenuDelegate {
             let faces = add(menu, L("Faces"), nil)
             let groups = NSMenu()
             groups.autoenablesItems = false
+            let picks = recent.compactMap { moods[$0] }
+            if !picks.isEmpty {
+                let title = add(groups, L("Recent"), nil)
+                title.isEnabled = false
+                for mood in picks { moodItem(groups, mood) }
+                groups.addItem(.separator())
+            }
             var order: [String] = []
             var byGroup: [String: [[String: Any]]] = [:]
             for mood in moodList {
-                guard let id = mood["id"] as? String, id != "auto" else { continue }
+                guard mood["id"] is String else { continue }
                 let g = (mood["group"] as? String) ?? L("Other")
                 if byGroup[g] == nil { order.append(g); byGroup[g] = [] }
                 byGroup[g]?.append(mood)
@@ -269,13 +307,7 @@ final class StatusController: NSObject, NSMenuDelegate {
                 let groupItem = add(groups, g, nil)
                 let list = NSMenu()
                 list.autoenablesItems = false
-                for mood in byGroup[g] ?? [] {
-                    let icon = (mood["icon"] as? String) ?? ""
-                    let title = ((mood["name"] as? String) ?? "") + (icon.isEmpty ? "" : "  " + icon)
-                    let it = add(list, title, #selector(chooseMood(_:)), object: mood["id"])
-                    it.toolTip = mood["description"] as? String
-                    if view.kind == "face" && (mood["id"] as? String) == animator.emotion { it.state = .on }
-                }
+                for mood in byGroup[g] ?? [] { moodItem(list, mood) }
                 groupItem.submenu = list
             }
             faces.submenu = groups
@@ -283,6 +315,13 @@ final class StatusController: NSObject, NSMenuDelegate {
         menu.addItem(.separator())
         _ = add(menu, L("Settings…"), #selector(settings), key: ",")
         _ = add(menu, L("Quit AI Face"), #selector(quit), key: "q")
+    }
+
+    private func moodItem(_ list: NSMenu, _ mood: [String: Any]) {
+        let it = add(list, (mood["name"] as? String) ?? "", #selector(chooseMood(_:)), object: mood["id"])
+        it.image = icon(mood)
+        it.toolTip = mood["description"] as? String
+        if view.kind == "face" && (mood["id"] as? String) == animator.emotion { it.state = .on }
     }
 
     private func report(_ ok: Bool, _ reply: [String: Any]) {

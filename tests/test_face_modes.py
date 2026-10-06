@@ -66,15 +66,26 @@ class EngineTests(unittest.TestCase):
     def test_emotion_catalog(self):
         import json
         moods=face_modes.emotions()
-        self.assertEqual(len(moods),72)
-        self.assertEqual(len({m['id'] for m in moods}),72)
-        self.assertEqual(len({m['name'] for m in moods}),72)
-        self.assertEqual(len({json.dumps(m['frames'],sort_keys=True) for m in moods}),72)
+        self.assertEqual(len(moods),78)
+        self.assertEqual(len({m['id'] for m in moods}),78)
+        self.assertEqual(len({m['name'] for m in moods}),78)
+        self.assertEqual(len({json.dumps(m['frames'],sort_keys=True) for m in moods}),78)
+        # 11 groups, in menu order, each mood listed with its group
+        groups=[]
+        for m in moods:
+            if m['group_id'] not in groups: groups.append(m['group_id'])
+        self.assertEqual(groups,['joy','love','wonder','work','stance','oops','rest','sad','tense','angry','body'])
+        by={m['id']:m['group_id'] for m in moods}
+        self.assertEqual([by[k] for k in ('greeting','on_it','agree','facepalm','apologetic','nostalgic')],
+                         ['love','work','stance','oops','oops','sad'])
+        self.assertNotIn('auto',by)
+        self.assertTrue(set(face_modes.HINTS)<=set(by))
+        self.assertTrue(set(face_modes.WORKING)<=set(by))
         # FACE8 effects are used by the new moods
         used=0
         for m in moods:
             for f in m['frames']: used|=f['fx']
-        for bit in (face_modes.WAVE,face_modes.BULB,face_modes.PRAY): self.assertTrue(used&bit)
+        for bit in (face_modes.WAVE,face_modes.BULB,face_modes.PRAY,face_modes.SALUTE,face_modes.PALM): self.assertTrue(used&bit)
         # Seven dedicated slots, "sleeping" in slot 9 for idling; every other mood shares slot 8.
         self.assertEqual(sorted(m['slot'] for m in moods if m['slot']<7),list(range(7)))
         self.assertEqual([m['id'] for m in moods if m['slot']==face_modes.SLEEPING_SLOT],['sleeping'])

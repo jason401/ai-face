@@ -69,6 +69,22 @@ def recent(n=20, now=None):
     return out[:n]
 
 
+def picks(n=5, known=None, now=None, days=60):
+    """Moods the user picked by hand, newest first, each once (the menu's "Recent" list).
+    AI choices are left out: they would fill the list with working moods. known: ids still
+    in the catalog."""
+    now = time.time() if now is None else now
+    out = []
+    for back in range(days):
+        for e in reversed(events(_day(now - back * 86400))):
+            mood = e['emotion']
+            if e['owner'] == 'user' and mood not in out and (known is None or mood in known):
+                out.append(mood)
+                if len(out) >= n:
+                    return out
+    return out
+
+
 def summary(day, moods):
     """Counts for one day. moods: [{id, name, group}] (the catalog) for names and groups."""
     info = {m['id']: m for m in moods}

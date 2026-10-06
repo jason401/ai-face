@@ -28,7 +28,7 @@ class HistoryTests(unittest.TestCase):
         self.assertEqual(s['total'], 5)
         self.assertEqual(s['owners']['claude']['count'], 3)
         self.assertEqual(s['owners']['claude']['top'][0], dict(id='happy', name='행복', count=2))
-        self.assertEqual(s['owners']['claude']['groups'], {'joy': 2, 'mind': 1})
+        self.assertEqual(s['owners']['claude']['groups'], {'joy': 2, 'work': 1})
         self.assertEqual([e['owner'] for e in s['timeline']], ['claude', 'claude', 'claude', 'gpt', 'user'])
         w = history.week('2026-10-04')
         self.assertEqual(len(w), 7)
@@ -37,6 +37,15 @@ class HistoryTests(unittest.TestCase):
         r = history.recent(3, noon + 600)
         self.assertEqual([e['emotion'] for e in r], ['calm', 'sad', 'happy'])
         self.assertEqual(history.summary('bad-day', [])['total'], 0)
+
+    def test_picks_are_hand_picked_moods_once(self):
+        now = time.time()
+        for i, (who, mood) in enumerate([('user', 'happy'), ('claude', 'processing'), ('user', 'calm'),
+                                          ('user', 'happy'), ('user', 'auto'), ('gpt', 'sad')]):
+            history.record(who, mood, now - 600 + i)
+        history.record('user', 'love', now - 3 * 86400)
+        self.assertEqual(history.picks(5, {'happy', 'calm', 'love', 'sad'}, now), ['happy', 'calm', 'love'])
+        self.assertEqual(history.picks(1, None, now), ['auto'])
 
     def test_clear(self):
         history.record('claude', 'happy', time.time() - 3 * 86400)

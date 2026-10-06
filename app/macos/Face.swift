@@ -18,6 +18,7 @@ enum Eye {
     static let normal = 0, happy = 1, calm = 2, cross = 3, heart = 4, spiral = 5, star = 6, dot = 7, big = 8, squeeze = 9
 }
 let FX_BLUSH = 1, FX_TEAR = 2, FX_SWEAT = 4, FX_ZZZ = 8, FX_WAVE = 1024, FX_BULB = 2048, FX_PRAY = 4096
+let FX_SALUTE = 8192, FX_PALM = 16384
 let PALETTE: [[Double]] = [[255, 255, 255], [255, 150, 190], [120, 180, 255], [255, 225, 90],
                            [255, 70, 60], [130, 220, 110], [190, 140, 255], [255, 160, 60]]
 let TIMER_COLORS = ["white", "pink", "blue", "yellow", "red", "green", "purple", "orange"]
@@ -251,7 +252,8 @@ func stroke(_ x0: Double, _ y0: Double, _ x1: Double, _ y1: Double, _ width: Dou
     p.stroke()
 }
 
-/// Effects added with FACE8, in LCD coordinates: waving hand, light bulb, praying hands.
+/// Effects added with FACE8, in LCD coordinates: waving hand, light bulb, praying hands,
+/// salute, facepalm (same shapes as the firmware; stroke width = 2 x radius + 1).
 func drawExtraEffects(_ p: Pose, _ now: Double) {
     let col = rgb(p.rgb[0], p.rgb[1], p.rgb[2])
     if p.fx & FX_WAVE != 0 {
@@ -285,6 +287,23 @@ func drawExtraEffects(_ p: Pose, _ now: Double) {
         stroke(133, 198 + y, 123, 166 + y, 17)
         NSColor.black.setStroke()
         stroke(120, 158 + y, 120, 212, 2)
+    }
+    if p.fx & FX_SALUTE != 0 {
+        col.setStroke()
+        let y = 2 * sin(now * 1000 / 200)
+        stroke(162, 60 + y, 202, 70 + y, 15)   // fingers
+        stroke(200, 70 + y, 210, 88 + y, 19)   // palm
+        stroke(210, 88 + y, 218, 124, 13)      // forearm
+    }
+    if p.fx & FX_PALM != 0 {
+        col.setStroke(); col.setFill()
+        let hx = 84.0, hy = 80 + 1.5 * sin(now * 1000 / 400)
+        let a = [0.42, 0.62, 0.82, 1.02], len = [24.0, 30.0, 30.0, 25.0]
+        for k in 0..<4 {
+            stroke(hx + sin(a[k]) * 14, hy - cos(a[k]) * 14, hx + sin(a[k]) * (14 + len[k]), hy - cos(a[k]) * (14 + len[k]), 11)
+        }
+        stroke(72, hy + 14, 38, 150, 19)   // wrist and forearm
+        NSBezierPath(ovalIn: NSRect(x: hx - 19, y: hy - 19, width: 38, height: 38)).fill()
     }
 }
 

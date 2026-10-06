@@ -4,15 +4,15 @@
 
 No hardware needed: the menu bar face works on its own. Everything runs locally on your Mac.
 
-![All 71 faces, drawn by the firmware](docs/faces-en.png)
+![All 78 faces, drawn by the firmware](docs/faces-en.png)
 
 [한국어 설명은 아래에 있어요.](#한국어)
 
 ## What you get
 
-- **71 animated moods** (happy, thinking, awkward, cheering, idea, fingers crossed, ...). The AI chooses one per reply through a local [MCP](https://modelcontextprotocol.io) server, so the face follows the tone of the conversation.
+- **78 animated moods in 11 groups** (happy, thinking, on it!, agree, facepalm, don't know, fingers crossed, ...). The AI chooses one per reply through a local [MCP](https://modelcontextprotocol.io) server, so the face follows the tone of the conversation.
 - **Who chose it**: the ring around the face is orange for Claude, green for GPT and white when you pick a face yourself. Monochrome mode shows it with ring patterns instead.
-- **Menu**: click the face for a timer (pomodoro), campfire, clock and every mood.
+- **Menu**: click the face for a timer (pomodoro), campfire, clock and every mood (with a small picture of each, and the ones you picked recently on top).
 - **Screen savers** when the face has not changed for a while: sleepy → asleep, clock, photo, slideshow, pixel-art campfire.
 - **History**: a daily log of which AI made which face, with stats and a timeline. Only the mood and the time are saved, never conversation text. AIs can read it too ("how were our faces today?").
 - **Round LCD (optional)**: Seeed XIAO ESP32S3 + 1.28" GC9A01 240×240 round display, firmware included (updated from the app, no Arduino IDE window needed) and a 3D-printable case in `hardware/housing`.
@@ -67,7 +67,7 @@ core/aiface/            Python core (standard library only)
   server.py             local server (127.0.0.1, random port + token), connects the board automatically
   integrations.py       registers the MCP server with Claude desktop / Codex
   board.py              ESP32 over USB serial (protocol FACE8)
-  moods.py              the 71 mood animations (+ auto), settings
+  moods.py              the 78 mood animations, settings
   history.py            expression log and stats (moods only, never conversation text)
   library.py            photo library
   flasher.py            compile + upload the firmware with Arduino IDE's arduino-cli
@@ -101,13 +101,13 @@ bash tools/firmware_sim/run.sh            # firmware simulator only (needs a C++
 
 Claude나 GPT와 대화하면 AI가 대답마다 표정을 골라서 **맥 메뉴바의 동그란 얼굴**에 보여줘요. ESP32와 원형 LCD로 실물 얼굴도 만들 수 있어요(선택).
 
-- 71가지 표정, 누가 골랐는지 테두리 색(Claude 주황 / GPT 초록 / 직접 흰색), 흑백 모드에서는 테두리 무늬로 구분
+- 78가지 표정(11개 분류), 누가 골랐는지 테두리 색(Claude 주황 / GPT 초록 / 직접 흰색), 흑백 모드에서는 테두리 무늬로 구분
 - 대기 화면: 졸림→잠, 시계, 사진, 슬라이드쇼, 픽셀 모닥불
 - 타이머 링, 사진 보관함, 표정 기록과 하루 통계, 보드 펌웨어 업데이트(Arduino IDE 창 없이)
 
 보드 없이 메뉴바 얼굴만으로도 쓸 수 있고, 모든 게 맥 안에서만 돌아가요.
 
-![표정 71가지](docs/faces-ko.png)
+![표정 78가지](docs/faces-ko.png)
 
 ### 설치
 

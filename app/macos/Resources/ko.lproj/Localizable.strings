@@ -110,7 +110,10 @@
 "The AI Face server stopped." = "AI Face 서버가 멈췄습니다.";
 "The face appears in the menu bar as soon as you log in." = "켜 두면 맥을 켤 때 메뉴바에 얼굴이 바로 나타나요.";
 "They show up here when a board is connected." = "보드를 연결하면 여기에 보여요.";
-"Thinking & talking" = "생각·대화";
+"Working" = "작업 중";
+"Stance" = "태도·의견";
+"Oops" = "실수·민망";
+"Recent" = "최근";
 "This picture format cannot be opened. Convert it to JPG or PNG." = "이 사진 형식은 열 수 없어요. JPG나 PNG로 바꿔서 넣어 주세요.";
 "Timeline" = "하루 타임라인";
 "Timer" = "타이머";

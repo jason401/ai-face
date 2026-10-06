@@ -1,4 +1,4 @@
-"""Moods and board protocol data: the 71 face animations, validation, settings and the
+"""Moods and board protocol data: the 78 face animations, validation, settings and the
 command lines sent to the ESP32 (firmware protocol FACE8: FACE3 frames + owner ring +
 countdown timer ring + photos + screen saver + monochrome style + hand/bulb effects)."""
 import json
@@ -10,7 +10,7 @@ from .i18n import T, lang
 FIELDS = ['move', 'hold', 'left', 'right', 'x', 'y', 'width', 'smile', 'open',
           'brow', 'lift', 'eyes', 'tilt', 'fx', 'color', 'shake']
 LIMITS = [(80,5000),(0,10000),(0,100),(0,100),(-15,15),(-10,10),(10,100),(-28,28),(0,30),
-          (-10,10),(0,12),(0,9),(-10,10),(0,8191),(0,7),(0,6)]
+          (-10,10),(0,12),(0,9),(-10,10),(0,32767),(0,7),(0,6)]
 # FACE3 fields may be missing in modes saved by FACE2; they default to 0.
 OPTIONAL = {'brow','lift','eyes','tilt','fx','color','shake'}
 PATH = paths.DATA / 'face_modes.json'   # user modes from the old editor
@@ -18,7 +18,8 @@ PATH = paths.DATA / 'face_modes.json'   # user modes from the old editor
 # Eye shapes (eyes)
 NORMAL, ARC, CALM, CROSS, HEART, SPIRAL, STAR, DOT, BIG, SQUEEZE = range(10)
 # Effect bits (fx)
-BLUSH, TEAR, SWEAT, ZZZ, HEARTS, ANGER, QUESTION, EXCLAIM, SPARKLE, NOTE, WAVE, BULB, PRAY = (1 << i for i in range(13))
+BLUSH, TEAR, SWEAT, ZZZ, HEARTS, ANGER, QUESTION, EXCLAIM, SPARKLE, NOTE, WAVE, BULB, PRAY, SALUTE, PALM = (
+    1 << i for i in range(15))
 # HELLO reply of the firmware this code talks to.
 PROTOCOL = 'FACE8'
 # Face colors (color)
@@ -77,27 +78,36 @@ def validate(mode):
 
 
 # ---------------------------------------------------------------------------
-# Emotion catalog: 71 moods + auto. Each entry:
+# Emotion catalog: 78 moods in 11 groups. Each entry:
 # (id, name, icon, group, description, dedicated slot or None, frames)
 # The board has 9 slots: the seven most-used moods keep slots 1-7, "sleeping"
 # keeps slot 9 (idle stage), and every other mood shares slot 8, replaced
 # automatically when selected.
 # ---------------------------------------------------------------------------
-JOY, LOVE, WONDER, MIND, REST, SAD, TENSE, ANGRY, BODY = (
-    '기쁨', '사랑·유대', '놀람·관심', '생각·대화', '평온·휴식', '슬픔', '불안·긴장', '분노·불쾌', '몸 상태')
-# Stable group ids (stats, colors) and English group names.
-GROUP_IDS = {JOY: 'joy', LOVE: 'love', WONDER: 'wonder', MIND: 'mind', REST: 'rest', SAD: 'sad',
-             TENSE: 'tense', ANGRY: 'angry', BODY: 'body', '자동': 'auto'}
-GROUP_EN = {'joy': 'Joy', 'love': 'Love & bond', 'wonder': 'Surprise & interest', 'mind': 'Thinking & talking',
-            'rest': 'Calm & rest', 'sad': 'Sadness', 'tense': 'Anxiety & tension', 'angry': 'Anger & dislike',
-            'body': 'Body', 'auto': 'Auto'}
+JOY, LOVE, WONDER, WORK, STANCE, OOPS, REST, SAD, TENSE, ANGRY, BODY = (
+    '기쁨', '사랑·유대', '놀람·관심', '작업 중', '태도·의견', '실수·민망', '평온·휴식', '슬픔', '불안·긴장',
+    '분노·불쾌', '몸 상태')
+# Stable group ids (stats, colors) and English group names, in menu order. Working = what
+# the AI is doing; Stance = its view of something; Oops = owning a mistake or not knowing.
+GROUP_IDS = {JOY: 'joy', LOVE: 'love', WONDER: 'wonder', WORK: 'work', STANCE: 'stance', OOPS: 'oops',
+             REST: 'rest', SAD: 'sad', TENSE: 'tense', ANGRY: 'angry', BODY: 'body'}
+GROUP_EN = {'joy': 'Joy', 'love': 'Love & bond', 'wonder': 'Surprise & interest', 'work': 'Working',
+            'stance': 'Stance', 'oops': 'Oops', 'rest': 'Calm & rest', 'sad': 'Sadness',
+            'tense': 'Anxiety & tension', 'angry': 'Anger & dislike', 'body': 'Body'}
+# Moods that only describe work in progress (not a reply's tone): if an AI leaves one on,
+# the app returns to "calm" after a few minutes.
+WORKING = ('processing', 'reading')
 # Short notes for the AI on moods whose id alone is ambiguous (the MCP tool list shows only
 # ids by group, to keep it small).
 HINTS = {
+    'thinking': 'working out an answer (processing = a tool or device is busy)',
+    'apologetic': "sorry to the user (facepalm = noticing your own slip)",
+    'confused': "can't follow (shrug = don't know / not enough to judge)",
+    'eager': 'excited, looking forward (hopeful = fingers crossed)',
+    'on_it': 'salute: got it, starting',
     'greeting': 'hello', 'farewell': 'waves goodbye', 'smitten': 'flustered crush',
     'dazed': 'spaced out', 'rueful': 'smiling but oh well', 'sulky': 'hurt, pouting',
-    'hopeful': 'fingers crossed', 'cringe': 'secondhand embarrassment',
-    'contempt': 'scornful smirk', 'knocked_out': 'X eyes, KO', 'auto': 'cycles several moods',
+    'cringe': 'secondhand embarrassment', 'contempt': 'scornful smirk', 'knocked_out': 'X eyes, KO',
 }
 
 # English names and looks, by mood id.
@@ -173,7 +183,13 @@ EN = {
     'hot': ('Hot', 'Orange face, panting and sweating'),
     'hungry': ('Hungry', 'Big eyes, looking around for food'),
     'knocked_out': ('Knocked out', 'X eyes, stars circling'),
-    'auto': ('Auto', 'Calm, curious, happy, playful, love and sleepy in turn'),
+    'on_it': ('On it!', 'A salute and a grin: starting right away'),
+    'reading': ('Reading', 'Eyes run along the lines, looking down'),
+    'agree': ('Agree', 'Nods along with a smile'),
+    'disagree': ('Disagree', 'Shakes head gently, brows raised'),
+    'facepalm': ('Facepalm', 'Hand over the forehead: oops, my bad'),
+    'shrug': ("Don't know", 'Brows up, a crooked flat mouth: not sure'),
+    'nostalgic': ('Nostalgic', 'A faint smile, gazing far away, slow blinks'),
 }
 
 CATALOG = [
@@ -205,13 +221,13 @@ CATALOG = [
   ('singing','흥얼거림','♪',JOY,'눈을 감고 리듬 타며 흥얼거려요',None,[
     F(400,500,x=-5,w=30,s=6,o=14,eyes=CALM,fx=NOTE),F(400,500,x=5,w=34,s=8,o=8,eyes=CALM,fx=NOTE),
     F(400,500,x=-5,w=28,s=6,o=18,eyes=CALM,fx=NOTE),F(400,500,80,80,x=5,w=36,s=10,o=6,fx=NOTE)]),
-  ('greeting','반가움','👋',JOY,'눈썹을 올리고 윙크하며 반겨요',None,[
+  ('greeting','반가움','👋',LOVE,'눈썹을 올리고 윙크하며 반겨요',None,[
     F(250,600,lift=8,w=85,s=24,o=14),F(160,400,0,100,lift=8,w=85,s=26,o=8),
     F(200,600,lift=8,w=90,s=26,o=18,eyes=ARC,fx=SPARKLE),F(400,1200,lift=6,w=75,s=20)]),
-  ('cheering','응원','📣',JOY,'눈썹에 힘주고 활짝 웃으며 파이팅!',None,[
+  ('cheering','응원','📣',LOVE,'눈썹에 힘주고 활짝 웃으며 파이팅!',None,[
     F(250,500,y=-3,w=90,s=26,o=18,eyes=ARC,lift=6,brow=-4,fx=SPARKLE),F(200,400,y=2,w=85,s=24,o=10,lift=6,brow=-4,fx=SPARKLE),
     F(250,500,y=-4,w=95,s=26,o=22,eyes=STAR,lift=7,brow=-4,fx=SPARKLE,color=YELLOW),F(200,600,w=85,s=24,o=8,eyes=ARC,lift=6,brow=-3)]),
-  ('farewell','배웅','🖐',JOY,'손을 흔들며 웃는 얼굴로 배웅해요',None,[
+  ('farewell','배웅','🖐',LOVE,'손을 흔들며 웃는 얼굴로 배웅해요',None,[
     F(300,900,w=80,s=24,o=8,lift=6,fx=WAVE),F(160,500,100,0,w=80,s=24,o=6,lift=6,fx=WAVE),
     F(300,1200,w=85,s=24,o=12,eyes=ARC,lift=6,fx=WAVE)]),
   # ----- 사랑·유대 -----
@@ -269,30 +285,30 @@ CATALOG = [
     F(500,900,55,100,x=6,y=-4,w=40,s=0,brow=4,lift=6,tilt=-6,fx=QUESTION),
     F(140,80,0,0,w=40,s=0,brow=4,lift=6),F(400,1200,90,70,w=38,s=-3,brow=5,lift=7,tilt=4,fx=QUESTION)]),
   # ----- 생각·대화 -----
-  ('determined','결의','💪',MIND,'눈에 힘을 주고 입을 꾹, 이제 해볼게요',None,[
+  ('determined','결의','💪',STANCE,'눈에 힘을 주고 입을 꾹, 이제 해볼게요',None,[
     F(400,900,60,60,w=50,s=6,lift=5,brow=-5),F(200,250,60,60,y=4,w=50,s=6,lift=5,brow=-5),
     F(200,250,60,60,y=-1,w=52,s=8,lift=5,brow=-5),F(400,1200,55,55,w=55,s=10,lift=6,brow=-6,fx=SPARKLE)]),
-  ('serious','진지함','😐',MIND,'일자 입에 눈썹을 살짝 모으고 차분하게',None,[
+  ('serious','진지함','😐',STANCE,'일자 입에 눈썹을 살짝 모으고 차분하게',None,[
     F(600,2000,85,85,w=50,s=0,lift=4,brow=-1),F(120,80,0,0,w=50,s=0,lift=4,brow=-1),
     F(500,1800,85,85,x=-4,w=50,s=-1,lift=4,brow=-2),F(500,1500,85,85,w=48,s=0,lift=5,brow=-1)]),
-  ('thinking','생각 중','…',MIND,'위쪽을 바라보며 골똘히 생각해요',None,[
+  ('thinking','생각 중','…',WORK,'위쪽을 바라보며 골똘히 생각해요',None,[
     F(700,2100,80,55,x=9,y=-9,w=40,s=0,lift=6,brow=2,tilt=4),F(140,80,0,0,x=9,y=-9,w=40,s=0,lift=6),
     F(550,1700,70,90,x=-8,y=-7,w=35,s=-3,lift=6,brow=2,tilt=-4),F(650,1100,90,90,w=45,s=5,lift=5)]),
-  ('skeptical','의심','¿',MIND,'눈을 좁히고 입꼬리를 비틀어요',None,[
+  ('skeptical','의심','¿',STANCE,'눈을 좁히고 입꼬리를 비틀어요',None,[
     F(400,1400,25,100,x=10,w=55,s=0,brow=-3,lift=4,tilt=5),F(550,900,25,100,x=-7,w=55,s=-3,brow=-3,lift=4,tilt=6),
     F(130,70,0,0,w=55,s=0,lift=4),F(400,1600,100,30,x=-10,w=50,s=0,brow=-3,lift=4,tilt=-5)]),
-  ('focused','집중','🎯',MIND,'눈을 가늘게 뜨고 한곳을 응시해요',None,[
+  ('focused','집중','🎯',WORK,'눈을 가늘게 뜨고 한곳을 응시해요',None,[
     F(600,3000,55,55,w=30,s=0,brow=-2,lift=2),F(400,1500,55,55,x=3,w=28,s=-2,brow=-3,lift=2),
     F(120,60,0,0,w=30,s=0,brow=-2,lift=2),F(500,2500,60,60,x=-2,w=30,s=0,brow=-2,lift=2)]),
-  ('listening','듣는 중','👂',MIND,'고개를 끄덕이며 귀 기울여요',None,[
+  ('listening','듣는 중','👂',WORK,'고개를 끄덕이며 귀 기울여요',None,[
     F(500,700,y=-2,w=45,s=10,lift=5),F(350,200,y=6,w=45,s=10,lift=5),F(350,700,y=-2,w=45,s=12,lift=5),
     F(350,200,y=6,w=45,s=12,lift=5),F(130,70,0,0,w=45,s=10,lift=5),F(600,1200,x=6,w=48,s=12,lift=6)]),
-  ('talking','말하는 중','💬',MIND,'입을 오물오물 움직이며 말해요',None,[
+  ('talking','말하는 중','💬',WORK,'입을 오물오물 움직이며 말해요',None,[
     F(100,60,w=45,s=10,o=18,lift=5),F(90,50,w=42,s=8,o=6,lift=5),F(110,70,w=48,s=10,o=22,lift=6),
     F(90,40,w=40,s=8,o=4,lift=5),F(100,60,w=46,s=12,o=14,lift=5),F(120,200,w=44,s=10,o=0,lift=5),
     F(100,60,x=4,w=46,s=10,o=20,lift=6),F(90,50,x=4,w=42,s=8,o=8,lift=5),F(100,40,0,0,x=4,w=44,s=10,o=2,lift=5),
     F(110,300,x=2,w=45,s=12,o=12,lift=5)]),
-  ('processing','처리 중','⟳',MIND,'눈동자를 빙글 돌리며 계산해요',None,[
+  ('processing','처리 중','⟳',WORK,'눈동자를 빙글 돌리며 계산해요',None,[
     F(250,150,70,70,x=10,y=-6,w=30,s=0,color=BLUE),F(250,150,70,70,x=0,y=-9,w=30,s=0,color=BLUE),
     F(250,150,70,70,x=-10,y=-6,w=30,s=0,color=BLUE),F(250,150,70,70,x=-10,y=4,w=30,s=0,color=BLUE),
     F(250,150,70,70,x=0,y=7,w=30,s=0,color=BLUE),F(250,150,70,70,x=10,y=4,w=30,s=0,color=BLUE),
@@ -342,7 +358,7 @@ CATALOG = [
   ('rueful','아쉬움','🥲',SAD,'웃는데 갸웃, 땀 한 방울로 아쉬워해요',None,[
     F(500,1200,80,80,w=60,s=10,tilt=4,lift=5,brow=4),F(400,1200,x=4,w=58,s=8,tilt=5,eyes=ARC,lift=5,brow=5,fx=SWEAT),
     F(120,80,0,0,x=4,w=58,s=8,tilt=5,lift=5,brow=5),F(500,1400,75,75,w=60,s=10,tilt=3,lift=5,brow=4)]),
-  ('apologetic','미안함','🙇',SAD,'고개를 숙이고 진땀을 흘려요',None,[
+  ('apologetic','미안함','🙇',OOPS,'고개를 숙이고 진땀을 흘려요',None,[
     F(600,800,80,80,y=3,w=40,s=-6,brow=8,lift=5),F(700,1000,y=9,w=36,s=-8,eyes=CALM,brow=8,lift=5,fx=SWEAT),
     F(500,800,75,75,x=-5,y=5,w=38,s=-4,o=4,brow=8,lift=5,fx=SWEAT),F(150,80,0,0,y=4,w=38,s=-6,brow=7,lift=5)]),
   ('sulky','서운함','😤',SAD,'고개를 홱 돌리고 입을 삐죽여요',None,[
@@ -363,14 +379,14 @@ CATALOG = [
     F(150,300,x=-6,w=44,s=-4,brow=6,lift=6,fx=SWEAT,shake=1),F(150,300,x=6,w=44,s=-4,brow=6,lift=6,fx=SWEAT,shake=1),
     F(100,60,0,0,w=44,s=-4,brow=6,lift=6,shake=1),F(150,400,y=2,w=46,s=4,brow=6,lift=6,tilt=-4,fx=SWEAT,shake=1),
     F(150,300,x=-8,w=44,s=-4,brow=6,lift=6,fx=SWEAT,shake=1),F(500,700,90,90,w=44,s=2,brow=5,lift=6,tilt=3,fx=SWEAT)]),
-  ('flustered','당황','😳',TENSE,'얼굴이 달아오르고 눈이 휘둥그레',None,[
+  ('flustered','당황','😳',OOPS,'얼굴이 달아오르고 눈이 휘둥그레',None,[
     F(120,400,x=-10,w=40,s=-4,o=10,eyes=DOT,lift=9,fx=SWEAT|BLUSH),F(120,400,x=10,w=40,s=-4,o=10,eyes=DOT,lift=9,fx=SWEAT|BLUSH),
     F(100,60,0,0,w=40,s=-4,o=10,lift=9,fx=BLUSH),F(150,500,w=44,s=6,o=6,eyes=SQUEEZE,lift=8,fx=SWEAT|BLUSH,shake=1),
     F(400,900,90,90,x=-6,y=4,w=40,s=4,lift=7,fx=BLUSH)]),
   ('hopeful','조마조마','🤞',TENSE,'두 손을 모으고 눈을 질끈, 잘 되길 빌어요',None,[
     F(300,900,w=30,s=2,eyes=SQUEEZE,lift=5,brow=5,fx=PRAY,shake=1),F(250,600,70,70,x=-3,w=32,s=0,lift=6,brow=6,fx=PRAY),
     F(300,1000,w=30,s=2,eyes=SQUEEZE,lift=5,brow=5,fx=PRAY|SWEAT,shake=1)]),
-  ('awkward','민망함','😅',TENSE,'땀 한 방울과 함께 멋쩍게 웃어요',None,[
+  ('awkward','민망함','😅',OOPS,'땀 한 방울과 함께 멋쩍게 웃어요',None,[
     F(400,1400,w=70,s=14,eyes=ARC,tilt=4,fx=SWEAT),F(500,900,80,80,x=10,w=60,s=8,brow=4,lift=5,tilt=5,fx=SWEAT),
     F(150,60,0,0,w=60,s=8,tilt=5),F(400,1200,w=72,s=16,eyes=ARC,tilt=3,fx=SWEAT|BLUSH)]),
   ('terrified','공포','😨',TENSE,'보랏빛으로 질려 와들와들 떨어요',None,[
@@ -379,7 +395,7 @@ CATALOG = [
     F(150,500,x=10,y=5,w=46,s=-12,o=22,eyes=DOT,brow=9,lift=11,shake=3,color=PURPLE),
     F(100,60,0,0,y=4,w=46,s=-12,o=20,brow=9,lift=11,shake=3,color=PURPLE),
     F(300,700,y=4,w=50,s=-16,o=28,brow=10,lift=12,shake=4,fx=SWEAT,color=PURPLE)]),
-  ('cringe','오글거림','><',TENSE,'> < 눈을 질끈 감고 몸서리쳐요',None,[
+  ('cringe','오글거림','><',OOPS,'> < 눈을 질끈 감고 몸서리쳐요',None,[
     F(200,900,w=60,s=-6,eyes=SQUEEZE,tilt=-5,shake=1,fx=SWEAT),F(400,700,40,40,x=-12,w=55,s=-4,brow=5,lift=4,tilt=5),
     F(200,800,y=3,w=64,s=-8,eyes=SQUEEZE,tilt=4,shake=2,fx=SWEAT),F(500,900,60,60,x=10,w=55,s=-2,brow=5,lift=4)]),
   # ----- 분노·불쾌 -----
@@ -427,17 +443,41 @@ CATALOG = [
   ('knocked_out','기절','😵',BODY,'X 눈에 별이 빙빙 돌아요',None,[
     F(300,2000,w=40,s=-4,o=14,eyes=CROSS,tilt=6,fx=SPARKLE),F(800,2000,y=3,w=42,s=-6,o=10,eyes=CROSS,tilt=-6,fx=SPARKLE),
     F(800,1600,x=-3,y=2,w=40,s=-4,o=16,eyes=CROSS,tilt=4)]),
+  # ----- 2026-10: Working / Stance / Oops additions -----
+  ('on_it','알겠어요','🫡',WORK,'경례하며 씩 웃어요: 바로 시작할게요',None,[
+    F(200,300,y=-2,w=70,s=20,lift=6,brow=-2,fx=SALUTE),F(160,700,100,0,y=-2,w=72,s=22,lift=6,brow=-2,fx=SALUTE),
+    F(200,400,y=-3,w=70,s=20,lift=6,brow=-2,fx=SALUTE),F(300,1500,y=-2,w=74,s=22,o=6,lift=5,brow=-2,eyes=ARC,fx=SALUTE)]),
+  ('reading','읽는 중','📖',WORK,'눈이 줄을 따라 왼쪽에서 오른쪽으로 움직여요',None,[
+    F(300,100,70,70,x=-11,y=5,w=40,s=4),F(1400,100,70,70,x=11,y=5,w=40,s=4),
+    F(160,60,70,70,x=-11,y=7,w=40,s=4),F(1400,100,70,70,x=11,y=7,w=40,s=4),
+    F(100,60,0,0,x=11,y=7,w=40,s=4),F(160,60,70,70,x=-11,y=5,w=40,s=4),F(1400,300,70,70,x=11,y=5,w=40,s=6)]),
+  ('agree','끄덕끄덕','👍',STANCE,'웃으며 고개를 끄덕여요',None,[
+    F(180,120,y=-3,s=20),F(180,120,90,90,y=6,s=22),F(180,120,y=-3,s=20),F(180,120,90,90,y=6,s=22),
+    F(300,1200,y=0,w=74,s=22,eyes=ARC)]),
+  ('disagree','도리도리','🙅',STANCE,'눈썹을 살짝 올리고 고개를 저어요',None,[
+    F(160,60,x=-12,w=50,s=-4,lift=4,brow=3),F(160,60,x=12,w=50,s=-4,lift=4,brow=3),
+    F(160,60,x=-12,w=50,s=-4,lift=4,brow=3),F(160,60,x=12,w=50,s=-4,lift=4,brow=3),
+    F(300,1400,w=48,s=-2,lift=4,brow=3)]),
+  ('facepalm','아차','🤦',OOPS,'손으로 이마를 짚어요: 내 실수!',None,[
+    F(200,1200,0,0,y=3,w=44,s=-6,tilt=3,fx=PALM|SWEAT),F(250,900,0,45,x=4,y=4,w=44,s=-8,fx=PALM|SWEAT),
+    F(140,100,0,0,x=-3,y=3,w=44,s=-6,fx=PALM|SWEAT),F(140,100,0,0,x=3,y=3,w=44,s=-6,fx=PALM|SWEAT),
+    F(300,1500,0,0,y=3,w=40,s=-6,o=4,tilt=-2,fx=PALM|SWEAT)]),
+  ('shrug','모르겠어요','🤷',OOPS,'눈썹을 올리고 입을 삐뚤게: 잘 모르겠어요',None,[
+    F(300,900,w=44,s=-2,tilt=4,lift=10,brow=2),F(250,700,x=-6,y=-3,w=40,s=-3,tilt=-5,lift=11,brow=3),
+    F(250,700,x=6,y=-3,w=40,s=-3,tilt=5,lift=11,brow=3),F(140,80,0,0,y=-2,w=42,s=-2,lift=10,brow=2),
+    F(300,1400,w=44,s=-2,o=4,tilt=4,lift=10,brow=2)]),
+  ('nostalgic','그리움','🌅',SAD,'옅게 웃으며 먼 곳을 보고 천천히 눈을 감았다 떠요',None,[
+    F(1200,2200,60,60,x=10,y=-6,w=50,s=10,lift=3,brow=3),F(700,500,0,0,x=10,y=-6,w=50,s=11,lift=3,brow=3),
+    F(900,2500,55,55,x=8,y=-7,w=52,s=12,lift=3,brow=3),F(1200,2000,60,60,x=12,y=-5,w=50,s=9,lift=3,brow=3),
+    F(700,500,0,0,x=12,y=-5,w=50,s=10,lift=3,brow=3)]),
 ]
 
 
 def _catalog():
     moods=[dict(id=k,name=n,icon=i,group=g,description=d,slot=7 if s is None else s,frames=f)
            for k,n,i,g,d,s,f in CATALOG]
-    by={m['id']:m['frames'] for m in moods}
-    mix=by['calm'][:4]+by['curious'][:4]+by['happy'][:5]+by['playful'][:3]+by['love'][:2]+by['sleepy'][:4]
-    moods.append(dict(id='auto',name='자동',icon='↻',group='자동',
-                      description='차분함·호기심·행복·장난·사랑·졸림을 차례로',slot=7,frames=mix))
-    return moods
+    order={g:i for i,g in enumerate(GROUP_IDS)}
+    return sorted(moods,key=lambda m:order[m['group']])   # grouped, catalog order within a group
 
 
 def defaults():

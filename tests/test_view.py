@@ -29,6 +29,21 @@ class ViewTests(unittest.TestCase):
         self.assertEqual(v['name'], '행복')
         self.assertIn('메뉴바', self.d.message)
 
+    def test_working_mood_left_on_returns_to_calm(self):
+        from aiface import history
+        by = {m['id']: m for m in face_modes.emotions()}
+        self.d.show_emotion(by['processing'], 'claude')
+        start = self.d.changed
+        self.assertFalse(self.d.expire_working(start + 60))
+        logged = len(history.recent(50))
+        self.assertTrue(self.d.expire_working(start + 200))
+        self.assertEqual((self.d.emotion, self.d.owner, self.d.changed), ('calm', 'claude', start))
+        self.assertEqual(len(history.recent(50)), logged)   # not logged as a choice
+        self.d.show_emotion(by['thinking'], 'claude')        # a reply's tone: stays
+        self.assertFalse(self.d.expire_working(self.d.changed + 999))
+        self.d.show_emotion(by['processing'], 'user')        # picked by hand: stays
+        self.assertFalse(self.d.expire_working(self.d.changed + 999))
+
     def test_nothing_chosen_yet_is_asleep(self):
         self.assertEqual(self.d.view()['emotion'], 'sleeping')
 

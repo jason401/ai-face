@@ -93,7 +93,7 @@ class ProtocolTests(Base):
         self.assertEqual(set(tools), {'set_expression', 'get_expression', 'show_clock', 'start_timer',
                                       'cancel_timer', 'show_photo', 'update_firmware'})
         desc = tools['set_expression']['description']
-        self.assertTrue(desc.startswith('Call once per reply. Match the tone of YOUR reply'))
+        self.assertTrue(desc.startswith('Call at the end of every reply with the tone of YOUR reply'))
         self.assertTrue(desc.endswith('Notes: greeting = hello'))
         self.assertNotIn('thinking', desc)   # the ids are in the enum only
         self.assertEqual(tools['set_expression']['inputSchema']['properties']['emotion']['enum'],

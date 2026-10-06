@@ -60,11 +60,11 @@ def moods():
 
 INSTRUCTIONS = (
     "The user has AI Face: a small animated face in the macOS menu bar (and maybe a round LCD) "
-    "that shows your expression. In every reply, call set_expression once with the mood that fits "
-    "the tone of YOUR reply, e.g. success -> happy/triumph/proud, thanks -> grateful, a question "
-    "-> curious, explaining -> talking, reasoning -> thinking, long tool work -> processing, a "
-    "mistake -> awkward/apologetic, sad news -> sympathy. Vary moods naturally and don't mention "
-    "the call. Replies: ok = shown; app_not_running = AI Face is closed and nothing was shown "
+    "that shows your expression. End every reply with set_expression in the mood of YOUR reply, "
+    "e.g. success -> happy/triumph/proud, thanks -> grateful, a question -> curious, explaining -> "
+    "talking, reasoning -> thinking, taking on a task -> on_it, agreeing -> agree, unsure -> shrug, "
+    "your own mistake -> facepalm/apologetic, sad news -> sympathy. Vary moods naturally and don't "
+    "mention the call. Replies: ok = shown; app_not_running = AI Face is closed and nothing was shown "
     "(carry on normally); error: ... = it failed."
 )
 
@@ -80,8 +80,9 @@ def mood_notes(catalog):
 def tools():
     catalog = moods()
     emotion = {'type': 'string'}
-    rule = ("Call once per reply. Match the tone of YOUR reply, not the user's mood. Skip when "
-            "showing a photo. Shows your expression on the user's AI Face.")
+    rule = ("Call at the end of every reply with the tone of YOUR reply, not the user's mood. Before "
+            "long tool work you may also show processing or reading; the last call must fit the reply. "
+            "Skip when showing a photo.")
     if catalog:
         emotion['enum'] = [m['id'] for m in catalog]   # grouped order: similar moods sit together
         notes = mood_notes(catalog)
