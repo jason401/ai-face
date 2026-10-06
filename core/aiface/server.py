@@ -205,6 +205,9 @@ def main():
                         device.delete_photo(data.get('id'))
                     elif action == 'firmware':
                         device.flash_firmware(data.get('port') or None)
+                    elif action == 'history_clear':
+                        n = history.clear()
+                        device.message = T(f'기록 {n}개를 지웠습니다.', f'Deleted {n} history entries.')
                     elif action == 'library_delete':
                         photo_library.delete(data.get('name'))
                         device.message = T('보관함에서 사진을 지웠습니다.', 'Removed from the photo library.')
