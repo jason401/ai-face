@@ -70,7 +70,7 @@ core/aiface/            Python core (standard library only)
   flasher.py            compile + upload the firmware with Arduino IDE's arduino-cli
 firmware/ESP32_Display/ ESP32 firmware
 hardware/housing/       3D-printable case
-tools/                  app build script, CLI installer, firmware simulator, face preview (make_preview.py)
+tools/                  app build script, CLI installer, firmware simulator, face preview and app icon (make_preview.py, make_icon.py)
 tests/                  tests
 ```
 
