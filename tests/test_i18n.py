@@ -60,12 +60,11 @@ class LanguageTests(unittest.TestCase):
             server.write_catalog()
             tools = ai_face_mcp.tools()
         text = tools[0]['description']
-        self.assertIn('\nAnxiety & tension: afraid, worried, ', text)
         self.assertIn('hopeful = fingers crossed', text)
-        for m in moods.emotions():   # every mood is listed, under English group names
-            self.assertRegex(text, r'[:,] %s(,|\n)' % m['id'])
         self.assertNotIn('조마조마', text)
-        self.assertLess(len(text), 1800)   # small: it is sent with every request
+        self.assertLess(len(text), 900)   # small: it is sent with every request
+        enum = tools[0]['inputSchema']['properties']['emotion']['enum']
+        self.assertEqual(enum, [m['id'] for m in moods.emotions()])
 
 if __name__ == '__main__':
     unittest.main()

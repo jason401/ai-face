@@ -94,14 +94,10 @@ GROUP_EN = {'joy': 'Joy', 'love': 'Love & bond', 'wonder': 'Surprise & interest'
 # Short notes for the AI on moods whose id alone is ambiguous (the MCP tool list shows only
 # ids by group, to keep it small).
 HINTS = {
-    'greeting': 'hello, nice to see you', 'farewell': 'waves goodbye',
-    'smitten': 'flustered crush', 'pleading': 'please?', 'idea': 'light bulb',
-    'realization': 'oh, got it', 'dazed': 'spaced out', 'waking': 'just woke up',
-    'rueful': 'smiling but oh well', 'sulky': 'hurt, pouting',
-    'hopeful': 'fingers crossed, praying hands', 'awkward': 'awkward smile',
-    'cringe': 'secondhand embarrassment', 'contempt': 'scornful smirk',
-    'cold': 'shivering', 'hot': 'sweating in the heat', 'knocked_out': 'X eyes, KO',
-    'auto': 'cycles calm, curious, happy, playful, love, sleepy',
+    'greeting': 'hello', 'farewell': 'waves goodbye', 'smitten': 'flustered crush',
+    'dazed': 'spaced out', 'rueful': 'smiling but oh well', 'sulky': 'hurt, pouting',
+    'hopeful': 'fingers crossed', 'cringe': 'secondhand embarrassment',
+    'contempt': 'scornful smirk', 'knocked_out': 'X eyes, KO', 'auto': 'cycles several moods',
 }
 
 # English names and looks, by mood id.
