@@ -78,7 +78,8 @@ def set_state(on):
     return actual() == on
 
 
-SETUP = 'Set up Keep Awake.command'   # in tools/: installs or removes the sudoers rule
+SETUP = 'Set up Keep Awake.command'   # in tools/: installs or removes the sudoers rule and `awake`
+COMMAND = '/usr/local/bin/awake'      # the `awake COMMAND` shortcut, installed by SETUP
 
 
 def open_setup():
@@ -91,6 +92,13 @@ def open_setup():
     if code != 0:
         raise ValueError(T('터미널을 열지 못했습니다.', 'Could not open Terminal.'))
     _cache['ready'] = None   # check again soon
+
+
+def command_installed():
+    try:
+        return 'ai_face_awake' in open(COMMAND).read(4096)
+    except OSError:
+        return False
 
 
 def battery():
@@ -336,7 +344,8 @@ def status(now=None):
                           job=v.get('pid') is not None)
                      for k, v in state['leases'].items() if _active(v, now)), key=lambda x: -x['left'])
     paused = max(0, int((state.get('paused_until') or 0) - now))
-    return dict(supported=supported(), ready=bool(_cache['ready']), on=bool(_cache['on']),
+    return dict(supported=supported(), ready=bool(_cache['ready']), command=command_installed(),
+                on=bool(_cache['on']),
                 ours=bool(state.get('on')), left=max([x['left'] for x in leases], default=0),
                 leases=leases, paused=paused, reason=last_reason)
 
