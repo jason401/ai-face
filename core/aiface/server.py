@@ -299,7 +299,8 @@ def main():
                             # reason: from the app's heat / Low Power Mode watch, else the user
                             reason = {'heat': T('Mac이 뜨거워요', 'the Mac is hot'),
                                       'low_power': T('저전력 모드', 'Low Power Mode')}.get(data.get('reason'))
-                            awake.stop(reason or T('직접 껐어요', 'turned off by hand'), force=not reason)
+                            # The user's Turn off ends every lease and pauses automatic ones for an hour.
+                            awake.off_all(reason or T('직접 껐어요', 'turned off by hand'), pause=not reason, force=not reason)
                             device.message = T(f'깨어 있기를 껐습니다: {reason}', f'Keep awake turned off: {reason}') \
                                 if reason else T('깨어 있기를 껐습니다.', 'Keep awake is off.')
                         else:
