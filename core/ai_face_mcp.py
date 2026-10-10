@@ -122,6 +122,24 @@ def tools():
         {'name': 'show_clock', 'title': 'Show the clock',
          'description': 'Show an analog clock on the face. Only when asked.',
          'inputSchema': NO_ARGS, 'annotations': SAFE},
+        {'name': 'keep_awake', 'title': 'Keep the Mac awake',
+         'description': ("Keep the user's MacBook awake, even with the lid closed, for some minutes "
+                         "(asking again renews it). Only when the user asks for it. Turns off by itself."),
+         'inputSchema': {'type': 'object', 'properties': {
+             'minutes': {'type': 'integer', 'minimum': 1, 'maximum': 240}},
+             'required': ['minutes'], 'additionalProperties': False},
+         'annotations': dict(SAFE, idempotentHint=False)},
+        {'name': 'release_awake', 'title': 'Stop keeping the Mac awake',
+         'description': ("End your keep_awake. all=true (only when the user asks to turn keep awake off "
+                         "entirely) ends every request, also Claude Code's and the user's."),
+         'inputSchema': {'type': 'object', 'properties': {'all': {'type': 'boolean'}},
+                         'additionalProperties': False},
+         'annotations': SAFE},
+        {'name': 'awake_status', 'title': 'Keep awake status',
+         'description': 'Whether the Mac is being kept awake now, and for whom.',
+         'inputSchema': NO_ARGS,
+         'annotations': {'readOnlyHint': True, 'destructiveHint': False, 'idempotentHint': True,
+                         'openWorldHint': False}},
         {'name': 'update_firmware', 'title': 'Update the board firmware',
          'description': ("Compile the round LCD board's firmware and upload it over USB (takes minutes); "
                          "returns compiler errors on failure. Only when the user asks to flash it."),
@@ -188,6 +206,10 @@ def get_expression(limit=10):
     return _request('GET', f'/expression?limit={limit}', timeout=10).get('text', '')
 
 
+def awake_text():
+    return _request('GET', '/awake', timeout=10).get('text', '')
+
+
 def start_timer(minutes, color='blue'):
     if isinstance(minutes, bool) or not isinstance(minutes, (int, float)) or not 0 < minutes <= 1440:
         raise Failed('minutes must be above 0 and at most 1440')
@@ -206,6 +228,21 @@ def call_tool(name, args):
         return get_expression(args.get('limit', 10))
     if name == 'start_timer':
         return start_timer(args.get('minutes'), args.get('color', 'blue'))
+    if name == 'keep_awake':
+        minutes = args.get('minutes')
+        if isinstance(minutes, bool) or not isinstance(minutes, int) or not 1 <= minutes <= 240:
+            raise Failed('minutes must be 1 to 240')
+        _api({'action': 'awake_acquire', 'id': 'mcp:' + agent(), 'minutes': minutes,
+              'label': 'Claude' if agent() == 'claude' else 'GPT'})
+        return 'ok: ' + awake_text()
+    if name == 'release_awake':
+        if args.get('all') is True:
+            _api({'action': 'awake', 'minutes': 0})
+        else:
+            _api({'action': 'awake_release', 'id': 'mcp:' + agent()})
+        return 'ok: ' + awake_text()
+    if name == 'awake_status':
+        return awake_text()
     if name == 'cancel_timer':
         _api({'action': 'timer', 'seconds': 0})
     elif name == 'show_clock':

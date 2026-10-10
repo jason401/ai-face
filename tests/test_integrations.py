@@ -91,6 +91,26 @@ class IntegrationTests(unittest.TestCase):
         self.assertIn('[mcp_servers.notion]', text)
         self.assertEqual(integrations.codex_status(), 'off')
 
+    def test_claude_code_hooks_keep_other_hooks(self):
+        cfg = integrations.claude_code_settings()
+        cfg.parent.mkdir(parents=True)
+        mine = {'matcher': 'Bash', 'hooks': [{'type': 'command', 'command': 'echo mine'}]}
+        cfg.write_text(json.dumps({'model': 'opus', 'hooks': {'PreToolUse': [mine]}}))
+        self.assertEqual(integrations.hooks_status(), 'off')
+        integrations.install('claude_code_awake')
+        data = json.loads(cfg.read_text())
+        self.assertEqual(data['model'], 'opus')
+        self.assertEqual(data['hooks']['PreToolUse'][0], mine)
+        self.assertEqual(set(data['hooks']), {'UserPromptSubmit', 'PreToolUse', 'Stop', 'SessionEnd'})
+        self.assertIn("ai_face_awake.py' hook off", data['hooks']['Stop'][0]['hooks'][0]['command'])
+        self.assertEqual(integrations.hooks_status(), 'on')
+        self.assertTrue(integrations.helper_path().is_file())
+        integrations.install('claude_code_awake')          # again: no duplicates
+        self.assertEqual(len(json.loads(cfg.read_text())['hooks']['Stop']), 1)
+        integrations.remove('claude_code_awake')
+        self.assertEqual(json.loads(cfg.read_text()), {'model': 'opus', 'hooks': {'PreToolUse': [mine]}})
+        self.assertEqual(integrations.hooks_status(), 'off')
+
     def test_status_and_unknown(self):
         s = integrations.status()
         self.assertEqual((s['claude'], s['codex'], s['codex_available']), ('off', 'off', False))

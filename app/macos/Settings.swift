@@ -107,6 +107,8 @@ final class SettingsStore: NSObject, ObservableObject {
     @Published var codex = "off"
     @Published var codexAvailable = false
     @Published var serverPath = ""
+    @Published var helperPath = ""
+    @Published var hooks = "off"
     @Published var aiNotice = ""
     // General
     @Published var loginItem = false
@@ -117,6 +119,7 @@ final class SettingsStore: NSObject, ObservableObject {
     @Published var awakeReady = false
     @Published var awakeOn = false
     @Published var awakeLeft = 0
+    @Published var awakeNotice = ""
     // Expression history (기록 tab)
     @Published var historyDay = Calendar.current.startOfDay(for: Date())
     @Published var dayTotal = 0
@@ -455,6 +458,8 @@ final class SettingsStore: NSObject, ObservableObject {
             self.codex = (s["codex"] as? String) ?? "off"
             self.codexAvailable = (s["codex_available"] as? Bool) ?? false
             self.serverPath = (s["server"] as? String) ?? ""
+            self.helperPath = (s["helper"] as? String) ?? ""
+            self.hooks = (s["claude_code_awake"] as? String) ?? "off"
         }
     }
 
@@ -468,6 +473,13 @@ final class SettingsStore: NSObject, ObservableObject {
 
     var otherAppCommand: String {
         return "/usr/bin/python3 '\(serverPath)'"
+    }
+
+    /// For ~/.zshrc: `awake COMMAND` keeps the Mac awake while COMMAND runs.
+    func copyAwakeAlias() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString("alias awake='/usr/bin/python3 \"\(helperPath)\" run'", forType: .string)
+        awakeNotice = L("Copied. Add it to ~/.zshrc, open a new Terminal window, then run: awake COMMAND")
     }
 
     func copyCommand() {
@@ -595,6 +607,15 @@ struct GeneralTab: View {
                     LabeledContent(L("Status"), value: store.awakeStatus)
                     LabeledContent(L("Permission")) {
                         Button(store.awakeReady ? L("Remove…") : L("Set up…")) { store.setUpAwake() }
+                    }
+                    if store.awakeReady {
+                        LabeledContent(L("awake command")) {
+                            Button(L("Copy alias")) { store.copyAwakeAlias() }
+                        }
+                    }
+                    if !store.awakeNotice.isEmpty {
+                        Text(store.awakeNotice).font(.caption).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 } header: {
                     Text(L("Keep awake"))
@@ -800,6 +821,10 @@ struct AITab: View {
             Section {
                 row(L("Claude desktop"), store.claude, "claude")
                 row("Codex (GPT)", store.codex, "codex", available: store.codexAvailable)
+                if store.awakeSupported {
+                    row(L("Claude Code: keep awake while working"), store.hooks, "claude_code_awake",
+                        available: store.awakeReady)
+                }
             } header: {
                 Text(L("AI apps"))
             } footer: {

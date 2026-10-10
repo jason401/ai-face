@@ -19,6 +19,7 @@ NAME = 'ai-face'
 OLD_NAMES = ('esp32-face',)   # earlier versions registered under this name
 PYTHON = '/usr/bin/python3'
 SERVER_FILE = 'ai_face_mcp.py'
+HELPER_FILE = 'ai_face_awake.py'   # keep awake: Claude Code hooks and the `awake` command
 # Files of earlier versions in the data folder (the server used to be a copy of the package).
 OLD_FILES = ['esp32_mcp.py', 'source.json', 'face_modes.py', 'esp_display.py', 'flasher.py',
              'photo_library.py', 'controller.html']
@@ -30,6 +31,14 @@ def runtime():
 
 def server_path():
     return runtime() / SERVER_FILE
+
+
+def helper_path():
+    return runtime() / HELPER_FILE
+
+
+def claude_code_settings():
+    return Path.home() / '.claude' / 'settings.json'
 
 
 def claude_config():
@@ -59,14 +68,16 @@ def _write(path, text):
 # The server file
 # ---------------------------------------------------------------------------
 def install_server():
-    """Copy the MCP server file next to the app's data, and remove older server files."""
-    source = paths.PACKAGE.parent / SERVER_FILE
-    if not source.is_file():
-        raise ValueError(T('AI Face MCP 서버 파일을 찾지 못했습니다.', 'The AI Face MCP server file is missing.'))
+    """Copy the MCP server and the keep-awake helper next to the app's data (chat apps and
+    hooks may not run programs from ~/Documents), and remove older server files."""
     runtime().mkdir(parents=True, exist_ok=True)
-    temp = server_path().with_name(SERVER_FILE + '.tmp')
-    shutil.copyfile(source, temp)
-    temp.replace(server_path())
+    for name in (SERVER_FILE, HELPER_FILE):
+        source = paths.PACKAGE.parent / name
+        if not source.is_file():
+            raise ValueError(T(f'{name} 파일을 찾지 못했습니다.', f'{name} is missing.'))
+        temp = runtime() / (name + '.tmp')
+        shutil.copyfile(source, temp)
+        temp.replace(runtime() / name)
     remove_old_files()
 
 
@@ -79,6 +90,8 @@ def remove_old_files():
 def remove_server():
     """Server files only: settings, photos and history in the same folder are kept."""
     server_path().unlink(missing_ok=True)
+    if hooks_status() == 'off':   # the hooks still use the helper otherwise
+        helper_path().unlink(missing_ok=True)
     remove_old_files()
 
 
@@ -216,13 +229,92 @@ def codex_remove():
 
 
 # ---------------------------------------------------------------------------
+# Claude Code hooks (~/.claude/settings.json): keep the Mac awake while Claude Code works
+# ---------------------------------------------------------------------------
+HOOK_EVENTS = {'UserPromptSubmit': 'on', 'PreToolUse': 'on', 'Stop': 'off', 'SessionEnd': 'off'}
+
+
+def _hook_command(mode):
+    return f"{PYTHON} '{helper_path()}' hook {mode}"
+
+
+def _ours(group):
+    return isinstance(group, dict) and any(isinstance(h, dict) and HELPER_FILE in str(h.get('command', ''))
+                                           for h in group.get('hooks') or [])
+
+
+def _code_load():
+    path = claude_code_settings()
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text() or '{}')
+    except ValueError:
+        raise ValueError(T(f'Claude Code 설정 파일 형식이 올바르지 않아 고치지 않았습니다: {path}',
+                           f'The Claude Code settings file is not valid JSON, so it was left alone: {path}'))
+    if not isinstance(data, dict) or not isinstance(data.get('hooks', {}), dict):
+        raise ValueError(T(f'Claude Code 설정 파일 형식이 올바르지 않습니다: {path}',
+                           f'The Claude Code settings file has an unexpected format: {path}'))
+    return data
+
+
+def hooks_status():
+    """'on' (all our hooks, current path), 'other' (ours, but incomplete or another path), 'off', 'error'."""
+    try:
+        hooks = _code_load().get('hooks') or {}
+    except (OSError, ValueError):
+        return 'error'
+    found = {e: [g for g in (hooks.get(e) or []) if _ours(g)] for e in HOOK_EVENTS}
+    if not any(found.values()):
+        return 'off'
+    exact = all(any(h.get('command') == _hook_command(m) for g in found[e] for h in g['hooks'])
+                for e, m in HOOK_EVENTS.items())
+    return 'on' if exact else 'other'
+
+
+def _hooks_without_ours(data):
+    hooks = data.setdefault('hooks', {})
+    for event in list(hooks):
+        if isinstance(hooks[event], list):
+            hooks[event] = [g for g in hooks[event] if not _ours(g)]
+            if not hooks[event]:
+                del hooks[event]
+    return hooks
+
+
+def hooks_install():
+    data = _code_load()
+    _backup(claude_code_settings())
+    hooks = _hooks_without_ours(data)
+    for event, mode in HOOK_EVENTS.items():
+        group = {'hooks': [{'type': 'command', 'command': _hook_command(mode), 'timeout': 5}]}
+        if event == 'PreToolUse':
+            group['matcher'] = '*'
+        hooks.setdefault(event, []).append(group)
+    _write(claude_code_settings(), json.dumps(data, indent=2, ensure_ascii=False))
+
+
+def hooks_remove():
+    if hooks_status() == 'off' or not claude_code_settings().exists():
+        return
+    data = _code_load()
+    _backup(claude_code_settings())
+    hooks = _hooks_without_ours(data)
+    if not hooks:
+        del data['hooks']
+    _write(claude_code_settings(), json.dumps(data, indent=2, ensure_ascii=False))
+
+
+# ---------------------------------------------------------------------------
 TARGETS = {'claude': (claude_status, claude_install, claude_remove),
-           'codex': (codex_status, codex_install, codex_remove)}
+           'codex': (codex_status, codex_install, codex_remove),
+           'claude_code_awake': (hooks_status, hooks_install, hooks_remove)}
 
 
 def status():
     return dict(claude=claude_status(), codex=codex_status(), codex_available=codex_available(),
-                server=str(server_path()), python=PYTHON)
+                claude_code_awake=hooks_status(), server=str(server_path()), helper=str(helper_path()),
+                python=PYTHON)
 
 
 def install(target):

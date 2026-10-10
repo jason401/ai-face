@@ -221,6 +221,8 @@ def main():
                     limit = 10
                 limit = limit if 1 <= limit <= 50 else 10
                 return self.reply(200, {'text': expression_text(device.view(), limit)})
+            if self.path == '/awake':   # keep awake, for the helper and the MCP server
+                return self.reply(200, {'text': awake.describe(), 'status': awake.status()})
             if self.path == '/mcp':
                 return self.reply(200, integrations.status())
             if self.path == '/state':
@@ -256,7 +258,8 @@ def main():
                         raise ValueError(T('잘못된 요청입니다.', 'Bad request.'))
                     action = data.get('action')
                     # A board that was plugged in after the app started is picked up here.
-                    if action not in ('connect', 'disconnect', 'quit', 'firmware', 'mcp_install', 'mcp_remove') \
+                    if action not in ('connect', 'disconnect', 'quit', 'firmware', 'mcp_install', 'mcp_remove',
+                                      'awake_acquire', 'awake_release', 'awake_resume') \
                             and device.fd is None and not device.paused and ports():
                         try:
                             device.connect(ports()[0])
@@ -306,6 +309,18 @@ def main():
                         else:
                             awake.start(minutes)
                             device.message = T('뚜껑을 닫아도 깨어 있어요.', 'Staying awake, even with the lid closed.')
+                    elif action == 'awake_acquire':
+                        # A lease from a Claude Code hook, an `awake` job or an AI (MCP).
+                        pid = data.get('pid')
+                        held = awake.acquire(data.get('id'), data.get('minutes'), data.get('label', ''),
+                                             pid=pid if type(pid) is int else None, auto=bool(data.get('auto')))
+                        if not held:
+                            raise ValueError(T('사용자가 자동 깨어 있기를 잠시 멈췄습니다.',
+                                               'The user paused automatic keep awake for now.'))
+                    elif action == 'awake_release':
+                        awake.release(data.get('id'))
+                    elif action == 'awake_resume':
+                        awake.resume_auto()
                     elif action == 'awake_setup':
                         awake.open_setup()
                         device.message = T('터미널에서 설정을 마쳐 주세요.', 'Finish the setup in Terminal.')
