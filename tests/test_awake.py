@@ -15,6 +15,8 @@ import isolate  # noqa: E402,F401  (temporary HOME for the whole test run)
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'core'))
 from aiface import awake  # noqa: E402
 
+PAUSE_END = awake.PAUSE + 1
+
 PMSET = r'''#!/bin/sh
 # fake pmset: -g prints SleepDisabled from a file, "-a disablesleep N" writes it, -g batt
 D="$(dirname "$0")"
@@ -63,9 +65,10 @@ class AwakeTests(unittest.TestCase):
         self.assertEqual((s['on'], s['ours'], self.value()), (True, True, '1'))
         self.assertGreater(s['left'], 3590)
         failsafe = json.loads(awake.STATE.read_text())['failsafe']
+        self.assertEqual([x['id'] for x in s['leases']], ['manual'])
         self.assertIsNone(subprocess.run(['kill', '-0', str(failsafe)]).returncode or None)
         self.assertTrue(awake.stop('by hand'))
-        self.assertEqual((self.value(), awake.STATE.exists(), awake.last_reason), ('0', False, 'by hand'))
+        self.assertEqual((self.value(), awake.status()['leases'], awake.last_reason), ('0', [], 'by hand'))
         time.sleep(0.2)
         self.assertNotEqual(subprocess.run(['kill', '-0', str(failsafe)], stderr=subprocess.DEVNULL).returncode, 0)
 
@@ -115,10 +118,40 @@ class AwakeTests(unittest.TestCase):
         awake.start(60)
         (self.dir / 'value').write_text('0\n')     # the Mac restarted: the setting is back to 0
         awake.startup()
-        self.assertFalse(awake.STATE.exists())
+        self.assertEqual(awake.status()['leases'], [])
         awake.start(60)
         awake.startup(time.time() + 3601)          # ran out while the app was closed
-        self.assertEqual((self.value(), awake.STATE.exists()), ('0', False))
+        self.assertEqual((self.value(), awake.status()['leases']), ('0', []))
+
+    def test_leases_each_asker_and_turn_off_all(self):
+        now = time.time()
+        awake.start(60, now)
+        self.assertTrue(awake.acquire('claude-code:s1', 20, 'Claude Code', auto=True, now=now))
+        awake.release('claude-code:s1', now)
+        self.assertEqual(self.value(), '1')                     # the user's hour still holds it
+        awake.release('manual', now)
+        self.assertEqual(self.value(), '0')                     # nobody needs it
+        awake.acquire('claude-code:s1', 20, 'Claude Code', auto=True, now=now)
+        self.assertTrue(awake.off_all('by hand', pause=True, now=now))
+        self.assertEqual(self.value(), '0')
+        self.assertFalse(awake.acquire('claude-code:s1', 20, auto=True, now=now + 60))   # paused
+        self.assertEqual(self.value(), '0')
+        self.assertTrue(awake.acquire('claude-code:s1', 20, auto=True, now=now + PAUSE_END))
+        awake.off_all('x', now=now + PAUSE_END)
+        awake.off_all('by hand', pause=True, now=now)
+        awake.start(60, now + 60)                               # the user's own lease ends the pause
+        self.assertTrue(awake.acquire('claude-code:s2', 20, auto=True, now=now + 60))
+
+    def test_job_lease_ends_with_its_process(self):
+        job = subprocess.Popen(['sleep', '30'])
+        self.addCleanup(job.kill)
+        awake.acquire('job:sweep', 480, 'sweep', pid=job.pid)
+        self.assertEqual(self.value(), '1')
+        self.assertEqual(awake.check(), '')
+        job.kill(); job.wait()
+        self.assertTrue(awake.check())
+        self.assertEqual(self.value(), '0')
+        self.assertIn('Keep awake: off', awake.describe())
 
 
 if __name__ == '__main__':
