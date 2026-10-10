@@ -81,6 +81,15 @@ def install_server():
     remove_old_files()
 
 
+def install_helper():
+    """The keep-awake helper (used by the `awake` command and the Claude Code hooks) is kept
+    current on every start, whether or not an AI app is connected."""
+    runtime().mkdir(parents=True, exist_ok=True)
+    temp = runtime() / (HELPER_FILE + '.tmp')
+    shutil.copyfile(paths.PACKAGE.parent / HELPER_FILE, temp)
+    temp.replace(helper_path())
+
+
 def remove_old_files():
     shutil.rmtree(runtime() / 'aiface', ignore_errors=True)
     for name in OLD_FILES:
@@ -335,6 +344,7 @@ def remove(target):
 def refresh():
     """Run when the app starts: keep the installed server file current, and move apps that
     were connected by an older version (other name or path) to the current registration."""
+    install_helper()
     connected = [t for t, (st, _, _) in TARGETS.items() if st() in ('on', 'other')]
     if connected or server_path().exists():
         install_server()

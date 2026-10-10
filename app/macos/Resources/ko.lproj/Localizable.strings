@@ -155,5 +155,5 @@
 "Resume automatic keep awake" = "자동 깨어 있기 다시 켜기";
 "Claude Code: keep awake while working" = "Claude Code: 일하는 동안 깨어 있기";
 "awake command" = "awake 명령";
-"Copy alias" = "alias 복사";
-"Copied. Add it to ~/.zshrc, open a new Terminal window, then run: awake COMMAND" = "복사했어요. ~/.zshrc에 붙여 넣고 새 터미널 창에서 awake 명령어 형태로 쓰세요.";
+"Installed" = "설치됨";
+"Install…" = "설치…";

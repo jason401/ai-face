@@ -120,6 +120,7 @@ final class SettingsStore: NSObject, ObservableObject {
     @Published var awakeOn = false
     @Published var awakeLeft = 0
     @Published var awakeNotice = ""
+    @Published var awakeCommand = false
     // Expression history (기록 tab)
     @Published var historyDay = Calendar.current.startOfDay(for: Date())
     @Published var dayTotal = 0
@@ -182,6 +183,7 @@ final class SettingsStore: NSObject, ObservableObject {
                 self.awakeReady = (a["ready"] as? Bool) ?? false
                 self.awakeOn = (a["on"] as? Bool) ?? false
                 self.awakeLeft = (a["left"] as? NSNumber)?.intValue ?? 0
+                self.awakeCommand = (a["command"] as? Bool) ?? false
             }
             let photos = ((s["photos"] as? [NSNumber]) ?? []).map { $0.intValue }
             let current = (s["current_photo"] as? NSNumber)?.intValue ?? -1
@@ -475,13 +477,6 @@ final class SettingsStore: NSObject, ObservableObject {
         return "/usr/bin/python3 '\(serverPath)'"
     }
 
-    /// For ~/.zshrc: `awake COMMAND` keeps the Mac awake while COMMAND runs.
-    func copyAwakeAlias() {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString("alias awake='/usr/bin/python3 \"\(helperPath)\" run'", forType: .string)
-        awakeNotice = L("Copied. Add it to ~/.zshrc, open a new Terminal window, then run: awake COMMAND")
-    }
-
     func copyCommand() {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString("claude mcp add ai-face -e AIFACE_AGENT=claude -- " + otherAppCommand, forType: .string)
@@ -610,7 +605,11 @@ struct GeneralTab: View {
                     }
                     if store.awakeReady {
                         LabeledContent(L("awake command")) {
-                            Button(L("Copy alias")) { store.copyAwakeAlias() }
+                            if store.awakeCommand {
+                                Text(L("Installed")).foregroundStyle(.secondary)
+                            } else {
+                                Button(L("Install…")) { store.setUpAwake() }
+                            }
                         }
                     }
                     if !store.awakeNotice.isEmpty {
