@@ -42,6 +42,12 @@ final class StatusController: NSObject, NSMenuDelegate {
     var moods: [String: [String: Any]] = [:]
     var moodList: [[String: Any]] = []
     var recent: [String] = []            // moods picked by hand, newest first (menu "Recent")
+    // Keep awake (lid closed), from /view: available on this Mac, set up, on, turned on here, seconds left
+    var awakeSupported = false
+    var awakeReady = false
+    var awakeOurs = false
+    var awakeEnd = 0.0
+    private var heatSent = false
     var openSettings: (() -> Void)?
     private var icons: [String: NSImage] = [:]
 
@@ -115,6 +121,27 @@ final class StatusController: NSObject, NSMenuDelegate {
 
     private var pendingEmotion = ""
 
+    /// Keep awake must not cook a closed MacBook in a bag: off when it runs hot or in Low Power Mode.
+    private func watchHeat() {
+        guard awakeOurs else { heatSent = false; return }
+        let state = ProcessInfo.processInfo.thermalState
+        let reason = state == .serious || state == .critical ? "heat"
+            : (ProcessInfo.processInfo.isLowPowerModeEnabled ? "low_power" : "")
+        guard !reason.isEmpty, !heatSent else { return }
+        heatSent = true
+        API.shared.call("awake", ["minutes": 0, "reason": reason]) { [weak self] _, _ in
+            self?.heatSent = false
+            self?.poll()
+        }
+    }
+
+    func awakeText(_ now: Double) -> String? {
+        guard view.awake else { return nil }
+        guard awakeEnd > now else { return L("☀ Awake") }
+        let left = Int((awakeEnd - now).rounded(.up))
+        return String(format: L("☀ Awake · %ld:%02ld left"), left / 3600, left % 3600 / 60)
+    }
+
     private func loadRecent() {
         API.shared.getJSON("recent") { [weak self] json in
             guard let self = self, let list = json as? [String] else { return }
@@ -162,6 +189,14 @@ final class StatusController: NSObject, NSMenuDelegate {
             view.timerEnd = 0
         }
         view.mono = (v["mono"] as? Bool) ?? false
+        if let a = v["awake"] as? [String: Any] {
+            awakeSupported = (a["supported"] as? Bool) ?? false
+            awakeReady = (a["ready"] as? Bool) ?? false
+            view.awake = (a["on"] as? Bool) ?? false
+            awakeOurs = (a["ours"] as? Bool) ?? false
+            awakeEnd = awakeOurs ? now + ((a["left"] as? NSNumber)?.doubleValue ?? 0) : 0
+            watchHeat()
+        }
         view.clockOnPhoto = (v["clock"] as? Bool) ?? false
         if kind == "photo" {
             let id = (v["photo"] as? NSNumber)?.intValue ?? -1
@@ -237,7 +272,7 @@ final class StatusController: NSObject, NSMenuDelegate {
                                        offset: bounce(now))
         header.title.stringValue = name.isEmpty ? "AI Face" : name
         header.detail.stringValue = view.kind == "face" ? ownerName(view.owner) : (board ? L("Showing on the board") : L("Showing in the menu bar"))
-        header.extra.stringValue = timerText(now) ?? (board ? L("● Board connected") : L("○ No board"))
+        header.extra.stringValue = timerText(now) ?? awakeText(now) ?? (board ? L("● Board connected") : L("○ No board"))
     }
 
     // MARK: - Menu
@@ -283,6 +318,29 @@ final class StatusController: NSObject, NSMenuDelegate {
         timer.submenu = timerMenu
         _ = add(menu, L("Light the campfire"), #selector(campfire))
         _ = add(menu, L("Show the clock"), #selector(clock))
+        if awakeSupported {
+            let now = Date.timeIntervalSinceReferenceDate
+            let title = view.awake ? L("Keep awake") + " · " + (awakeText(now) ?? "").replacingOccurrences(of: "☀ ", with: "")
+                                   : L("Keep awake")
+            let item = add(menu, title, nil)
+            let sub = NSMenu()
+            sub.autoenablesItems = false
+            if awakeReady {
+                for minutes in [60, 120, 240] {
+                    _ = add(sub, minutesText(minutes), #selector(startAwake(_:)), object: minutes)
+                }
+                if view.awake {
+                    sub.addItem(.separator())
+                    _ = add(sub, L("Turn off"), #selector(stopAwake))
+                }
+            } else {
+                _ = add(sub, L("Set up…"), #selector(setUpAwake))
+            }
+            sub.addItem(.separator())
+            let note = add(sub, L("Stays awake with the lid closed, then turns off by itself."), nil)
+            note.isEnabled = false
+            item.submenu = sub
+        }
 
         if !moodList.isEmpty {
             let faces = add(menu, L("Faces"), nil)
@@ -375,6 +433,19 @@ final class StatusController: NSObject, NSMenuDelegate {
     @objc func chooseMood(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? String else { return }
         API.shared.call("emotion", ["id": id]) { [weak self] ok, reply in self?.report(ok, reply) }
+    }
+
+    @objc func startAwake(_ sender: NSMenuItem) {
+        let minutes = (sender.representedObject as? Int) ?? 60
+        API.shared.call("awake", ["minutes": minutes]) { [weak self] ok, reply in self?.report(ok, reply) }
+    }
+
+    @objc func stopAwake() {
+        API.shared.call("awake", ["minutes": 0]) { [weak self] ok, reply in self?.report(ok, reply) }
+    }
+
+    @objc func setUpAwake() {
+        API.shared.call("awake_setup") { [weak self] ok, reply in self?.report(ok, reply) }
     }
 
     @objc func settings() {

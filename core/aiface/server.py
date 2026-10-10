@@ -7,12 +7,14 @@ import datetime
 import json
 import os
 import secrets
+import signal
 import threading
 import urllib.parse
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from . import VERSION
+from . import awake
 from . import history
 from . import i18n
 from .i18n import T
@@ -108,6 +110,17 @@ def auto_connect(device, stop, interval=3, retry=30):
             device.lock.release()
 
 
+def watch_awake(device, stop, interval=5):
+    """Keep awake: end it at its deadline or on low battery (see awake.check)."""
+    while not stop.wait(interval):
+        try:
+            reason = awake.check()
+        except OSError:
+            reason = ''
+        if reason:
+            device.message = T(f'깨어 있기를 껐습니다: {reason}', f'Keep awake turned off: {reason}')
+
+
 def expire_working(device, stop, interval=10):
     """Return to calm when an AI left a working mood on (see Device.expire_working)."""
     while not stop.wait(interval):
@@ -133,6 +146,10 @@ def main():
     token = secrets.token_urlsafe(32)
     history.prune()
     face_modes.save_settings(language=i18n.lang())   # the MCP server speaks the app's language
+    try:
+        awake.startup()
+    except OSError:
+        pass
     try:
         write_catalog()
         integrations.refresh()   # current server file; apps registered by older versions move over
@@ -185,9 +202,9 @@ def main():
                     return self.reply(404, {})
                 return self.reply(200, data, kind)
             if self.path == '/view':   # for the menu bar face; no lock (a flash can hold it for minutes)
-                return self.reply(200, device.view())
+                return self.reply(200, dict(device.view(), awake=awake.status()))
             if self.path == '/status':   # for the settings window; no lock either
-                return self.reply(200, dict(device.status(), version=VERSION))
+                return self.reply(200, dict(device.status(), version=VERSION, awake=awake.status()))
             if self.path.startswith('/history'):
                 query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
                 day = (query.get('day') or [time.strftime('%Y-%m-%d')])[0]
@@ -275,6 +292,22 @@ def main():
                         device.delete_photo(data.get('id'))
                     elif action == 'firmware':
                         device.flash_firmware(data.get('port') or None)
+                    elif action == 'awake':
+                        # minutes > 0: stay awake that long (replaces a running period); 0: off.
+                        minutes = data.get('minutes', 0)
+                        if minutes == 0:
+                            # reason: from the app's heat / Low Power Mode watch, else the user
+                            reason = {'heat': T('Mac이 뜨거워요', 'the Mac is hot'),
+                                      'low_power': T('저전력 모드', 'Low Power Mode')}.get(data.get('reason'))
+                            awake.stop(reason or T('직접 껐어요', 'turned off by hand'), force=not reason)
+                            device.message = T(f'깨어 있기를 껐습니다: {reason}', f'Keep awake turned off: {reason}') \
+                                if reason else T('깨어 있기를 껐습니다.', 'Keep awake is off.')
+                        else:
+                            awake.start(minutes)
+                            device.message = T('뚜껑을 닫아도 깨어 있어요.', 'Staying awake, even with the lid closed.')
+                    elif action == 'awake_setup':
+                        awake.open_setup()
+                        device.message = T('터미널에서 설정을 마쳐 주세요.', 'Finish the setup in Terminal.')
                     elif action == 'history_clear':
                         n = history.clear()
                         device.message = T(f'기록 {n}개를 지웠습니다.', f'Deleted {n} history entries.')
@@ -316,12 +349,21 @@ def main():
     stop = threading.Event()
     threading.Thread(target=auto_connect, args=(device, stop), daemon=True).start()
     threading.Thread(target=expire_working, args=(device, stop), daemon=True).start()
+    threading.Thread(target=watch_awake, args=(device, stop), daemon=True).start()
+    # The app stops the server with SIGTERM: run the cleanup below (keep awake off) then too.
+    def terminated(*_):
+        raise KeyboardInterrupt
+    signal.signal(signal.SIGTERM, terminated)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
         stop.set()
+        try:
+            awake.stop(T('AI Face를 종료했어요', 'AI Face quit'))
+        except OSError:
+            pass
         with device.lock:
             device.close()
         server.server_close()

@@ -13,6 +13,7 @@ No hardware needed: the menu bar face works on its own. Everything runs locally 
 - **78 animated moods in 11 groups** (happy, thinking, on it!, agree, facepalm, don't know, fingers crossed, ...). The AI chooses one per reply through a local [MCP](https://modelcontextprotocol.io) server, so the face follows the tone of the conversation.
 - **Who chose it**: the ring around the face is orange for Claude, green for GPT and white when you pick a face yourself. Monochrome mode shows it with ring patterns instead.
 - **Menu**: click the face for a timer (pomodoro), campfire, clock and every mood (with a small picture of each, and the ones you picked recently on top).
+- **Keep awake** (optional): keep a MacBook awake with the lid closed for 1, 2 or 4 hours, from the menu. It turns itself off at the end, on low battery, when hot and when AI Face quits. Setup installs one sudoers rule that allows only `pmset -a disablesleep 0/1` (Settings → General → Keep awake).
 - **Screen savers** when the face has not changed for a while: sleepy → asleep, clock, photo, slideshow, pixel-art campfire.
 - **History**: a daily log of which AI made which face, with stats and a timeline. Only the mood and the time are saved, never conversation text. AIs can read it too ("how were our faces today?").
 - **Round LCD (optional)**: Seeed XIAO ESP32S3 + 1.28" GC9A01 240×240 round display, firmware included (updated from the app, no Arduino IDE window needed) and a 3D-printable case in `hardware/housing`.
@@ -49,6 +50,7 @@ The face only changes while AI Face is running. When it is quit, the AI's face t
 ## Uninstall
 
 1. Settings → AI apps → **Disconnect** for each app (or `python3 tools/install_mcp.py --remove`), and turn off **Open at login** in Settings → General.
+   If you set up keep awake, remove its rule there too (Settings → General → Keep awake → Remove…).
 2. Quit AI Face from its menu, then delete the project folder and, if you want, `~/Library/Application Support/AI Face/`.
 
 ## How it works
@@ -70,6 +72,7 @@ core/aiface/            Python core (standard library only)
   moods.py              the 78 mood animations, settings
   history.py            expression log and stats (moods only, never conversation text)
   library.py            photo library
+  awake.py              keep awake with the lid closed (pmset disablesleep, with a deadline)
   flasher.py            compile + upload the firmware with Arduino IDE's arduino-cli
 firmware/ESP32_Display/ ESP32 firmware
 hardware/housing/       3D-printable case
@@ -104,6 +107,7 @@ Claude나 GPT와 대화하면 AI가 대답마다 표정을 골라서 **맥 메�
 - 78가지 표정(11개 분류), 누가 골랐는지 테두리 색(Claude 주황 / GPT 초록 / 직접 흰색), 흑백 모드에서는 테두리 무늬로 구분
 - 대기 화면: 졸림→잠, 시계, 사진, 슬라이드쇼, 픽셀 모닥불
 - 타이머 링, 사진 보관함, 표정 기록과 하루 통계, 보드 펌웨어 업데이트(Arduino IDE 창 없이)
+- 깨어 있기(선택): 1·2·4시간 동안 뚜껑을 닫아도 맥북이 잠들지 않게. 시간·배터리·발열·앱 종료 때 알아서 꺼져요
 
 보드 없이 메뉴바 얼굴만으로도 쓸 수 있고, 모든 게 맥 안에서만 돌아가요.
 
