@@ -112,6 +112,11 @@ final class SettingsStore: NSObject, ObservableObject {
     @Published var loginItem = false
     @Published var mono = false
     @Published var version = ""
+    // Keep awake (lid closed)
+    @Published var awakeSupported = false
+    @Published var awakeReady = false
+    @Published var awakeOn = false
+    @Published var awakeLeft = 0
     // Expression history (기록 tab)
     @Published var historyDay = Calendar.current.startOfDay(for: Date())
     @Published var dayTotal = 0
@@ -169,6 +174,12 @@ final class SettingsStore: NSObject, ObservableObject {
             self.flashing = (s["flashing"] as? Bool) ?? false
             self.version = (s["version"] as? String) ?? ""
             self.mono = (s["mono"] as? Bool) ?? false
+            if let a = s["awake"] as? [String: Any] {
+                self.awakeSupported = (a["supported"] as? Bool) ?? false
+                self.awakeReady = (a["ready"] as? Bool) ?? false
+                self.awakeOn = (a["on"] as? Bool) ?? false
+                self.awakeLeft = (a["left"] as? NSNumber)?.intValue ?? 0
+            }
             let photos = ((s["photos"] as? [NSNumber]) ?? []).map { $0.intValue }
             let current = (s["current_photo"] as? NSNumber)?.intValue ?? -1
             if photos != self.photos { self.photos = photos }
@@ -503,6 +514,19 @@ final class SettingsStore: NSObject, ObservableObject {
         loginItem = LoginItem.enabled
     }
 
+    var awakeStatus: String {
+        if !awakeReady { return L("Not set up") }
+        if !awakeOn { return L("Turned off") }
+        if awakeLeft <= 0 { return L("Turned on") }
+        return String(format: L("On · %ld:%02ld left"), awakeLeft / 3600, awakeLeft % 3600 / 60)
+    }
+
+    func setUpAwake() {
+        API.shared.call("awake_setup") { [weak self] ok, reply in
+            if !ok { self?.notice = (reply["message"] as? String) ?? "" }
+        }
+    }
+
     func openDataFolder() {
         let folder = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/AI Face")
@@ -565,6 +589,18 @@ struct GeneralTab: View {
                 Text(L("Draws the face in grays and shows who chose it by the ring pattern: you = solid, Claude = short dashes, GPT = six long arcs. Applies to the menu bar and the board."))
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+            if store.awakeSupported {
+                Section(L("Keep awake")) {
+                    LabeledContent(L("Status"), value: store.awakeStatus)
+                    LabeledContent(L("Permission")) {
+                        Button(store.awakeReady ? L("Remove…") : L("Set up…")) { store.setUpAwake() }
+                    }
+                } footer: {
+                    Text(L("Keeps the MacBook awake even with the lid closed, for 1, 2 or 4 hours (menu → Keep awake). It turns off at the end, at 20% battery, when the Mac gets hot, in Low Power Mode and when AI Face quits. Setting it up asks for your Mac password once, in Terminal, and allows only this one setting."))
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             Section(L("About")) {
                 LabeledContent(L("Version"), value: "AI Face " + store.version)

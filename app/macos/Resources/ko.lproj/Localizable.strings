@@ -133,3 +133,18 @@
 "Every recorded face change, from all days, is deleted from this Mac. This cannot be undone." = "모든 날짜의 표정 기록이 이 맥에서 지워져요. 되돌릴 수 없어요.";
 "Delete" = "지우기";
 "Delete all history…" = "기록 모두 지우기…";
+
+/* Keep awake */
+"Keep awake" = "깨어 있기";
+"☀ Awake" = "☀ 깨어 있음";
+"☀ Awake · %ld:%02ld left" = "☀ 깨어 있음 · %ld:%02ld 남음";
+"Turn off" = "끄기";
+"Set up…" = "설정…";
+"Remove…" = "제거…";
+"Stays awake with the lid closed, then turns off by itself." = "뚜껑을 닫아도 깨어 있다가, 시간이 되면 알아서 꺼져요.";
+"Not set up" = "설정 안 됨";
+"Turned off" = "꺼짐";
+"Turned on" = "켜짐";
+"On · %ld:%02ld left" = "켜짐 · %ld:%02ld 남음";
+"Permission" = "권한";
+"Keeps the MacBook awake even with the lid closed, for 1, 2 or 4 hours (menu → Keep awake). It turns off at the end, at 20% battery, when the Mac gets hot, in Low Power Mode and when AI Face quits. Setting it up asks for your Mac password once, in Terminal, and allows only this one setting." = "메뉴 → 깨어 있기에서 1·2·4시간 동안 뚜껑을 닫아도 맥북이 잠들지 않게 해요. 시간이 끝나면, 배터리가 20% 이하일 때, 맥이 뜨거워지거나 저전력 모드일 때, AI Face를 종료할 때 꺼져요. 설정은 터미널에서 맥 비밀번호를 한 번 입력하고, 이 설정 하나만 허용해요.";

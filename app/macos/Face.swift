@@ -429,6 +429,7 @@ struct FaceView {
     var timerEnd = 0.0           // seconds since the reference date; 0 = no timer
     var timerTotal = 1.0
     var timerColor = 2
+    var awake = false            // keep awake is on: a small sun at the top right
 }
 
 /// Monochrome ring patterns (same as the LCD): app solid, Claude short dashes, GPT six arcs.
@@ -521,6 +522,12 @@ func renderFace(side: CGFloat, inset: CGFloat, view v: FaceView, pose p: Pose, f
         } else {
             ownerColor(v.owner).setStroke()
             circle.stroke()
+        }
+        if v.awake {   // keep awake: a small sun on the ring, top right
+            NSColor.black.setFill()
+            NSBezierPath(ovalIn: NSRect(x: 168, y: 2, width: 70, height: 70)).fill()
+            rgb(255, 200, 60).setFill()
+            NSBezierPath(ovalIn: NSRect(x: 180, y: 14, width: 46, height: 46)).fill()
         }
         return true
     }
