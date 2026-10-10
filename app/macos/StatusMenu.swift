@@ -47,6 +47,8 @@ final class StatusController: NSObject, NSMenuDelegate {
     var awakeReady = false
     var awakeOurs = false
     var awakeEnd = 0.0
+    var awakeLeases: [[String: Any]] = []   // who asks for it: label, left (s), job
+    var awakePaused = 0                     // s left of the user's pause of automatic requests
     private var heatSent = false
     var openSettings: (() -> Void)?
     private var icons: [String: NSImage] = [:]
@@ -195,6 +197,8 @@ final class StatusController: NSObject, NSMenuDelegate {
             view.awake = (a["on"] as? Bool) ?? false
             awakeOurs = (a["ours"] as? Bool) ?? false
             awakeEnd = awakeOurs ? now + ((a["left"] as? NSNumber)?.doubleValue ?? 0) : 0
+            awakeLeases = (a["leases"] as? [[String: Any]]) ?? []
+            awakePaused = (a["paused"] as? NSNumber)?.intValue ?? 0
             watchHeat()
         }
         view.clockOnPhoto = (v["clock"] as? Bool) ?? false
@@ -320,8 +324,8 @@ final class StatusController: NSObject, NSMenuDelegate {
         _ = add(menu, L("Show the clock"), #selector(clock))
         if awakeSupported {
             let now = Date.timeIntervalSinceReferenceDate
-            let title = view.awake ? L("Keep awake") + " · " + (awakeText(now) ?? "").replacingOccurrences(of: "☀ ", with: "")
-                                   : L("Keep awake")
+            let title = L("Keep awake") + " · " + (view.awake
+                ? (awakeText(now) ?? "").replacingOccurrences(of: "☀ ", with: "") : L("Turned off"))
             let item = add(menu, title, nil)
             let sub = NSMenu()
             sub.autoenablesItems = false
@@ -329,9 +333,26 @@ final class StatusController: NSObject, NSMenuDelegate {
                 for minutes in [60, 120, 240] {
                     _ = add(sub, minutesText(minutes), #selector(startAwake(_:)), object: minutes)
                 }
+                if !awakeLeases.isEmpty {
+                    sub.addItem(.separator())
+                    for lease in awakeLeases {   // who keeps it awake, and for how long
+                        let label = (lease["label"] as? String) ?? ""
+                        let left = (lease["left"] as? NSNumber)?.intValue ?? 0
+                        let job = (lease["job"] as? Bool) ?? false
+                        let line = add(sub, job ? String(format: L("%@ · while it runs"), label)
+                                                : String(format: L("%@ · %ld min"), label, (left + 59) / 60), nil)
+                        line.isEnabled = false
+                    }
+                }
                 if view.awake {
                     sub.addItem(.separator())
-                    _ = add(sub, L("Turn off"), #selector(stopAwake))
+                    _ = add(sub, L("Turn off all"), #selector(stopAwake))
+                }
+                if awakePaused > 0 {
+                    sub.addItem(.separator())
+                    let line = add(sub, String(format: L("Automatic keep awake paused · %ld min"), (awakePaused + 59) / 60), nil)
+                    line.isEnabled = false
+                    _ = add(sub, L("Resume automatic keep awake"), #selector(resumeAwake))
                 }
             } else {
                 _ = add(sub, L("Set up…"), #selector(setUpAwake))
@@ -442,6 +463,10 @@ final class StatusController: NSObject, NSMenuDelegate {
 
     @objc func stopAwake() {
         API.shared.call("awake", ["minutes": 0]) { [weak self] ok, reply in self?.report(ok, reply) }
+    }
+
+    @objc func resumeAwake() {
+        API.shared.call("awake_resume") { [weak self] ok, reply in self?.report(ok, reply) }
     }
 
     @objc func setUpAwake() {

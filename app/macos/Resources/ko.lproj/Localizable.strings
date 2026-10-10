@@ -148,3 +148,12 @@
 "On · %ld:%02ld left" = "켜짐 · %ld:%02ld 남음";
 "Permission" = "권한";
 "Keeps the MacBook awake even with the lid closed, for 1, 2 or 4 hours (menu → Keep awake). It turns off at the end, at 20% battery, when the Mac gets hot, in Low Power Mode and when AI Face quits. Setting it up asks for your Mac password once, in Terminal, and allows only this one setting." = "메뉴 → 깨어 있기에서 1·2·4시간 동안 뚜껑을 닫아도 맥북이 잠들지 않게 해요. 시간이 끝나면, 배터리가 20% 이하일 때, 맥이 뜨거워지거나 저전력 모드일 때, AI Face를 종료할 때 꺼져요. 설정은 터미널에서 맥 비밀번호를 한 번 입력하고, 이 설정 하나만 허용해요.";
+"Turn off all" = "모두 끄기";
+"%@ · while it runs" = "%@ · 끝날 때까지";
+"%@ · %ld min" = "%@ · %ld분";
+"Automatic keep awake paused · %ld min" = "자동 깨어 있기 일시 중지 · %ld분";
+"Resume automatic keep awake" = "자동 깨어 있기 다시 켜기";
+"Claude Code: keep awake while working" = "Claude Code: 일하는 동안 깨어 있기";
+"awake command" = "awake 명령";
+"Copy alias" = "alias 복사";
+"Copied. Add it to ~/.zshrc, open a new Terminal window, then run: awake COMMAND" = "복사했어요. ~/.zshrc에 붙여 넣고 새 터미널 창에서 awake 명령어 형태로 쓰세요.";

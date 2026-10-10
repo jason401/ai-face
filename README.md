@@ -13,7 +13,7 @@ No hardware needed: the menu bar face works on its own. Everything runs locally 
 - **78 animated moods in 11 groups** (happy, thinking, on it!, agree, facepalm, don't know, fingers crossed, ...). The AI chooses one per reply through a local [MCP](https://modelcontextprotocol.io) server, so the face follows the tone of the conversation.
 - **Who chose it**: the ring around the face is orange for Claude, green for GPT and white when you pick a face yourself. Monochrome mode shows it with ring patterns instead.
 - **Menu**: click the face for a timer (pomodoro), campfire, clock and every mood (with a small picture of each, and the ones you picked recently on top).
-- **Keep awake** (optional): keep a MacBook awake with the lid closed for 1, 2 or 4 hours, from the menu. It turns itself off at the end, on low battery, when hot and when AI Face quits. Setup installs one sudoers rule that allows only `pmset -a disablesleep 0/1` (Settings → General → Keep awake).
+- **Keep awake** (optional): keep a MacBook awake with the lid closed for 1, 2 or 4 hours, from the menu. It turns itself off at the end, on low battery, when hot and when AI Face quits. Setup installs one sudoers rule that allows only `pmset -a disablesleep 0/1` (Settings → General → Keep awake). Claude Code can hold it while it works (hooks, Settings → AI apps), `awake COMMAND` holds it while a command runs, and AIs can ask for it ("keep the Mac awake for 20 minutes").
 - **Screen savers** when the face has not changed for a while: sleepy → asleep, clock, photo, slideshow, pixel-art campfire.
 - **History**: a daily log of which AI made which face, with stats and a timeline. Only the mood and the time are saved, never conversation text. AIs can read it too ("how were our faces today?").
 - **Round LCD (optional)**: Seeed XIAO ESP32S3 + 1.28" GC9A01 240×240 round display, firmware included (updated from the app, no Arduino IDE window needed) and a 3D-printable case in `hardware/housing`.
@@ -63,6 +63,7 @@ Claude / Codex ──MCP (stdio)──▶ ai_face_mcp.py ──HTTP (127.0.0.1)�
 
 ```
 app/macos/*.swift       menu bar app (Swift): starts the server, menu bar face and menu, SwiftUI settings
+core/ai_face_awake.py   keep-awake helper: Claude Code hooks and the `awake` command
 core/ai_face_mcp.py     MCP stdio server ("ai-face"): one file that only forwards set_expression,
                         get_expression, start_timer, show_photo, ... to the running app
 core/aiface/            Python core (standard library only)

@@ -91,7 +91,8 @@ class ProtocolTests(Base):
         self.assertEqual(call('initialize', {'protocolVersion': '1999'})['result']['protocolVersion'], mcp.PROTOCOLS[0])
         tools = {t['name']: t for t in call('tools/list')['result']['tools']}
         self.assertEqual(set(tools), {'set_expression', 'get_expression', 'show_clock', 'start_timer',
-                                      'cancel_timer', 'show_photo', 'update_firmware'})
+                                      'cancel_timer', 'show_photo', 'update_firmware', 'keep_awake',
+                                      'release_awake', 'awake_status'})
         desc = tools['set_expression']['description']
         self.assertTrue(desc.startswith('Call at the end of every reply with the tone of YOUR reply'))
         self.assertTrue(desc.endswith('Notes: greeting = hello'))
@@ -148,6 +149,17 @@ class ForwardingTests(Base):
             {'action': 'mode', 'mode': 'CLOCK'},
             {'action': 'photo_show'},
             ('GET', '/expression?limit=3')])
+
+    def test_keep_awake_tools(self):
+        app = self.run_app()
+        self.assertTrue(tool('keep_awake', minutes=20)['content'][0]['text'].startswith('ok: '))
+        tool('release_awake')
+        tool('release_awake', all=True)
+        self.assertTrue(tool('keep_awake', minutes=0)['isError'])
+        self.assertEqual([c for c in app.calls if isinstance(c, dict)], [
+            {'action': 'awake_acquire', 'id': 'mcp:gpt', 'minutes': 20, 'label': 'GPT'},
+            {'action': 'awake_release', 'id': 'mcp:gpt'},
+            {'action': 'awake', 'minutes': 0}])
 
     def test_app_error_is_reported(self):
         self.run_app()
