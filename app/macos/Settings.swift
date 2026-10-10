@@ -591,11 +591,13 @@ struct GeneralTab: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             if store.awakeSupported {
-                Section(L("Keep awake")) {
+                Section {
                     LabeledContent(L("Status"), value: store.awakeStatus)
                     LabeledContent(L("Permission")) {
                         Button(store.awakeReady ? L("Remove…") : L("Set up…")) { store.setUpAwake() }
                     }
+                } header: {
+                    Text(L("Keep awake"))
                 } footer: {
                     Text(L("Keeps the MacBook awake even with the lid closed, for 1, 2 or 4 hours (menu → Keep awake). It turns off at the end, at 20% battery, when the Mac gets hot, in Low Power Mode and when AI Face quits. Setting it up asks for your Mac password once, in Terminal, and allows only this one setting."))
                         .font(.caption).foregroundStyle(.secondary)
