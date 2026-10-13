@@ -175,6 +175,15 @@ class ForwardingTests(Base):
                              'Now showing: Happy')
             self.assertEqual(app.calls[-1], ('GET', '/calendar/events?agent=claude&start=2026-10-15&q=prof'))
 
+    def test_calendar_write_tools_only_when_allowed(self):
+        names = lambda: {t['name'] for t in call('tools/list')['result']['tools']}
+        with patch.object(mcp, 'CLIENT_NAME', 'claude-ai'):
+            self.assertNotIn('calendar_add_event', names())          # writing is off by default
+            mcp.SETTINGS.write_text(json.dumps({'calendar': {'write_apps': {'claude': True}}}))
+            self.assertTrue({'calendar_add_event', 'calendar_update_event', 'calendar_delete_event'} <= names())
+            mcp.SETTINGS.write_text(json.dumps({'calendar': {'apps': {'claude': False}, 'write_apps': {'claude': True}}}))
+            self.assertNotIn('calendar_add_event', names())          # no writing without reading
+
     def test_app_error_is_reported(self):
         self.run_app()
         r = tool('update_firmware')

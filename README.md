@@ -17,7 +17,7 @@ No hardware needed: the menu bar face works on its own. Everything runs locally 
 - **Screen savers** when the face has not changed for a while: sleepy → asleep, clock, photo, slideshow, pixel-art campfire.
 - **History**: a daily log of which AI made which face, with stats and a timeline. Only the mood and the time are saved, never conversation text. AIs can read it too ("how were our faces today?").
 - **Round LCD (optional)**: Seeed XIAO ESP32S3 + 1.28" GC9A01 240×240 round display, firmware included (updated from the app, no Arduino IDE window needed) and a 3D-printable case in `hardware/housing`.
-- **Calendar (read only, optional)**: AIs you allow can read the Mac's calendars (Exchange included): titles, times and places; notes and attendees only if you turn them on. Settings → Calendar.
+- **Calendar (optional)**: AIs you allow can read the Mac's calendars (Exchange included): titles, times and places; notes and attendees only if you turn them on. Writing is allowed separately: AIs add events to the calendars you pick and change or delete only events they added, each change waiting for your OK (on by default), with undo. Settings → Calendar.
 - English and Korean, following your Mac's language.
 
 ## Requirements

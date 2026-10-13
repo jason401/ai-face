@@ -52,13 +52,22 @@ def agent():
     return 'claude' if 'claude' in CLIENT_NAME.lower() else 'gpt'
 
 
-def calendar_allowed():
-    """The user allows each AI separately in the app (default: Claude yes, GPT no)."""
+def _calendar_setting(key, default):
     try:
-        apps = json.loads(SETTINGS.read_text()).get('calendar', {}).get('apps', {})
+        apps = json.loads(SETTINGS.read_text()).get('calendar', {}).get(key, {})
     except (OSError, ValueError, AttributeError):
         apps = {}
-    return apps.get(agent(), agent() == 'claude') is True
+    return apps.get(agent(), default) is True
+
+
+def calendar_allowed():
+    """The user allows each AI separately in the app (default: Claude yes, GPT no)."""
+    return _calendar_setting('apps', agent() == 'claude')
+
+
+def calendar_writer():
+    """Writing is allowed separately (default: no AI)."""
+    return calendar_allowed() and _calendar_setting('write_apps', False)
 
 
 def moods():
@@ -106,8 +115,40 @@ CALENDAR_TOOLS = [
 ]
 
 
+EVENT_FIELDS = {
+    'title': {'type': 'string'},
+    'start': {'type': 'string', 'description': 'YYYY-MM-DDTHH:MM local (a date for all-day)'},
+    'end': {'type': 'string', 'description': 'Default: start + 1 h'},
+    'all_day': {'type': 'boolean'},
+    'location': {'type': 'string'},
+    'notes': {'type': 'string'},
+    'calendar': {'type': 'string', 'description': 'Calendar name; default: the one the user chose'},
+}
+WRITE_SAFE = {'readOnlyHint': False, 'destructiveHint': False, 'idempotentHint': False, 'openWorldHint': False}
+CALENDAR_WRITE_TOOLS = [
+    {'name': 'calendar_add_event', 'title': 'Add a calendar event',
+     'description': ("Add an event to the user's calendar when they ask. The user may have to approve it in "
+                     "AI Face first; tell them it was added only if this returns Added. No invitations."),
+     'inputSchema': {'type': 'object', 'properties': EVENT_FIELDS, 'required': ['title', 'start'],
+                     'additionalProperties': False},
+     'annotations': WRITE_SAFE},
+    {'name': 'calendar_update_event', 'title': 'Change a calendar event',
+     'description': ("Change an event added via AI Face (id like e3 from calendar_events), when the user asks. "
+                     "Give only the fields to change. May need the user's approval."),
+     'inputSchema': {'type': 'object', 'properties': dict(EVENT_FIELDS, id={'type': 'string'}),
+                     'required': ['id'], 'additionalProperties': False},
+     'annotations': WRITE_SAFE},
+    {'name': 'calendar_delete_event', 'title': 'Delete a calendar event',
+     'description': "Delete an event added via AI Face (id from calendar_events), when the user asks. May need approval.",
+     'inputSchema': {'type': 'object', 'properties': {'id': {'type': 'string'}}, 'required': ['id'],
+                     'additionalProperties': False},
+     'annotations': dict(WRITE_SAFE, destructiveHint=True)},
+]
+
+
 def tools():
-    return face_tools() + (CALENDAR_TOOLS if calendar_allowed() else [])
+    return (face_tools() + (CALENDAR_TOOLS if calendar_allowed() else [])
+            + (CALENDAR_WRITE_TOOLS if calendar_writer() else []))
 
 
 def face_tools():
@@ -286,6 +327,12 @@ def call_tool(name, args):
                 query['q'] = query.pop('query')
         path = '/calendar/' + ('events' if name == 'calendar_events' else 'list') + '?' + urllib.parse.urlencode(query)
         return _request('GET', path, timeout=30).get('text', '')
+    if name in ('calendar_add_event', 'calendar_update_event', 'calendar_delete_event'):
+        if not calendar_writer():
+            raise KeyError(name)
+        op = {'calendar_add_event': 'add', 'calendar_update_event': 'update', 'calendar_delete_event': 'delete'}[name]
+        body = {k: args[k] for k in list(EVENT_FIELDS) + ['id'] if k in args}
+        return _request('POST', '/calendar/write', dict(body, agent=agent(), op=op), timeout=150).get('text', '')
     if name == 'cancel_timer':
         _api({'action': 'timer', 'seconds': 0})
     elif name == 'show_clock':

@@ -76,6 +76,15 @@ struct CalendarItem: Identifiable, Hashable {
     let title: String
     let account: String
     var shown: Bool
+    var canWrite = false   // the calendar itself accepts changes (not subscribed / read-only)
+    var write = false      // the AIs may write to it
+}
+
+struct CalendarChange: Identifiable, Hashable {
+    let n: Int
+    let text: String
+    let undone: Bool
+    var id: Int { return n }
 }
 
 struct LibraryItem: Identifiable, Hashable {
@@ -121,6 +130,10 @@ final class SettingsStore: NSObject, ObservableObject {
     @Published var calClaude = true
     @Published var calGPT = false
     @Published var calDetails = false
+    @Published var calWriteClaude = false
+    @Published var calWriteGPT = false
+    @Published var calConfirm = true
+    @Published var calChanges: [CalendarChange] = []
     @Published var hooks = "off"
     @Published var aiNotice = ""
     // General
@@ -474,10 +487,19 @@ final class SettingsStore: NSObject, ObservableObject {
             self.calClaude = (apps["claude"] as? Bool) ?? true
             self.calGPT = (apps["gpt"] as? Bool) ?? false
             self.calDetails = (s["details"] as? Bool) ?? false
+            let writers = (s["write_apps"] as? [String: Any]) ?? [:]
+            self.calWriteClaude = (writers["claude"] as? Bool) ?? false
+            self.calWriteGPT = (writers["gpt"] as? Bool) ?? false
+            self.calConfirm = (s["confirm"] as? Bool) ?? true
             self.calendars = ((s["calendars"] as? [[String: Any]]) ?? []).compactMap { c in
                 guard let id = c["id"] as? String else { return nil }
                 return CalendarItem(id: id, title: (c["title"] as? String) ?? id,
-                                    account: (c["account"] as? String) ?? "", shown: (c["shown"] as? Bool) ?? true)
+                                    account: (c["account"] as? String) ?? "", shown: (c["shown"] as? Bool) ?? true,
+                                    canWrite: (c["writable"] as? Bool) ?? false, write: (c["write"] as? Bool) ?? false)
+            }
+            self.calChanges = ((s["changes"] as? [[String: Any]]) ?? []).compactMap { c in
+                guard let n = (c["n"] as? NSNumber)?.intValue else { return nil }
+                return CalendarChange(n: n, text: (c["text"] as? String) ?? "", undone: (c["undone"] as? Bool) ?? false)
             }
         }
     }
@@ -493,6 +515,18 @@ final class SettingsStore: NSObject, ObservableObject {
     func setCalendarShown(_ id: String, _ on: Bool) {
         let hidden = calendars.filter { $0.id == id ? !on : !$0.shown }.map { $0.id }
         setCalendar(["hidden": hidden])
+    }
+
+    func setCalendarWritable(_ id: String, _ on: Bool) {
+        let list = calendars.filter { $0.canWrite && ($0.id == id ? on : $0.write) }.map { $0.id }
+        setCalendar(["writable": list])
+    }
+
+    func undoCalendarChange(_ n: Int) {
+        API.shared.call("calendar_undo", ["n": n]) { [weak self] ok, reply in
+            self?.aiNotice = ok ? L("Undone.") : ((reply["message"] as? String) ?? "")
+            self?.loadCalendar()
+        }
     }
 
     func requestCalendarAccess() {
@@ -937,6 +971,10 @@ struct CalendarTab: View {
                         }
                     }
                 }
+            } header: {
+                Text(L("Calendar"))
+            }
+            Section {
                 Toggle(L("Claude can read it"), isOn: Binding(get: { store.calClaude },
                                                              set: { store.setCalendar(["apps": ["claude": $0]]) }))
                 Toggle(L("GPT (Codex) can read it"), isOn: Binding(get: { store.calGPT },
@@ -949,11 +987,46 @@ struct CalendarTab: View {
                     }
                 }
             } header: {
-                Text(L("Calendar (read only)"))
+                Text(L("Reading"))
             } footer: {
-                Text(L("AI Face reads the calendars in the Calendar app (Exchange included) and never changes them. Only the AIs you allow see the calendars you leave on; titles, times and places are shared, notes and attendees only if you turn them on. After a change, quit that AI app (⌘Q) and open it again."))
+                Text(L("Only the AIs you allow see the calendars you leave on: titles, times and places; notes and attendees only if you turn them on. After a change, quit that AI app (⌘Q) and open it again."))
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+            Section {
+                Toggle(L("Claude can add and change events"), isOn: Binding(get: { store.calWriteClaude },
+                    set: { store.setCalendar(["write_apps": ["claude": $0]]) }))
+                Toggle(L("GPT (Codex) can add and change events"), isOn: Binding(get: { store.calWriteGPT },
+                    set: { store.setCalendar(["write_apps": ["gpt": $0]]) }))
+                Toggle(L("Ask me before every change"), isOn: Binding(get: { store.calConfirm },
+                    set: { store.setCalendar(["confirm": $0]) }))
+                ForEach(store.calendars.filter { $0.canWrite }) { cal in
+                    Toggle(isOn: Binding(get: { cal.write }, set: { store.setCalendarWritable(cal.id, $0) })) {
+                        Text(cal.title) + Text("  " + cal.account).foregroundColor(.secondary).font(.caption)
+                    }
+                }
+            } header: {
+                Text(L("Writing"))
+            } footer: {
+                Text(L("AIs may add events to the calendars turned on here, and change or delete only events they added through AI Face; never anyone else's. With asking on, each change waits for your OK in a window. No invitations are sent."))
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if !store.calChanges.isEmpty {
+                Section(L("Recent changes")) {
+                    ForEach(store.calChanges) { change in
+                        HStack {
+                            Text(change.text).font(.caption).lineLimit(2)
+                                .foregroundStyle(change.undone ? Color.secondary : Color.primary)
+                            Spacer()
+                            if change.undone {
+                                Text(L("Undone")).font(.caption).foregroundStyle(.secondary)
+                            } else {
+                                Button(L("Undo")) { store.undoCalendarChange(change.n) }
+                            }
+                        }
+                    }
+                }
             }
             if !store.aiNotice.isEmpty {
                 Section { Text(store.aiNotice).font(.caption).foregroundStyle(.secondary) }
