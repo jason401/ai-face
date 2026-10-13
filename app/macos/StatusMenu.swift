@@ -50,6 +50,8 @@ final class StatusController: NSObject, NSMenuDelegate {
     var awakeLeases: [[String: Any]] = []   // who asks for it: label, left (s), job
     var awakePaused = 0                     // s left of the user's pause of automatic requests
     private var heatSent = false
+    private var confirming = false           // a calendar confirmation window is open
+    private var answered: Set<String> = []
     var openSettings: (() -> Void)?
     private var icons: [String: NSImage] = [:]
 
@@ -123,6 +125,22 @@ final class StatusController: NSObject, NSMenuDelegate {
 
     private var pendingEmotion = ""
 
+    /// An AI wants to add / change / delete an event: the user allows or declines it here.
+    private func confirmCalendar(_ ask: [String: Any]) {
+        guard let id = ask["id"] as? String else { return }
+        confirming = true
+        answered.insert(id)
+        let alert = NSAlert()
+        alert.messageText = L("Calendar change")
+        alert.informativeText = (ask["text"] as? String) ?? ""
+        alert.addButton(withTitle: L("Allow"))
+        alert.addButton(withTitle: L("Decline"))
+        NSApp.activate(ignoringOtherApps: true)
+        let allow = alert.runModal() == .alertFirstButtonReturn
+        confirming = false
+        API.shared.call("calendar_decide", ["id": id, "allow": allow]) { _, _ in }
+    }
+
     /// Keep awake must not cook a closed MacBook in a bag: off when it runs hot or in Low Power Mode.
     private func watchHeat() {
         guard awakeOurs else { heatSent = false; return }
@@ -191,6 +209,10 @@ final class StatusController: NSObject, NSMenuDelegate {
             view.timerEnd = 0
         }
         view.mono = (v["mono"] as? Bool) ?? false
+        if let asks = v["calendar_pending"] as? [[String: Any]], !confirming,
+           let ask = asks.first(where: { !answered.contains(($0["id"] as? String) ?? "") }) {
+            confirmCalendar(ask)
+        }
         if let a = v["awake"] as? [String: Any] {
             awakeSupported = (a["supported"] as? Bool) ?? false
             awakeReady = (a["ready"] as? Bool) ?? false

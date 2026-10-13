@@ -173,3 +173,17 @@
 "AI Face reads the calendars in the Calendar app (Exchange included) and never changes them. Only the AIs you allow see the calendars you leave on; titles, times and places are shared, notes and attendees only if you turn them on. After a change, quit that AI app (⌘Q) and open it again." = "AI Face는 캘린더 앱의 캘린더(Exchange 포함)를 읽기만 하고 절대 바꾸지 않아요. 허용한 AI만, 켜둔 캘린더만 볼 수 있어요. 제목·시간·장소만 전달하고, 메모와 참석자는 켰을 때만 전달해요. 바꾼 뒤에는 그 AI 앱을 ⌘Q로 껐다 켜세요.";
 "Calendar" = "캘린더";
 "A new face from an AI or the end of a timer brings the face back." = "AI가 새 표정을 보내거나 타이머가 끝나면 얼굴로 돌아와요.";
+"Reading" = "읽기";
+"Writing" = "쓰기";
+"Recent changes" = "최근 변경";
+"Undo" = "되돌리기";
+"Undone" = "되돌림";
+"Undone." = "되돌렸어요.";
+"Only the AIs you allow see the calendars you leave on: titles, times and places; notes and attendees only if you turn them on. After a change, quit that AI app (⌘Q) and open it again." = "허용한 AI만, 켜둔 캘린더만 볼 수 있어요. 제목·시간·장소만 전달하고, 메모와 참석자는 켰을 때만 전달해요. 바꾼 뒤에는 그 AI 앱을 ⌘Q로 껐다 켜세요.";
+"Claude can add and change events" = "Claude가 일정 추가·변경 허용";
+"GPT (Codex) can add and change events" = "GPT(Codex)가 일정 추가·변경 허용";
+"Ask me before every change" = "변경할 때마다 나에게 확인";
+"AIs may add events to the calendars turned on here, and change or delete only events they added through AI Face; never anyone else's. With asking on, each change waits for your OK in a window. No invitations are sent." = "AI는 여기서 켠 캘린더에만 일정을 추가할 수 있고, AI Face로 추가한 일정만 바꾸거나 지울 수 있어요. 다른 일정은 건드리지 못해요. 확인을 켜두면 변경마다 창이 떠서 허용을 눌러야 반영돼요. 초대 메일은 보내지 않아요.";
+"Calendar change" = "캘린더 변경";
+"Allow" = "허용";
+"Decline" = "거절";

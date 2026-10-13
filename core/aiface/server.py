@@ -203,7 +203,8 @@ def main():
                     return self.reply(404, {})
                 return self.reply(200, data, kind)
             if self.path == '/view':   # for the menu bar face; no lock (a flash can hold it for minutes)
-                return self.reply(200, dict(device.view(), awake=awake.status()))
+                return self.reply(200, dict(device.view(), awake=awake.status(),
+                                            calendar_pending=calendar_access.pending()))
             if self.path == '/status':   # for the settings window; no lock either
                 return self.reply(200, dict(device.status(), version=VERSION, awake=awake.status()))
             if self.path.startswith('/history'):
@@ -264,6 +265,30 @@ def main():
                     return self.reply(200, {'name': stored, 'library': photo_library.listing()})
                 except (OSError, ValueError) as exc:
                     return self.reply(400, {'message': str(exc)})
+            if self.path == '/calendar/write':
+                # An AI adds / changes / deletes an event. Not under the device lock: it may
+                # wait up to two minutes for the user's OK in the confirmation window.
+                try:
+                    length = int(self.headers.get('Content-Length', 0))
+                    if not 0 < length <= 65536:
+                        raise ValueError(T('잘못된 요청입니다.', 'Bad request.'))
+                    data = json.loads(self.rfile.read(length))
+                    if not isinstance(data, dict):
+                        raise ValueError(T('잘못된 요청입니다.', 'Bad request.'))
+                    agent, op = data.get('agent'), data.get('op')
+                    if op == 'add':
+                        text = calendar_access.add(agent, data)
+                    elif op == 'update':
+                        text = calendar_access.update(agent, data.get('id'), data)
+                    elif op == 'delete':
+                        text = calendar_access.delete(agent, data.get('id'))
+                    else:
+                        raise ValueError(T('알 수 없는 요청입니다.', 'Unknown request.'))
+                    return self.reply(200, {'text': text})
+                except PermissionError as exc:
+                    return self.reply(403, {'message': str(exc)})
+                except (ValueError, OSError) as exc:
+                    return self.reply(400, {'message': str(exc)})
             if self.path != '/api':
                 return self.reply(404, {})
             with device.lock:
@@ -279,7 +304,8 @@ def main():
                     action = data.get('action')
                     # A board that was plugged in after the app started is picked up here.
                     if action not in ('connect', 'disconnect', 'quit', 'firmware', 'mcp_install', 'mcp_remove',
-                                      'awake_acquire', 'awake_release', 'awake_resume', 'calendar_settings') \
+                                      'awake_acquire', 'awake_release', 'awake_resume', 'calendar_settings',
+                                      'calendar_decide', 'calendar_undo') \
                             and device.fd is None and not device.paused and ports():
                         try:
                             device.connect(ports()[0])
@@ -343,6 +369,11 @@ def main():
                         awake.resume_auto()
                     elif action == 'calendar_settings':
                         calendar_access.save(data.get('changes'))
+                    elif action == 'calendar_decide':
+                        calendar_access.decide(data.get('id'), data.get('allow'))
+                    elif action == 'calendar_undo':
+                        calendar_access.undo(data.get('n'))
+                        device.message = T('변경을 되돌렸습니다.', 'Undone.')
                     elif action == 'awake_setup':
                         awake.open_setup()
                         device.message = T('터미널에서 설정을 마쳐 주세요.', 'Finish the setup in Terminal.')
