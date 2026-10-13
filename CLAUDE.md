@@ -22,7 +22,8 @@ server named `ai-face`. The ESP32 round LCD board is optional. Public repo: gith
 - `core/ai_face_mcp.py` — thin MCP shim; copied to `~/Library/Application Support/AI Face` and
   forwards to the app. Tool list is gated by settings (calendar per-AI read/write).
 - `core/ai_face_awake.py` — keep-awake helper (`hook on|off` for Claude Code hooks, `run CMD`, `status`).
-- `core/aiface/integrations.py` — connects Claude desktop, Codex, Claude Code (`claude mcp add -s user`)
+- `core/aiface/integrations.py` — connects Claude desktop, Codex, Claude Code (`claude mcp add -s user`;
+  falls back to the copy inside Claude.app's Code tab under `~/Library/Application Support/Claude/claude-code`)
   and the Claude Code keep-awake hooks (`~/.claude/settings.json`).
 - `core/aiface/moods.py` — 78 moods in 11 groups (the MCP enum comes from here).
 - `firmware/` — ESP32 firmware; `tools/firmware_sim` checks it on the computer.
@@ -51,7 +52,5 @@ server named `ai-face`. The ESP32 round LCD board is optional. Public repo: gith
 ## Open items (ask before starting)
 - Does the Mac sleep right away when keep awake ends with the lid closed? (maybe `pmset sleepnow`)
 - Fully automatic keep awake; Claude Code hook event names not double-checked against docs.
-- Settings → AI apps → Claude Code: if it shows "Not installed" when only the Claude app's Code tab is
-  used (no `claude` command on PATH), register by another way.
 - Later ideas: mail reading, more moods, AI-to-AI chat, token gauge, flashing the board at home.
 - Test calendar event "☕ AI Face 캘린더 쓰기 테스트" (10/13 09:00) — delete when he asks.

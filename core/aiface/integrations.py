@@ -248,10 +248,23 @@ CLAUDE_CODE_DIRS = ['~/.local/bin', '~/.claude/local', '/opt/homebrew/bin', '/us
                     '~/.npm-global/bin', '~/.bun/bin', '~/.volta/bin']
 
 
+def _bundled_claude_code():
+    """The copy of Claude Code inside the Claude app (its Code tab), newest version first.
+
+    It lives in ~/Library/Application Support/Claude/claude-code/<version>/<id>/claude.app and
+    is the same `claude` command, so people who only use the Code tab can be connected too."""
+    def version(path):
+        return tuple(int(n) if n.isdigit() else 0 for n in path.parents[4].name.split('.'))
+    root = Path.home() / 'Library' / 'Application Support' / 'Claude' / 'claude-code'
+    found = [p for p in root.glob('*/*/claude.app/Contents/MacOS/claude') if os.access(p, os.X_OK)]
+    return str(max(found, key=version)) if found else None
+
+
 def claude_code_cli():
     """The `claude` command, or None when Claude Code is not installed."""
     dirs = [os.path.expanduser(d) for d in CLAUDE_CODE_DIRS]
-    return shutil.which('claude', path=os.pathsep.join(dirs + os.environ.get('PATH', '').split(os.pathsep)))
+    return (shutil.which('claude', path=os.pathsep.join(dirs + os.environ.get('PATH', '').split(os.pathsep)))
+            or _bundled_claude_code())
 
 
 def claude_code_config():
