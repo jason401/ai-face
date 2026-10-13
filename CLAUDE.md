@@ -12,6 +12,9 @@ server named `ai-face`. The ESP32 round LCD board is optional. Public repo: gith
 - Only make changes that are clear, safe and certain; say plainly what is unverified.
 - Commit and push to `origin main` when a change is done and tests pass. End commit messages with
   `Co-Authored-By: Claude <noreply@anthropic.com>`. Remove `__pycache__` before `git add`.
+- Pushing uses the GitHub CLI login, once per Mac: `gh auth login --web --git-protocol https` then
+  `gh auth setup-git` (install gh with Homebrew; he only clicks Authorize). If push asks for a username,
+  offer exactly this — never tokens or GitHub Desktop.
 
 ## Layout
 - `app/macos/*.swift` — the menu bar app (face drawing, settings window, calendar via EventKit).
