@@ -43,8 +43,8 @@ def _run(*args, timeout=20):
 def _calendars():
     result = _run('calendars')
     if isinstance(result, dict) and result.get('error') == 'no_access':
-        raise PermissionError(T('AI Face에 캘린더 권한이 없습니다 (설정 → AI 연결 → 캘린더).',
-                                'AI Face has no calendar access yet (Settings → AI apps → Calendar).'))
+        raise PermissionError(T('AI Face에 캘린더 권한이 없습니다 (설정 → 캘린더).',
+                                'AI Face has no calendar access yet (Settings → Calendar).'))
     if not isinstance(result, list):
         raise ValueError(T('캘린더를 읽지 못했습니다.', 'Could not read the calendar.'))
     return [c for c in result if isinstance(c, dict) and isinstance(c.get('id'), str)]
@@ -125,8 +125,8 @@ def events(agent, start=None, end=None, query=None, now=None):
     """Events as text lines for an AI. start/end: 'YYYY-MM-DD' or ISO date-time (local time);
     default today; an end date alone is inclusive."""
     if not allowed(agent):
-        raise PermissionError(T('이 AI는 캘린더를 읽도록 허용되지 않았습니다 (AI Face 설정 → AI 연결).',
-                                'This AI is not allowed to read the calendar (AI Face settings → AI apps).'))
+        raise PermissionError(T('이 AI는 캘린더를 읽도록 허용되지 않았습니다 (AI Face 설정 → 캘린더).',
+                                'This AI is not allowed to read the calendar (AI Face settings → Calendar).'))
     now = now or datetime.datetime.now()
     today = datetime.datetime(now.year, now.month, now.day)
     begin = _day(start, today)
@@ -146,8 +146,8 @@ def events(agent, start=None, end=None, query=None, now=None):
     result = _run('events', str(begin.timestamp()), str(finish.timestamp()),
                   ','.join(c['id'] for c in cals), 'details' if conf['details'] else '-')
     if isinstance(result, dict) and result.get('error') == 'no_access':
-        raise PermissionError(T('AI Face에 캘린더 권한이 없습니다 (설정 → AI 연결 → 캘린더).',
-                                'AI Face has no calendar access yet (Settings → AI apps → Calendar).'))
+        raise PermissionError(T('AI Face에 캘린더 권한이 없습니다 (설정 → 캘린더).',
+                                'AI Face has no calendar access yet (Settings → Calendar).'))
     if not isinstance(result, list):
         raise ValueError(T('캘린더를 읽지 못했습니다.', 'Could not read the calendar.'))
     if query:

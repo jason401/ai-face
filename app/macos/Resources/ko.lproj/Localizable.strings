@@ -171,3 +171,5 @@
 "Include notes and attendees" = "메모와 참석자 포함";
 "Calendar (read only)" = "캘린더 (읽기 전용)";
 "AI Face reads the calendars in the Calendar app (Exchange included) and never changes them. Only the AIs you allow see the calendars you leave on; titles, times and places are shared, notes and attendees only if you turn them on. After a change, quit that AI app (⌘Q) and open it again." = "AI Face는 캘린더 앱의 캘린더(Exchange 포함)를 읽기만 하고 절대 바꾸지 않아요. 허용한 AI만, 켜둔 캘린더만 볼 수 있어요. 제목·시간·장소만 전달하고, 메모와 참석자는 켰을 때만 전달해요. 바꾼 뒤에는 그 AI 앱을 ⌘Q로 껐다 켜세요.";
+"Calendar" = "캘린더";
+"A new face from an AI or the end of a timer brings the face back." = "AI가 새 표정을 보내거나 타이머가 끝나면 얼굴로 돌아와요.";
