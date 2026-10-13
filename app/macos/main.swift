@@ -119,6 +119,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 if let i = CommandLine.arguments.firstIndex(of: "--calendar") {
     exit(CalendarCLI.run(Array(CommandLine.arguments[(i + 1)...])))
 }
+// `AIFace --mail ...`: the same for reading mail (Mail.swift).
+if let i = CommandLine.arguments.firstIndex(of: "--mail") {
+    exit(MailCLI.run(Array(CommandLine.arguments[(i + 1)...])))
+}
 
 let app = NSApplication.shared
 let delegate = AppDelegate()

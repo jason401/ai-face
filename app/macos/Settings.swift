@@ -87,6 +87,12 @@ struct CalendarChange: Identifiable, Hashable {
     var id: Int { return n }
 }
 
+struct MailAccount: Identifiable, Hashable {
+    let name: String
+    var shown: Bool
+    var id: String { return name }
+}
+
 struct LibraryItem: Identifiable, Hashable {
     let name: String
     let mtime: Int
@@ -136,6 +142,13 @@ final class SettingsStore: NSObject, ObservableObject {
     @Published var calWriteGPT = false
     @Published var calConfirm = true
     @Published var calChanges: [CalendarChange] = []
+    // Mail (read only): macOS permission, which AIs may read it, which accounts, links hidden
+    @Published var mailAccess = ""
+    @Published var mailAccounts: [MailAccount] = []
+    @Published var mailClaude = true
+    @Published var mailGPT = false
+    @Published var mailHideLinks = true
+    @Published var mailAsking = false
     @Published var hooks = "off"
     @Published var aiNotice = ""
     // General
@@ -547,6 +560,58 @@ final class SettingsStore: NSObject, ObservableObject {
         case "notDetermined": return L("Not allowed yet")
         case "denied", "restricted": return L("Denied in System Settings")
         case "writeOnly": return L("Add-only access (needs full access)")
+        default: return L("Unavailable")
+        }
+    }
+
+    func loadMail() {
+        API.shared.getJSON("mail/status") { [weak self] json in
+            guard let self = self, let s = json as? [String: Any] else { return }
+            self.mailAccess = (s["access"] as? String) ?? ""
+            let apps = (s["apps"] as? [String: Any]) ?? [:]
+            self.mailClaude = (apps["claude"] as? Bool) ?? true
+            self.mailGPT = (apps["gpt"] as? Bool) ?? false
+            self.mailHideLinks = (s["hide_links"] as? Bool) ?? true
+            self.mailAccounts = ((s["accounts"] as? [[String: Any]]) ?? []).compactMap { a in
+                guard let name = a["name"] as? String else { return nil }
+                return MailAccount(name: name, shown: (a["shown"] as? Bool) ?? true)
+            }
+        }
+    }
+
+    func setMail(_ changes: [String: Any]) {
+        API.shared.call("mail_settings", ["changes": changes]) { [weak self] ok, reply in
+            if !ok { self?.aiNotice = (reply["message"] as? String) ?? "" }
+            else { self?.aiNotice = L("Saved. Quit that AI app (⌘Q) and open it again for the change to apply.") }
+            self?.loadMail()
+        }
+    }
+
+    func setMailShown(_ name: String, _ on: Bool) {
+        let hidden = mailAccounts.filter { $0.name == name ? !on : !$0.shown }.map { $0.name }
+        setMail(["hidden": hidden])
+    }
+
+    func requestMailAccess() {
+        if mailAccess == "denied" {
+            if let u = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation") {
+                NSWorkspace.shared.open(u)
+            }
+            return
+        }
+        mailAsking = true
+        MailAccess.request { [weak self] _ in
+            self?.mailAsking = false
+            self?.loadMail()
+        }
+    }
+
+    var mailAccessText: String {
+        switch mailAccess {
+        case "allowed": return L("Allowed")
+        case "notDetermined": return L("Not allowed yet")
+        case "denied": return L("Denied in System Settings")
+        case "notRunning": return L("Open Mail to check")
         default: return L("Unavailable")
         }
     }
@@ -1035,6 +1100,58 @@ struct CalendarTab: View {
     }
 }
 
+struct MailTab: View {
+    @ObservedObject var store: SettingsStore
+
+    var body: some View {
+        Form {
+            Section {
+                LabeledContent(L("Access")) {
+                    HStack(spacing: 10) {
+                        Text(store.mailAccessText)
+                            .foregroundStyle(store.mailAccess == "allowed" ? Color.green : Color.secondary)
+                        if store.mailAsking {
+                            ProgressView().controlSize(.small)
+                        } else if store.mailAccess != "allowed" && store.mailAccess != "" && store.mailAccess != "unavailable" {
+                            Button(store.mailAccess == "denied" ? L("Open System Settings") : L("Allow…")) {
+                                store.requestMailAccess()
+                            }
+                        }
+                    }
+                }
+            } header: {
+                Text(L("Mail"))
+            } footer: {
+                Text(L("AI Face reads the Mail app's inboxes. It never sends, moves or deletes mail, and does not mark it as read."))
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Section {
+                Toggle(L("Claude can read it"), isOn: Binding(get: { store.mailClaude },
+                                                             set: { store.setMail(["apps": ["claude": $0]]) }))
+                Toggle(L("GPT (Codex) can read it"), isOn: Binding(get: { store.mailGPT },
+                                                                  set: { store.setMail(["apps": ["gpt": $0]]) }))
+                Toggle(L("Hide links and codes"), isOn: Binding(get: { store.mailHideLinks },
+                                                               set: { store.setMail(["hide_links": $0]) }))
+                ForEach(store.mailAccounts) { acct in
+                    Toggle(acct.name, isOn: Binding(get: { acct.shown }, set: { store.setMailShown(acct.name, $0) }))
+                }
+            } header: {
+                Text(L("Reading"))
+            } footer: {
+                Text(L("Only the AIs you allow can read the accounts you leave on. With links and codes hidden, a link shows only its site and sign-in codes and passwords are left out. After a change, quit that AI app (⌘Q) and open it again."))
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if !store.aiNotice.isEmpty {
+                Section { Text(store.aiNotice).font(.caption).foregroundStyle(.secondary) }
+            }
+        }
+        .formStyle(.grouped)
+        .onAppear { store.loadMail() }
+    }
+}
+
 struct BoardTab: View {
     @ObservedObject var store: SettingsStore
 
@@ -1116,6 +1233,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             tabs.addTabViewItem(tab(HistoryTab(store: store), L("History"), "chart.bar"))
             tabs.addTabViewItem(tab(AITab(store: store), L("AI apps"), "sparkles"))
             tabs.addTabViewItem(tab(CalendarTab(store: store), L("Calendar"), "calendar"))
+            tabs.addTabViewItem(tab(MailTab(store: store), L("Mail"), "envelope"))
             tabs.addTabViewItem(tab(BoardTab(store: store), L("Board"), "cpu"))
             let w = NSWindow(contentViewController: tabs)
             w.styleMask = [.titled, .closable, .miniaturizable]

@@ -84,6 +84,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <key>LSMinimumSystemVersion</key><string>13.0</string>
 <key>LSUIElement</key><true/>
 <key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>
+<key>NSAppleEventsUsageDescription</key><string>AI Face reads your mail in the Mail app (read only) so the AI apps you allow (Settings → Mail) can answer questions about it. It never sends, moves or deletes mail.</string>
 <key>NSCalendarsFullAccessUsageDescription</key><string>AI Face reads your calendar so the AI apps you allow (Settings → AI apps) can answer questions about your schedule. It never changes events.</string>
 <key>NSCalendarsUsageDescription</key><string>AI Face reads your calendar so the AI apps you allow (Settings → AI apps) can answer questions about your schedule. It never changes events.</string>
 </dict></plist>

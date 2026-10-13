@@ -16,6 +16,7 @@ server named `ai-face`. The ESP32 round LCD board is optional. Public repo: gith
 ## Layout
 - `app/macos/*.swift` — the menu bar app (face drawing, settings window, calendar via EventKit).
   `main.swift` handles `AIFace --calendar ...` (JSON CLI) before the app starts.
+  `Mail.swift` reads Mail (`AIFace --mail ...`).
   Strings: `app/macos/Resources/{en,ko}.lproj/Localizable.strings` (`L("...")`; add Korean for new labels).
 - `core/run_server.py` → `core/aiface/server.py` — local HTTP server the app starts (127.0.0.1,
   token header `X-ESP-Token`). Board serial, history, photos, keep awake, calendar.
@@ -47,10 +48,11 @@ server named `ai-face`. The ESP32 round LCD board is optional. Public repo: gith
   Repeating events are not changed.
 - Keep awake always has a time limit and a failsafe that turns it off if the app dies; it turns off on
   overheating and Low Power Mode.
-- Mail access is deferred ("찝찝해서" — do not start it without asking).
+- Mail: read only (inboxes, via Apple events from `AIFace --mail`). Never add sending, moving, deleting or
+  marking read. Per-AI switches (GPT off by default); links and codes hidden by default.
 
 ## Open items (ask before starting)
 - Does the Mac sleep right away when keep awake ends with the lid closed? (maybe `pmset sleepnow`)
 - Fully automatic keep awake; Claude Code hook event names not double-checked against docs.
-- Later ideas: mail reading, more moods, AI-to-AI chat, token gauge, flashing the board at home.
+- Later ideas: more moods, AI-to-AI chat, token gauge, flashing the board at home.
 - Test calendar event "☕ AI Face 캘린더 쓰기 테스트" (10/13 09:00) — delete when he asks.
