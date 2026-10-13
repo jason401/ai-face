@@ -71,6 +71,13 @@ let GROUP_COLOR: [String: Color] = [
     "rest": .mint, "sad": .indigo, "tense": .purple, "angry": .red, "body": .green,
 ]
 
+struct CalendarItem: Identifiable, Hashable {
+    let id: String
+    let title: String
+    let account: String
+    var shown: Bool
+}
+
 struct LibraryItem: Identifiable, Hashable {
     let name: String
     let mtime: Int
@@ -108,6 +115,12 @@ final class SettingsStore: NSObject, ObservableObject {
     @Published var codexAvailable = false
     @Published var serverPath = ""
     @Published var helperPath = ""
+    // Calendar (read only): macOS permission, which AIs may read it, which calendars, details
+    @Published var calAccess = ""
+    @Published var calendars: [CalendarItem] = []
+    @Published var calClaude = true
+    @Published var calGPT = false
+    @Published var calDetails = false
     @Published var hooks = "off"
     @Published var aiNotice = ""
     // General
@@ -453,7 +466,57 @@ final class SettingsStore: NSObject, ObservableObject {
 
     // MARK: AI apps
 
+    func loadCalendar() {
+        API.shared.getJSON("calendar/status") { [weak self] json in
+            guard let self = self, let s = json as? [String: Any] else { return }
+            self.calAccess = (s["access"] as? String) ?? ""
+            let apps = (s["apps"] as? [String: Any]) ?? [:]
+            self.calClaude = (apps["claude"] as? Bool) ?? true
+            self.calGPT = (apps["gpt"] as? Bool) ?? false
+            self.calDetails = (s["details"] as? Bool) ?? false
+            self.calendars = ((s["calendars"] as? [[String: Any]]) ?? []).compactMap { c in
+                guard let id = c["id"] as? String else { return nil }
+                return CalendarItem(id: id, title: (c["title"] as? String) ?? id,
+                                    account: (c["account"] as? String) ?? "", shown: (c["shown"] as? Bool) ?? true)
+            }
+        }
+    }
+
+    func setCalendar(_ changes: [String: Any]) {
+        API.shared.call("calendar_settings", ["changes": changes]) { [weak self] ok, reply in
+            if !ok { self?.aiNotice = (reply["message"] as? String) ?? "" }
+            else { self?.aiNotice = L("Saved. Quit that AI app (⌘Q) and open it again for the change to apply.") }
+            self?.loadCalendar()
+        }
+    }
+
+    func setCalendarShown(_ id: String, _ on: Bool) {
+        let hidden = calendars.filter { $0.id == id ? !on : !$0.shown }.map { $0.id }
+        setCalendar(["hidden": hidden])
+    }
+
+    func requestCalendarAccess() {
+        if calAccess == "denied" || calAccess == "restricted" {
+            if let u = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars") {
+                NSWorkspace.shared.open(u)
+            }
+            return
+        }
+        CalendarAccess.request { [weak self] _ in self?.loadCalendar() }
+    }
+
+    var calAccessText: String {
+        switch calAccess {
+        case "full": return L("Allowed")
+        case "notDetermined": return L("Not allowed yet")
+        case "denied", "restricted": return L("Denied in System Settings")
+        case "writeOnly": return L("Add-only access (needs full access)")
+        default: return L("Unavailable")
+        }
+    }
+
     func refreshAI() {
+        loadCalendar()
         API.shared.getJSON("mcp") { [weak self] json in
             guard let self = self, let s = json as? [String: Any] else { return }
             self.claude = (s["claude"] as? String) ?? "off"
@@ -830,6 +893,36 @@ struct AITab: View {
                 Text(store.aiNotice.isEmpty
                      ? L("Once connected, the AI picks a face for every reply. After connecting or disconnecting, quit that app (⌘Q) and open it again. Ring colors: Claude orange, GPT green, your own picks white.")
                      : store.aiNotice)
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Section {
+                LabeledContent(L("Access")) {
+                    HStack(spacing: 10) {
+                        Text(store.calAccessText)
+                            .foregroundStyle(store.calAccess == "full" ? Color.green : Color.secondary)
+                        if store.calAccess != "full" && store.calAccess != "" && store.calAccess != "unavailable" {
+                            Button(store.calAccess == "notDetermined" ? L("Allow…") : L("Open System Settings")) {
+                                store.requestCalendarAccess()
+                            }
+                        }
+                    }
+                }
+                Toggle(L("Claude can read it"), isOn: Binding(get: { store.calClaude },
+                                                             set: { store.setCalendar(["apps": ["claude": $0]]) }))
+                Toggle(L("GPT (Codex) can read it"), isOn: Binding(get: { store.calGPT },
+                                                                  set: { store.setCalendar(["apps": ["gpt": $0]]) }))
+                Toggle(L("Include notes and attendees"), isOn: Binding(get: { store.calDetails },
+                                                                      set: { store.setCalendar(["details": $0]) }))
+                ForEach(store.calendars) { cal in
+                    Toggle(isOn: Binding(get: { cal.shown }, set: { store.setCalendarShown(cal.id, $0) })) {
+                        Text(cal.title) + Text("  " + cal.account).foregroundColor(.secondary).font(.caption)
+                    }
+                }
+            } header: {
+                Text(L("Calendar (read only)"))
+            } footer: {
+                Text(L("AI Face reads the calendars in the Calendar app (Exchange included) and never changes them. Only the AIs you allow see the calendars you leave on; titles, times and places are shared, notes and attendees only if you turn them on. After a change, quit that AI app (⌘Q) and open it again."))
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }

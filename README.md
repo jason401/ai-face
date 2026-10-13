@@ -17,6 +17,7 @@ No hardware needed: the menu bar face works on its own. Everything runs locally 
 - **Screen savers** when the face has not changed for a while: sleepy → asleep, clock, photo, slideshow, pixel-art campfire.
 - **History**: a daily log of which AI made which face, with stats and a timeline. Only the mood and the time are saved, never conversation text. AIs can read it too ("how were our faces today?").
 - **Round LCD (optional)**: Seeed XIAO ESP32S3 + 1.28" GC9A01 240×240 round display, firmware included (updated from the app, no Arduino IDE window needed) and a 3D-printable case in `hardware/housing`.
+- **Calendar (read only, optional)**: AIs you allow can read the Mac's calendars (Exchange included): titles, times and places; notes and attendees only if you turn them on. Settings → AI apps → Calendar.
 - English and Korean, following your Mac's language.
 
 ## Requirements
@@ -74,6 +75,7 @@ core/aiface/            Python core (standard library only)
   history.py            expression log and stats (moods only, never conversation text)
   library.py            photo library
   awake.py              keep awake with the lid closed (pmset disablesleep, with a deadline)
+  calendar_access.py    calendar reading for the AIs (the app binary answers with EventKit: AIFace --calendar)
   flasher.py            compile + upload the firmware with Arduino IDE's arduino-cli
 firmware/ESP32_Display/ ESP32 firmware
 hardware/housing/       3D-printable case

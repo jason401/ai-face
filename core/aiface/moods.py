@@ -587,6 +587,8 @@ def load_settings():
     out=dict(saver=saver,timer=timer,mono=mono)
     if isinstance(data.get('language'),str):
         out['language']=data['language']   # written by the app's server for the MCP server
+    if isinstance(data.get('calendar'),dict):
+        out['calendar']=data['calendar']   # which AIs may read the calendar (calendar_access.py)
     return out
 
 

@@ -15,6 +15,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from . import VERSION
 from . import awake
+from . import calendar_access
 from . import history
 from . import i18n
 from .i18n import T
@@ -221,6 +222,25 @@ def main():
                     limit = 10
                 limit = limit if 1 <= limit <= 50 else 10
                 return self.reply(200, {'text': expression_text(device.view(), limit)})
+            if self.path.startswith('/calendar/'):   # calendar reads: token needed (personal data)
+                if self.headers.get('X-ESP-Token') != token:
+                    return self.reply(403, {'message': 'Invalid token'})
+                query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                arg = lambda k: (query.get(k) or [None])[0]
+                route = urllib.parse.urlparse(self.path).path
+                try:
+                    if route == '/calendar/status':
+                        return self.reply(200, calendar_access.status())
+                    if route == '/calendar/events':
+                        return self.reply(200, {'text': calendar_access.events(
+                            arg('agent'), arg('start'), arg('end'), arg('q'))})
+                    if route == '/calendar/list':
+                        return self.reply(200, {'text': calendar_access.calendar_names(arg('agent'))})
+                except PermissionError as exc:
+                    return self.reply(403, {'message': str(exc)})
+                except ValueError as exc:
+                    return self.reply(400, {'message': str(exc)})
+                return self.reply(404, {})
             if self.path == '/awake':   # keep awake, for the helper and the MCP server
                 return self.reply(200, {'text': awake.describe(), 'status': awake.status()})
             if self.path == '/mcp':
@@ -259,7 +279,7 @@ def main():
                     action = data.get('action')
                     # A board that was plugged in after the app started is picked up here.
                     if action not in ('connect', 'disconnect', 'quit', 'firmware', 'mcp_install', 'mcp_remove',
-                                      'awake_acquire', 'awake_release', 'awake_resume') \
+                                      'awake_acquire', 'awake_release', 'awake_resume', 'calendar_settings') \
                             and device.fd is None and not device.paused and ports():
                         try:
                             device.connect(ports()[0])
@@ -321,6 +341,8 @@ def main():
                         awake.release(data.get('id'))
                     elif action == 'awake_resume':
                         awake.resume_auto()
+                    elif action == 'calendar_settings':
+                        calendar_access.save(data.get('changes'))
                     elif action == 'awake_setup':
                         awake.open_setup()
                         device.message = T('터미널에서 설정을 마쳐 주세요.', 'Finish the setup in Terminal.')

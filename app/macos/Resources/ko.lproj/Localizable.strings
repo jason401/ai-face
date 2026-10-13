@@ -157,3 +157,17 @@
 "awake command" = "awake 명령";
 "Installed" = "설치됨";
 "Install…" = "설치…";
+"Saved. Quit that AI app (⌘Q) and open it again for the change to apply." = "저장했어요. 그 AI 앱을 ⌘Q로 껐다 켜야 반영돼요.";
+"Allowed" = "허용됨";
+"Not allowed yet" = "아직 허용 안 됨";
+"Denied in System Settings" = "시스템 설정에서 거부됨";
+"Add-only access (needs full access)" = "추가 전용 권한 (전체 접근 필요)";
+"Unavailable" = "사용할 수 없음";
+"Access" = "접근 권한";
+"Allow…" = "허용…";
+"Open System Settings" = "시스템 설정 열기";
+"Claude can read it" = "Claude가 읽기 허용";
+"GPT (Codex) can read it" = "GPT(Codex)가 읽기 허용";
+"Include notes and attendees" = "메모와 참석자 포함";
+"Calendar (read only)" = "캘린더 (읽기 전용)";
+"AI Face reads the calendars in the Calendar app (Exchange included) and never changes them. Only the AIs you allow see the calendars you leave on; titles, times and places are shared, notes and attendees only if you turn them on. After a change, quit that AI app (⌘Q) and open it again." = "AI Face는 캘린더 앱의 캘린더(Exchange 포함)를 읽기만 하고 절대 바꾸지 않아요. 허용한 AI만, 켜둔 캘린더만 볼 수 있어요. 제목·시간·장소만 전달하고, 메모와 참석자는 켰을 때만 전달해요. 바꾼 뒤에는 그 AI 앱을 ⌘Q로 껐다 켜세요.";
