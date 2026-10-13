@@ -30,7 +30,7 @@ No hardware needed: the menu bar face works on its own. Everything runs locally 
 1. Install the Xcode Command Line Tools if you do not have them: `xcode-select --install`
 2. Get the code: `git clone https://github.com/jason401/ai-face.git` (or download the ZIP).
 3. Double-click **`Build AI Face.command`**. It compiles `AI Face.app` in the folder and starts it: a face appears in the menu bar and the settings window opens. The app is built on your own Mac, so it opens without a Gatekeeper warning. (If you downloaded the ZIP, macOS may block the `.command` file the first time: right-click it → Open, or allow it in System Settings → Privacy & Security.)
-4. In **Settings → AI apps**, click **Connect** next to Claude desktop, Codex and/or Claude Code, then quit (⌘Q) and reopen those apps (start a new Claude Code session). Claude Code is registered for all folders (user scope) through its own `claude mcp add` command (if there is no `claude` on PATH, the copy inside the Claude app's Code tab is used).
+4. In **Settings → AI apps**, click **Connect** next to Claude desktop, Codex and/or Claude Code, then quit (⌘Q) and reopen those apps (start a new Claude Code session). Claude Code is registered for all folders (user scope) through its own `claude mcp add-json` command (if there is no `claude` on PATH, the copy inside the Claude app's Code tab is used).
 
 Keep `AI Face.app` in the project folder: it runs the Python code next to it.
 
