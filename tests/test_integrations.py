@@ -214,6 +214,19 @@ class ClaudeCodeTests(unittest.TestCase):
         self.assertEqual(integrations.claude_code_status(), 'off')
         self.assertIn('keep', json.loads(cfg.read_text())['mcpServers'])
 
+    def test_uses_copy_inside_claude_app(self):
+        # only the Claude app's Code tab: its own copy of `claude` is used, newest version
+        root = self.home / 'Library' / 'Application Support' / 'Claude' / 'claude-code'
+        for ver in ('2.1.9', '2.1.295'):
+            cli = root / ver / 'abc' / 'claude.app' / 'Contents' / 'MacOS' / 'claude'
+            cli.parent.mkdir(parents=True)
+            cli.write_text(FAKE_CLAUDE)
+            cli.chmod(0o755)
+        self.assertIn('/2.1.295/', integrations.claude_code_cli())
+        self.assertTrue(integrations.status()['claude_code_available'])
+        integrations.install('claude_code')
+        self.assertEqual(integrations.claude_code_status(), 'on')
+
     def test_refresh_survives_missing_cli(self):
         # an old Claude Code registration but no `claude` command: other apps still get updated
         (self.home / '.claude.json').write_text(json.dumps({'mcpServers': {'esp32-face': {'args': ['/x']}}}))
