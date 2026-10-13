@@ -24,6 +24,7 @@ import json
 import os
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -33,6 +34,7 @@ PROTOCOLS = ['2025-06-18', '2025-03-26', '2024-11-05']
 DATA = Path.home() / 'Library' / 'Application Support' / 'AI Face'
 DISCOVERY = DATA / 'controller.json'   # port and token of the running app
 CATALOG = DATA / 'moods.json'          # the moods, written by the app when it starts
+SETTINGS = DATA / 'settings.json'      # which AIs may read the calendar (set in the app)
 TIMER_COLORS = ['white', 'pink', 'blue', 'yellow', 'red', 'green', 'purple', 'orange']
 GPT_ALIASES = ('gpt', 'chatgpt', 'codex', 'openai')
 CLIENT_NAME = ''   # the chat app's name from "initialize"
@@ -48,6 +50,15 @@ def agent():
     # Claude desktop / Claude Code report names with "claude"; anything else is taken as GPT
     # (Codex reports "codex-mcp-client").
     return 'claude' if 'claude' in CLIENT_NAME.lower() else 'gpt'
+
+
+def calendar_allowed():
+    """The user allows each AI separately in the app (default: Claude yes, GPT no)."""
+    try:
+        apps = json.loads(SETTINGS.read_text()).get('calendar', {}).get('apps', {})
+    except (OSError, ValueError, AttributeError):
+        apps = {}
+    return apps.get(agent(), agent() == 'claude') is True
 
 
 def moods():
@@ -77,7 +88,29 @@ def mood_notes(catalog):
     return '; '.join(f"{m['id']} = {m['hint']}" for m in catalog if m.get('hint'))
 
 
+CALENDAR_TOOLS = [
+    {'name': 'calendar_events', 'title': "Read the user's calendar",
+     'description': ("Events from the user's Mac calendars (read only), local time. Dates as YYYY-MM-DD "
+                     "or YYYY-MM-DDTHH:MM; default today; end date inclusive; up to 62 days. query filters "
+                     "by title or place."),
+     'inputSchema': {'type': 'object', 'properties': {
+         'start': {'type': 'string'}, 'end': {'type': 'string'}, 'query': {'type': 'string'}},
+         'additionalProperties': False},
+     'annotations': {'readOnlyHint': True, 'destructiveHint': False, 'idempotentHint': True,
+                     'openWorldHint': False}},
+    {'name': 'calendar_list', 'title': "List the user's calendars",
+     'description': "The user's calendars you can read.",
+     'inputSchema': {'type': 'object', 'properties': {}, 'additionalProperties': False},
+     'annotations': {'readOnlyHint': True, 'destructiveHint': False, 'idempotentHint': True,
+                     'openWorldHint': False}},
+]
+
+
 def tools():
+    return face_tools() + (CALENDAR_TOOLS if calendar_allowed() else [])
+
+
+def face_tools():
     catalog = moods()
     emotion = {'type': 'string'}
     rule = ("Call at the end of every reply with the tone of YOUR reply, not the user's mood. Before "
@@ -243,6 +276,16 @@ def call_tool(name, args):
         return 'ok: ' + awake_text()
     if name == 'awake_status':
         return awake_text()
+    if name in ('calendar_events', 'calendar_list'):
+        if not calendar_allowed():
+            raise KeyError(name)
+        query = {'agent': agent()}
+        if name == 'calendar_events':
+            query.update({k: str(args[k]) for k in ('start', 'end', 'query') if args.get(k)})
+            if 'query' in query:
+                query['q'] = query.pop('query')
+        path = '/calendar/' + ('events' if name == 'calendar_events' else 'list') + '?' + urllib.parse.urlencode(query)
+        return _request('GET', path, timeout=30).get('text', '')
     if name == 'cancel_timer':
         _api({'action': 'timer', 'seconds': 0})
     elif name == 'show_clock':

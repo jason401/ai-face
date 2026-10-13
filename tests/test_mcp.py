@@ -70,7 +70,7 @@ class Base(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.dir = Path(tmp.name)
-        for name in ('DISCOVERY', 'CATALOG'):
+        for name in ('DISCOVERY', 'CATALOG', 'SETTINGS'):
             p = patch.object(mcp, name, self.dir / (name.lower() + '.json')); p.start(); self.addCleanup(p.stop)
         mcp.CATALOG.write_text(json.dumps(CATALOG))
         p = patch.object(mcp, 'CLIENT_NAME', ''); p.start(); self.addCleanup(p.stop)
@@ -160,6 +160,20 @@ class ForwardingTests(Base):
             {'action': 'awake_acquire', 'id': 'mcp:gpt', 'minutes': 20, 'label': 'GPT'},
             {'action': 'awake_release', 'id': 'mcp:gpt'},
             {'action': 'awake', 'minutes': 0}])
+
+    def test_calendar_tools_only_for_allowed_ais(self):
+        names = lambda: {t['name'] for t in call('tools/list')['result']['tools']}
+        self.assertNotIn('calendar_events', names())             # GPT (client name '') : off by default
+        with patch.object(mcp, 'CLIENT_NAME', 'claude-ai'):
+            self.assertIn('calendar_events', names())             # Claude: on by default
+            mcp.SETTINGS.write_text(json.dumps({'calendar': {'apps': {'claude': False}}}))
+            self.assertNotIn('calendar_events', names())
+            self.assertEqual(call('tools/call', {'name': 'calendar_events'})['error']['code'], -32602)
+            mcp.SETTINGS.write_text(json.dumps({'calendar': {'apps': {'claude': True}}}))
+            app = self.run_app()
+            self.assertEqual(tool('calendar_events', start='2026-10-15', query='prof')['content'][0]['text'],
+                             'Now showing: Happy')
+            self.assertEqual(app.calls[-1], ('GET', '/calendar/events?agent=claude&start=2026-10-15&q=prof'))
 
     def test_app_error_is_reported(self):
         self.run_app()

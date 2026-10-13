@@ -115,6 +115,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+// `AIFace --calendar ...`: answer one calendar question for the server and exit (no menu bar app).
+if let i = CommandLine.arguments.firstIndex(of: "--calendar") {
+    exit(CalendarCLI.run(Array(CommandLine.arguments[(i + 1)...])))
+}
+
 let app = NSApplication.shared
 let delegate = AppDelegate()
 app.delegate = delegate

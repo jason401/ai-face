@@ -40,7 +40,7 @@ msg "2/4 컴파일 (30초쯤 걸려요)" "2/4 Compiling (about 30 seconds)"
 mkdir -p "$APP/Contents/MacOS"
 ARCH="$(uname -m)"
 if ! xcrun swiftc -swift-version 5 -O -target "$ARCH-apple-macos13.0" \
-      -framework Cocoa -framework SwiftUI -framework ServiceManagement \
+      -framework Cocoa -framework SwiftUI -framework ServiceManagement -framework EventKit \
       -o "$APP/Contents/MacOS/AIFace.new" app/macos/*.swift >"$LOG" 2>&1; then
   echo
   msg "빌드 실패. 아래 내용(또는 app-build.log)을 Claude에게 알려 주세요." \
@@ -84,9 +84,44 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <key>LSMinimumSystemVersion</key><string>13.0</string>
 <key>LSUIElement</key><true/>
 <key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>
+<key>NSCalendarsFullAccessUsageDescription</key><string>AI Face reads your calendar so the AI apps you allow (Settings → AI apps) can answer questions about your schedule. It never changes events.</string>
+<key>NSCalendarsUsageDescription</key><string>AI Face reads your calendar so the AI apps you allow (Settings → AI apps) can answer questions about your schedule. It never changes events.</string>
 </dict></plist>
 PLIST
-codesign --force --deep --sign - "$APP" >>"$LOG" 2>&1
+# Sign with a local, self-made certificate ("AI Face Local Signing", made once in the login
+# keychain) so macOS keeps permissions such as calendar access across rebuilds; an ad-hoc
+# signature changes with every build. Falls back to ad-hoc if anything here fails.
+IDENTITY="AI Face Local Signing"
+if ! security find-certificate -c "$IDENTITY" >/dev/null 2>&1; then
+  msg "   처음 한 번: 로컬 서명 인증서를 만들어요 (권한이 빌드마다 풀리지 않게)." \
+      "   First time only: making a local signing certificate (so permissions survive rebuilds)."
+  CERTDIR="$(mktemp -d)"
+  cat > "$CERTDIR/cert.cfg" <<'CFG'
+[req]
+distinguished_name = dn
+x509_extensions = ext
+prompt = no
+[dn]
+CN = AI Face Local Signing
+[ext]
+basicConstraints = critical,CA:false
+keyUsage = critical,digitalSignature
+extendedKeyUsage = critical,codeSigning
+CFG
+  if /usr/bin/openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -config "$CERTDIR/cert.cfg" \
+        -keyout "$CERTDIR/key.pem" -out "$CERTDIR/cert.pem" >>"$LOG" 2>&1 \
+     && /usr/bin/openssl pkcs12 -export -inkey "$CERTDIR/key.pem" -in "$CERTDIR/cert.pem" \
+        -out "$CERTDIR/id.p12" -passout pass:aiface >>"$LOG" 2>&1; then
+    security import "$CERTDIR/id.p12" -k "$HOME/Library/Keychains/login.keychain-db" -P aiface \
+      -T /usr/bin/codesign >>"$LOG" 2>&1
+  fi
+  rm -rf "$CERTDIR"
+fi
+if ! codesign --force --deep --sign "$IDENTITY" "$APP" >>"$LOG" 2>&1; then
+  msg "   로컬 인증서로 서명하지 못해서 임시 서명으로 대신해요 (캘린더 권한이 빌드마다 다시 필요할 수 있어요)." \
+      "   Could not sign with the local certificate; using an ad-hoc signature (calendar access may need allowing again after each build)."
+  codesign --force --deep --sign - "$APP" >>"$LOG" 2>&1
+fi
 
 msg "4/4 앱 실행" "4/4 Starting the app"
 echo "Built $(date)" >>"$LOG"

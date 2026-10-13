@@ -31,7 +31,8 @@ final class API {
     /// GET; `done` runs on the main thread with the body, or nil on any failure.
     func get(_ path: String, timeout: TimeInterval = 5, done: @escaping (Data?) -> Void) {
         guard let u = url(path) else { done(nil); return }
-        let req = URLRequest(url: u, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: timeout)
+        var req = URLRequest(url: u, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: timeout)
+        req.setValue(token, forHTTPHeaderField: "X-ESP-Token")   // calendar reads need it
         URLSession.shared.dataTask(with: req) { data, resp, _ in
             let ok = (resp as? HTTPURLResponse)?.statusCode == 200
             DispatchQueue.main.async { done(ok ? data : nil) }
