@@ -698,6 +698,8 @@ struct GeneralTab: View {
     }
 }
 
+/// Screen saver settings on top, the photos it can show below (one tab: photos are mostly
+/// for the photo / slideshow savers).
 struct SaverTab: View {
     @ObservedObject var store: SettingsStore
 
@@ -706,33 +708,38 @@ struct SaverTab: View {
     }
 
     var body: some View {
-        Form {
-            Section {
-                Picker(L("Screen saver"), selection: bind(\.saverType)) {
-                    ForEach(SAVER_TYPES, id: \.self) { c in Text(c.label).tag(c.value) }
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 16) {
+                    Picker(L("Screen saver"), selection: bind(\.saverType)) {
+                        ForEach(SAVER_TYPES, id: \.self) { c in Text(c.label).tag(c.value) }
+                    }
+                    Picker(L("Wait"), selection: bind(\.saverAfter)) {
+                        ForEach(store.afterChoices, id: \.self) { m in Text(minutesText(m)).tag(m) }
+                    }
+                    .disabled(store.saverType == "off")
+                    .frame(maxWidth: 150)
                 }
-                Picker(L("Wait"), selection: bind(\.saverAfter)) {
-                    ForEach(store.afterChoices, id: \.self) { m in Text(minutesText(m)).tag(m) }
-                }
-                .disabled(store.saverType == "off")
                 if store.saverType == "photo" || store.saverType == "slideshow" {
-                    Toggle(L("Clock hands over photos"), isOn: bind(\.saverClock))
-                }
-                if store.saverType == "slideshow" {
-                    Picker(L("Change every"), selection: bind(\.saverSlide)) {
-                        ForEach(store.slideChoices, id: \.self) { c in Text(c.label).tag(c.value) }
+                    HStack(spacing: 16) {
+                        Toggle(L("Clock hands over photos"), isOn: bind(\.saverClock))
+                        if store.saverType == "slideshow" {
+                            Picker(L("Change every"), selection: bind(\.saverSlide)) {
+                                ForEach(store.slideChoices, id: \.self) { c in Text(c.label).tag(c.value) }
+                            }
+                            .frame(maxWidth: 200)
+                        }
                     }
                 }
-            } footer: {
-                Text(store.saverHint).font(.caption).foregroundStyle(.secondary)
+                Text(store.saverHint + " " + L("A new face from an AI or the end of a timer brings the face back."))
+                    .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Section {
-                Text(L("When the face has not changed for a while, the screen saver starts. A new face from an AI or the end of a timer brings the face back. The board keeps this setting, so it works with the Mac off too."))
-                    .font(.callout).foregroundStyle(.secondary)
-            }
+            .padding([.horizontal, .top], 20)
+            .padding(.bottom, 8)
+            Divider().padding(.horizontal, 20)
+            PhotosTab(store: store)
         }
-        .formStyle(.grouped)
     }
 }
 
@@ -896,6 +903,28 @@ struct AITab: View {
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            Section(L("Other apps")) {
+                LabeledContent("Claude Code") {
+                    Button(L("Copy command")) { store.copyCommand() }
+                }
+                LabeledContent(L("Server command")) {
+                    Text(store.otherAppCommand)
+                        .font(.system(.caption, design: .monospaced))
+                        .textSelection(.enabled)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.trailing)
+                }
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+struct CalendarTab: View {
+    @ObservedObject var store: SettingsStore
+
+    var body: some View {
+        Form {
             Section {
                 LabeledContent(L("Access")) {
                     HStack(spacing: 10) {
@@ -926,20 +955,12 @@ struct AITab: View {
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Section(L("Other apps")) {
-                LabeledContent("Claude Code") {
-                    Button(L("Copy command")) { store.copyCommand() }
-                }
-                LabeledContent(L("Server command")) {
-                    Text(store.otherAppCommand)
-                        .font(.system(.caption, design: .monospaced))
-                        .textSelection(.enabled)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.trailing)
-                }
+            if !store.aiNotice.isEmpty {
+                Section { Text(store.aiNotice).font(.caption).foregroundStyle(.secondary) }
             }
         }
         .formStyle(.grouped)
+        .onAppear { store.loadCalendar() }
     }
 }
 
@@ -1021,9 +1042,9 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             tabs.tabStyle = .toolbar
             tabs.addTabViewItem(tab(GeneralTab(store: store), L("General"), "gearshape"))
             tabs.addTabViewItem(tab(SaverTab(store: store), L("Screen saver"), "moon.zzz"))
-            tabs.addTabViewItem(tab(PhotosTab(store: store), L("Photos"), "photo.on.rectangle"))
             tabs.addTabViewItem(tab(HistoryTab(store: store), L("History"), "chart.bar"))
             tabs.addTabViewItem(tab(AITab(store: store), L("AI apps"), "sparkles"))
+            tabs.addTabViewItem(tab(CalendarTab(store: store), L("Calendar"), "calendar"))
             tabs.addTabViewItem(tab(BoardTab(store: store), L("Board"), "cpu"))
             let w = NSWindow(contentViewController: tabs)
             w.styleMask = [.titled, .closable, .miniaturizable]
