@@ -241,7 +241,7 @@ def codex_remove():
 
 # ---------------------------------------------------------------------------
 # Claude Code (the terminal app): its own MCP list, changed with its official command
-# `claude mcp add|remove -s user` (user scope: every folder). Its list lives in ~/.claude.json,
+# `claude mcp add-json|remove -s user` (user scope: every folder). Its list lives in ~/.claude.json,
 # which Claude Code rewrites itself, so AI Face only reads that file.
 # ---------------------------------------------------------------------------
 CLAUDE_CODE_DIRS = ['~/.local/bin', '~/.claude/local', '/opt/homebrew/bin', '/usr/local/bin',
@@ -302,7 +302,9 @@ def _claude_code(*args):
 def claude_code_install():
     for name in (NAME,) + OLD_NAMES:   # replace an older registration (fine if there is none)
         _claude_code('remove', '-s', 'user', name)
-    p = _claude_code('add', '-s', 'user', '-e', 'AIFACE_AGENT=claude', NAME, '--', PYTHON, str(server_path()))
+    # add-json, not `add -e KEY=value`: newer versions let -e take every word after it, name included
+    entry = {'type': 'stdio', 'command': PYTHON, 'args': [str(server_path())], 'env': {'AIFACE_AGENT': 'claude'}}
+    p = _claude_code('add-json', '-s', 'user', NAME, json.dumps(entry))
     if p.returncode != 0 or claude_code_status() != 'on':
         raise ValueError(T('Claude Code에 등록하지 못했습니다: ', 'Could not register with Claude Code: ')
                          + (p.stderr or p.stdout).strip()[:300])

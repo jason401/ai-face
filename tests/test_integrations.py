@@ -155,10 +155,10 @@ if a[:2] == ['mcp', 'remove']:
     if a[-1] not in servers:
         sys.exit(1)
     del servers[a[-1]]
-elif a[:2] == ['mcp', 'add']:
-    i = a.index('--')
-    env = dict(x.split('=', 1) for x in a[a.index('-e') + 1:a.index('-e') + 2])
-    servers[a[i - 1]] = {'type': 'stdio', 'command': a[i + 1], 'args': a[i + 2:], 'env': env}
+elif a[:2] == ['mcp', 'add-json']:
+    servers[a[-2]] = json.loads(a[-1])
+else:   # e.g. `mcp add -e KEY=value name ...`: the real -e takes every word after it
+    sys.exit(1)
 cfg.write_text(json.dumps(data))
 """
 

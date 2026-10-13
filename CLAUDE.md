@@ -22,7 +22,7 @@ server named `ai-face`. The ESP32 round LCD board is optional. Public repo: gith
 - `core/ai_face_mcp.py` — thin MCP shim; copied to `~/Library/Application Support/AI Face` and
   forwards to the app. Tool list is gated by settings (calendar per-AI read/write).
 - `core/ai_face_awake.py` — keep-awake helper (`hook on|off` for Claude Code hooks, `run CMD`, `status`).
-- `core/aiface/integrations.py` — connects Claude desktop, Codex, Claude Code (`claude mcp add -s user`;
+- `core/aiface/integrations.py` — connects Claude desktop, Codex, Claude Code (`claude mcp add-json -s user`;
   falls back to the copy inside Claude.app's Code tab under `~/Library/Application Support/Claude/claude-code`)
   and the Claude Code keep-awake hooks (`~/.claude/settings.json`).
 - `core/aiface/moods.py` — 78 moods in 11 groups (the MCP enum comes from here).
