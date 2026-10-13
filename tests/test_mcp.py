@@ -175,6 +175,21 @@ class ForwardingTests(Base):
                              'Now showing: Happy')
             self.assertEqual(app.calls[-1], ('GET', '/calendar/events?agent=claude&start=2026-10-15&q=prof'))
 
+    def test_mail_tools_read_only_and_only_for_allowed_ais(self):
+        names = lambda: {t['name'] for t in call('tools/list')['result']['tools']}
+        self.assertNotIn('mail_messages', names())                # GPT: off by default
+        with patch.object(mcp, 'CLIENT_NAME', 'claude-ai'):
+            self.assertTrue({'mail_messages', 'mail_read'} <= names())
+            self.assertFalse({n for n in names() if n.startswith('mail_')} - {'mail_messages', 'mail_read'})
+            app = self.run_app()
+            tool('mail_messages', days=3, query='prof', unread=True)
+            self.assertEqual(app.calls[-1], ('GET', '/mail/messages?agent=claude&days=3&q=prof&unread=1'))
+            tool('mail_read', id='m2')
+            self.assertEqual(app.calls[-1], ('GET', '/mail/read?agent=claude&id=m2'))
+            mcp.SETTINGS.write_text(json.dumps({'mail': {'apps': {'claude': False}}}))
+            self.assertNotIn('mail_read', names())
+            self.assertEqual(call('tools/call', {'name': 'mail_read', 'arguments': {'id': 'm2'}})['error']['code'], -32602)
+
     def test_calendar_write_tools_only_when_allowed(self):
         names = lambda: {t['name'] for t in call('tools/list')['result']['tools']}
         with patch.object(mcp, 'CLIENT_NAME', 'claude-ai'):

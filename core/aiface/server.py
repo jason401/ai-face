@@ -20,6 +20,7 @@ from . import history
 from . import i18n
 from .i18n import T
 from . import integrations
+from . import mail_access
 from . import library as photo_library
 from . import moods as face_modes
 from . import paths
@@ -242,6 +243,25 @@ def main():
                 except ValueError as exc:
                     return self.reply(400, {'message': str(exc)})
                 return self.reply(404, {})
+            if self.path.startswith('/mail/'):   # mail reads: token needed (personal data)
+                if self.headers.get('X-ESP-Token') != token:
+                    return self.reply(403, {'message': 'Invalid token'})
+                query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                arg = lambda k: (query.get(k) or [None])[0]
+                route = urllib.parse.urlparse(self.path).path
+                try:
+                    if route == '/mail/status':
+                        return self.reply(200, mail_access.status())
+                    if route == '/mail/messages':
+                        return self.reply(200, {'text': mail_access.messages(
+                            arg('agent'), arg('days'), arg('q'), arg('unread') == '1', arg('limit'))})
+                    if route == '/mail/read':
+                        return self.reply(200, {'text': mail_access.read(arg('agent'), arg('id'))})
+                except PermissionError as exc:
+                    return self.reply(403, {'message': str(exc)})
+                except ValueError as exc:
+                    return self.reply(400, {'message': str(exc)})
+                return self.reply(404, {})
             if self.path == '/awake':   # keep awake, for the helper and the MCP server
                 return self.reply(200, {'text': awake.describe(), 'status': awake.status()})
             if self.path == '/mcp':
@@ -305,7 +325,7 @@ def main():
                     # A board that was plugged in after the app started is picked up here.
                     if action not in ('connect', 'disconnect', 'quit', 'firmware', 'mcp_install', 'mcp_remove',
                                       'awake_acquire', 'awake_release', 'awake_resume', 'calendar_settings',
-                                      'calendar_decide', 'calendar_undo') \
+                                      'calendar_decide', 'calendar_undo', 'mail_settings') \
                             and device.fd is None and not device.paused and ports():
                         try:
                             device.connect(ports()[0])
@@ -369,6 +389,8 @@ def main():
                         awake.resume_auto()
                     elif action == 'calendar_settings':
                         calendar_access.save(data.get('changes'))
+                    elif action == 'mail_settings':
+                        mail_access.save(data.get('changes'))
                     elif action == 'calendar_decide':
                         calendar_access.decide(data.get('id'), data.get('allow'))
                     elif action == 'calendar_undo':

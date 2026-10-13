@@ -18,6 +18,7 @@ No hardware needed: the menu bar face works on its own. Everything runs locally 
 - **History**: a daily log of which AI made which face, with stats and a timeline. Only the mood and the time are saved, never conversation text. AIs can read it too ("how were our faces today?").
 - **Round LCD (optional)**: Seeed XIAO ESP32S3 + 1.28" GC9A01 240×240 round display, firmware included (updated from the app, no Arduino IDE window needed) and a 3D-printable case in `hardware/housing`.
 - **Calendar (optional)**: AIs you allow can read the Mac's calendars (Exchange included): titles, times and places; notes and attendees only if you turn them on. Writing is allowed separately: AIs add events to the calendars you pick and change or delete only events they added, each change waiting for your OK (on by default), with undo. Settings → Calendar.
+- **Mail (optional, read only)**: AIs you allow can list and read the Mail app's inboxes (accounts you leave on). Nothing is sent, moved, deleted or marked read; links show only their site and sign-in codes are hidden unless you turn that off. Settings → Mail.
 - English and Korean, following your Mac's language.
 
 ## Requirements
@@ -76,6 +77,7 @@ core/aiface/            Python core (standard library only)
   library.py            photo library
   awake.py              keep awake with the lid closed (pmset disablesleep, with a deadline)
   calendar_access.py    calendar reading for the AIs (the app binary answers with EventKit: AIFace --calendar)
+  mail_access.py        mail reading for the AIs, read only (the app binary asks Mail via Apple events: AIFace --mail)
   flasher.py            compile + upload the firmware with Arduino IDE's arduino-cli
 firmware/ESP32_Display/ ESP32 firmware
 hardware/housing/       3D-printable case

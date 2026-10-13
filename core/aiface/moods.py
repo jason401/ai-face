@@ -589,6 +589,8 @@ def load_settings():
         out['language']=data['language']   # written by the app's server for the MCP server
     if isinstance(data.get('calendar'),dict):
         out['calendar']=data['calendar']   # which AIs may read the calendar (calendar_access.py)
+    if isinstance(data.get('mail'),dict):
+        out['mail']=data['mail']   # which AIs may read mail (mail_access.py)
     return out
 
 

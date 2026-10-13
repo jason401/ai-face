@@ -185,3 +185,10 @@
 "Calendar change" = "캘린더 변경";
 "Allow" = "허용";
 "Decline" = "거절";
+
+/* Mail (read only) */
+"Mail" = "메일";
+"Open Mail to check" = "메일 앱을 열면 확인돼요";
+"Hide links and codes" = "링크와 인증 코드 숨기기";
+"AI Face reads the Mail app's inboxes. It never sends, moves or deletes mail, and does not mark it as read." = "AI Face는 메일 앱의 받은 편지함을 읽기만 해요. 메일을 보내거나 옮기거나 지우지 않고, 읽음 표시도 바꾸지 않아요.";
+"Only the AIs you allow can read the accounts you leave on. With links and codes hidden, a link shows only its site and sign-in codes and passwords are left out. After a change, quit that AI app (⌘Q) and open it again." = "허용한 AI만, 켜 둔 계정의 메일을 읽을 수 있어요. 링크와 코드 숨기기를 켜 두면 링크는 사이트 이름만 보이고, 인증 코드와 비밀번호는 빠져요. 바꾼 뒤에는 그 AI 앱을 완전히 종료(⌘Q)하고 다시 여세요.";
