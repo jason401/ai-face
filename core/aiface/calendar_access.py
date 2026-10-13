@@ -30,7 +30,7 @@ from .i18n import T
 DEFAULTS = dict(apps=dict(claude=True, gpt=False), hidden=[], details=False,
                 write_apps=dict(claude=False, gpt=False), writable=None, confirm=True)
 LOG = paths.DATA / 'calendar_changes.json'   # recent changes, for undo
-CONFIRM_SECONDS = 120
+CONFIRM_SECONDS = 45   # under the chat apps' tool time limit; a late answer changes nothing
 MAX_DAYS = 62
 
 
@@ -294,14 +294,14 @@ def _fields(args, current=None):
             start = datetime.datetime(start.year, start.month, start.day)
         out['start'] = start.timestamp()
     if end is not None:
-        if day_only:
-            end = datetime.datetime(end.year, end.month, end.day) + datetime.timedelta(days=1)
+        if day_only:   # EventKit: an all-day event ends on its last day (start = end for one day)
+            end = datetime.datetime(end.year, end.month, end.day)
         out['end'] = end.timestamp()
     s = out.get('start', (current or {}).get('start'))
     f = out.get('end', (current or {}).get('end'))
     if s is not None and 'end' not in out and current is None:
-        f = out['end'] = s + (86400 if day_only else 3600)
-    if s is not None and f is not None and f <= s:
+        f = out['end'] = s if day_only else s + 3600
+    if s is not None and f is not None and (f < s if day_only else f <= s):
         raise ValueError(T('끝이 시작보다 빠릅니다.', 'The end is before the start.'))
     for key in ('location', 'notes'):
         if args.get(key) is not None:
@@ -409,11 +409,16 @@ def _target(conf, name):
     if not name:
         default = [c for c in targets if c.get('default')]
         return (default or targets)[0]
-    for c in targets:
-        if c['title'].lower() == str(name).lower():
-            return c
+    label = lambda c: f"{c['title']} ({c.get('account', '')})"
+    wanted = ' '.join(str(name).split()).lower()
+    found = [c for c in targets if label(c).lower() == wanted] or [c for c in targets if c['title'].lower() == wanted]
+    if len(found) == 1:
+        return found[0]
+    if len(found) > 1:   # the same name in two accounts: ask for "Name (Account)"
+        raise ValueError(T('같은 이름의 캘린더가 여럿입니다. 계정까지 적어 주세요: ',
+                           'Several calendars have that name; give the account too: ') + ', '.join(label(c) for c in found))
     raise PermissionError(T(f'"{name}" 캘린더에는 쓸 수 없습니다. 가능한 캘린더: ',
-                            f'Cannot write to "{name}". Allowed: ') + ', '.join(c['title'] for c in targets))
+                            f'Cannot write to "{name}". Allowed: ') + ', '.join(label(c) for c in targets))
 
 
 def add(agent, args):
@@ -423,6 +428,10 @@ def add(agent, args):
     if 'title' not in fields or 'start' not in fields:
         raise ValueError(T('제목과 시작 시각이 필요합니다.', 'A title and a start are needed.'))
     cal = _target(conf, args.get('calendar'))
+    same = [e for e in (_around(fields['start']) or []) if isinstance(e, dict) and e.get('calendar_id') == cal['id']
+            and abs(e['start'] - fields['start']) < 1 and e.get('title') == fields['title']]
+    if same:   # a retry or a repeated request: do not add it twice
+        return 'Already there (not added again): ' + _summary(same[0]) + f" #{_short(same[0]['id'], same[0]['start'])}"
     preview = dict(fields, calendar=cal['title'])
     _confirm(agent, T(f"{_who(agent)}가 일정을 추가하려고 해요:\n", f"{_who(agent)} wants to add an event:\n") + _summary(preview))
     result = _write('add', dict(fields, calendar_id=cal['id']))
@@ -458,6 +467,9 @@ def update(agent, short, args):
         raise ValueError(T('그 일정을 찾지 못했습니다. 일정을 다시 읽어 주세요.', 'That event was not found. Read the calendar again.'))
     if not current.get('ours'):
         raise PermissionError(T('AI Face로 추가한 일정만 바꿀 수 있습니다.', 'Only events added through AI Face can be changed.'))
+    if current.get('recurring'):
+        raise PermissionError(T('반복 일정은 AI가 바꿀 수 없습니다. 캘린더 앱에서 직접 바꿔 주세요.',
+                                'Repeating events cannot be changed by an AI; change it in the Calendar app.'))
     fields = _fields(args, current)
     if args.get('calendar'):
         fields['calendar_id'] = _target(conf, args['calendar'])['id']
@@ -482,6 +494,9 @@ def delete(agent, short):
         raise ValueError(T('그 일정을 찾지 못했습니다.', 'That event was not found.'))
     if not current.get('ours'):
         raise PermissionError(T('AI Face로 추가한 일정만 지울 수 있습니다.', 'Only events added through AI Face can be deleted.'))
+    if current.get('recurring'):
+        raise PermissionError(T('반복 일정은 AI가 지울 수 없습니다. 캘린더 앱에서 직접 지워 주세요.',
+                                'Repeating events cannot be deleted by an AI; delete it in the Calendar app.'))
     _confirm(agent, T(f"{_who(agent)}가 일정을 지우려고 해요:\n", f"{_who(agent)} wants to delete an event:\n") + _summary(current))
     result = _write('delete', dict(id=event_id, occurrence=occurrence))
     _log(agent, 'delete', before=result.get('before'))
@@ -496,6 +511,12 @@ def undo(n):
         raise ValueError(T('되돌릴 수 없는 변경입니다.', 'That change cannot be undone.'))
     before, after = entry.get('before') or {}, entry.get('after') or {}
     keys = ('title', 'start', 'end', 'all_day', 'location')
+    if entry['op'] in ('add', 'update'):   # refuse if it was changed since (by hand or by an AI)
+        now_ = next((e for e in (_around(after['start']) or []) if isinstance(e, dict)
+                     and e.get('id') == after.get('id') and abs(e['start'] - after['start']) < 1), None)
+        if now_ is None or any(now_.get(k) != after.get(k) for k in keys):
+            raise ValueError(T('그 뒤에 일정이 바뀌었거나 지워져서 되돌리지 않았습니다.',
+                               'The event changed or was removed since, so it was not undone.'))
     if entry['op'] == 'add':
         _write('delete', dict(id=after['id'], occurrence=after['start']))
     elif entry['op'] == 'delete':

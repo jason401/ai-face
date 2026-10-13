@@ -180,6 +180,40 @@ class CalendarTests(unittest.TestCase):
         t.join()
         self.assertEqual(cal.pending(), [])
 
+    def test_safety_fixes(self):
+        cal.save({'write_apps': {'claude': True}, 'confirm': False})
+        first = cal.add('claude', {'title': 'Kristen', 'start': '2026-10-15T15:00'})
+        again = cal.add('claude', {'title': 'Kristen', 'start': '2026-10-15T15:00'})
+        self.assertTrue(again.startswith('Already there'))                       # no duplicate
+        self.assertEqual(first.split('#')[1], again.split('#')[1])
+        day = cal.add('claude', {'title': 'Retreat', 'start': '2026-10-16', 'all_day': True})
+        store = json.loads(Path(str(self.exe) + '.store').read_text())
+        retreat = next(e for e in store if e['title'] == 'Retreat')
+        self.assertEqual(retreat['start'], retreat['end'])                        # one day: start = end
+        self.assertIn('10-16 Fri all day Retreat', day)
+        # changed by hand after the AI added it: undo refuses
+        next(e for e in store if e['title'] == 'Kristen')['title'] = 'Kristen (moved)'
+        Path(str(self.exe) + '.store').write_text(json.dumps(store))
+        with self.assertRaises(ValueError):
+            cal.undo(1)
+        # repeating events are left to the user
+        store[0]['recurring'] = True
+        Path(str(self.exe) + '.store').write_text(json.dumps(store))
+        listing = cal.events('claude', '2026-10-15', now=self.now)
+        short = listing.split('Kristen (moved)')[1].split('#')[1].split()[0]
+        with self.assertRaises(PermissionError):
+            cal.delete('claude', short)
+
+    def test_same_calendar_name_needs_the_account(self):
+        cals = [dict(id='a', title='Calendar', account='Stanford', writable=True, default=True),
+                dict(id='b', title='Calendar', account='iCloud', writable=True, default=False)]
+        conf = dict(cal.settings(), writable=['a', 'b'])
+        with patch.object(cal, '_calendars', return_value=cals):
+            with self.assertRaises(ValueError):
+                cal._target(conf, 'calendar')
+            self.assertEqual(cal._target(conf, 'Calendar (iCloud)')['id'], 'b')
+            self.assertEqual(cal._target(conf, None)['id'], 'a')
+
     def test_bad_ranges_and_no_access(self):
         for start, end in (('2026-10-15', '2026-10-14'), ('2026-10-01', '2026-12-31'), ('soon', None)):
             with self.assertRaises(ValueError):
