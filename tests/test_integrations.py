@@ -142,6 +142,85 @@ class IntegrationTests(unittest.TestCase):
         self.assertTrue(paths.LEGACY_DATA.exists())
 
 
+FAKE_CLAUDE = r"""#!/usr/bin/env python3
+import json, os, sys
+from pathlib import Path
+cfg = Path(os.environ['FAKE_HOME']) / '.claude.json'
+data = json.loads(cfg.read_text()) if cfg.exists() else {}
+servers = data.setdefault('mcpServers', {})
+a = sys.argv[1:]
+with open(Path(os.environ['FAKE_HOME']) / 'calls.log', 'a') as log:
+    log.write(' '.join(a) + '\n')
+if a[:2] == ['mcp', 'remove']:
+    if a[-1] not in servers:
+        sys.exit(1)
+    del servers[a[-1]]
+elif a[:2] == ['mcp', 'add']:
+    i = a.index('--')
+    env = dict(x.split('=', 1) for x in a[a.index('-e') + 1:a.index('-e') + 2])
+    servers[a[i - 1]] = {'type': 'stdio', 'command': a[i + 1], 'args': a[i + 2:], 'env': env}
+cfg.write_text(json.dumps(data))
+"""
+
+
+class ClaudeCodeTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        home = Path(self.tmp.name)
+        data = home / 'Library' / 'Application Support' / 'AI Face'
+        self.bin = home / 'bin'
+        self.bin.mkdir()
+        for p in [patch.object(Path, 'home', return_value=home), patch.object(paths, 'DATA', data),
+                  patch.object(paths, 'LEGACY_DATA', home / 'Library' / 'Application Support' / 'ESP32Face'),
+                  patch.object(integrations, 'CLAUDE_CODE_DIRS', [str(self.bin)]),
+                  patch.dict('os.environ', {'FAKE_HOME': str(home), 'PATH': '/usr/bin:/bin'})]:
+            p.start()
+            self.addCleanup(p.stop)
+        self.home = home
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def fake_cli(self):
+        cli = self.bin / 'claude'
+        cli.write_text(FAKE_CLAUDE)
+        cli.chmod(0o755)
+
+    def test_not_installed(self):
+        st = integrations.status()
+        self.assertFalse(st['claude_code_available'])
+        self.assertEqual(st['claude_code'], 'off')
+        with self.assertRaises(ValueError):
+            integrations.install('claude_code')
+
+    def test_connect_and_disconnect(self):
+        self.fake_cli()
+        cfg = self.home / '.claude.json'
+        cfg.write_text(json.dumps({'mcpServers': {'esp32-face': {'command': 'x', 'args': ['/old.py']},
+                                                  'keep': {'command': 'y'}}, 'theme': 'dark'}))
+        self.assertTrue(integrations.status()['claude_code_available'])
+        self.assertEqual(integrations.claude_code_status(), 'other')
+        integrations.install('claude_code')
+        data = json.loads(cfg.read_text())
+        self.assertEqual(integrations.claude_code_status(), 'on')
+        self.assertNotIn('esp32-face', data['mcpServers'])
+        self.assertIn('keep', data['mcpServers'])
+        self.assertEqual(data['theme'], 'dark')
+        entry = data['mcpServers']['ai-face']
+        self.assertEqual(entry['args'], [str(integrations.server_path())])
+        self.assertEqual(entry['env'], {'AIFACE_AGENT': 'claude'})
+        self.assertIn('-s user', (self.home / 'calls.log').read_text())
+        integrations.remove('claude_code')
+        self.assertEqual(integrations.claude_code_status(), 'off')
+        self.assertIn('keep', json.loads(cfg.read_text())['mcpServers'])
+
+    def test_refresh_survives_missing_cli(self):
+        # an old Claude Code registration but no `claude` command: other apps still get updated
+        (self.home / '.claude.json').write_text(json.dumps({'mcpServers': {'esp32-face': {'args': ['/x']}}}))
+        integrations.refresh()
+        self.assertTrue(integrations.server_path().exists())
+
+
 class AutoConnectTests(unittest.TestCase):
     def test_connects_and_backs_off(self):
         class Fake:

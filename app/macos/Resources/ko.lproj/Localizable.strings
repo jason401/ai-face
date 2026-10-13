@@ -36,8 +36,6 @@
 "Connected" = "연결됨";
 "Connected to another location" = "다른 위치로 연결됨";
 "Connecting or error" = "연결 중이거나 오류";
-"Copied the Claude Code command. Paste it into a terminal." = "Claude Code 등록 명령을 복사했어요. 터미널에 붙여 넣으세요.";
-"Copy command" = "등록 명령 복사";
 "Could not reach the AI Face server." = "AI Face 서버에 연결하지 못했어요.";
 "Could not read the photo from the library." = "보관함 사진을 읽지 못했어요.";
 "Could not save it." = "저장하지 못했어요.";
@@ -153,7 +151,7 @@
 "%@ · %ld min" = "%@ · %ld분";
 "Automatic keep awake paused · %ld min" = "자동 깨어 있기 일시 중지 · %ld분";
 "Resume automatic keep awake" = "자동 깨어 있기 다시 켜기";
-"Claude Code: keep awake while working" = "Claude Code: 일하는 동안 깨어 있기";
+"Claude Code: keep the Mac awake while it works" = "Claude Code가 일하는 동안 맥 깨어 있기";
 "awake command" = "awake 명령";
 "Installed" = "설치됨";
 "Install…" = "설치…";

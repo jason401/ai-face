@@ -122,6 +122,8 @@ final class SettingsStore: NSObject, ObservableObject {
     @Published var claude = "off"
     @Published var codex = "off"
     @Published var codexAvailable = false
+    @Published var claudeCode = "off"
+    @Published var claudeCodeAvailable = false
     @Published var serverPath = ""
     @Published var helperPath = ""
     // Calendar (read only): macOS permission, which AIs may read it, which calendars, details
@@ -556,6 +558,8 @@ final class SettingsStore: NSObject, ObservableObject {
             self.claude = (s["claude"] as? String) ?? "off"
             self.codex = (s["codex"] as? String) ?? "off"
             self.codexAvailable = (s["codex_available"] as? Bool) ?? false
+            self.claudeCode = (s["claude_code"] as? String) ?? "off"
+            self.claudeCodeAvailable = (s["claude_code_available"] as? Bool) ?? false
             self.serverPath = (s["server"] as? String) ?? ""
             self.helperPath = (s["helper"] as? String) ?? ""
             self.hooks = (s["claude_code_awake"] as? String) ?? "off"
@@ -564,7 +568,7 @@ final class SettingsStore: NSObject, ObservableObject {
 
     func setAI(_ target: String, on: Bool) {
         aiNotice = L("Working…")
-        API.shared.call(on ? "mcp_install" : "mcp_remove", ["target": target]) { [weak self] _, reply in
+        API.shared.call(on ? "mcp_install" : "mcp_remove", ["target": target], timeout: 90) { [weak self] _, reply in
             self?.aiNotice = (reply["message"] as? String) ?? ""
             self?.refreshAI()
         }
@@ -572,12 +576,6 @@ final class SettingsStore: NSObject, ObservableObject {
 
     var otherAppCommand: String {
         return "/usr/bin/python3 '\(serverPath)'"
-    }
-
-    func copyCommand() {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString("claude mcp add ai-face -e AIFACE_AGENT=claude -- " + otherAppCommand, forType: .string)
-        aiNotice = L("Copied the Claude Code command. Paste it into a terminal.")
     }
 
     // MARK: Board
@@ -924,9 +922,12 @@ struct AITab: View {
             Section {
                 row(L("Claude desktop"), store.claude, "claude")
                 row("Codex (GPT)", store.codex, "codex", available: store.codexAvailable)
+                row("Claude Code", store.claudeCode, "claude_code", available: store.claudeCodeAvailable)
                 if store.awakeSupported {
-                    row(L("Claude Code: keep awake while working"), store.hooks, "claude_code_awake",
-                        available: store.awakeReady)
+                    Toggle(L("Claude Code: keep the Mac awake while it works"),
+                           isOn: Binding(get: { store.hooks == "on" },
+                                         set: { store.setAI("claude_code_awake", on: $0) }))
+                        .disabled(!store.awakeReady)
                 }
             } header: {
                 Text(L("AI apps"))
@@ -938,9 +939,6 @@ struct AITab: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             Section(L("Other apps")) {
-                LabeledContent("Claude Code") {
-                    Button(L("Copy command")) { store.copyCommand() }
-                }
                 LabeledContent(L("Server command")) {
                     Text(store.otherAppCommand)
                         .font(.system(.caption, design: .monospaced))

@@ -7,8 +7,10 @@ app's settings is touched (plus the "esp32-face" entry of older versions, which 
 replaced), and the settings file is backed up first. Python standard library only.
 """
 import json
+import os
 import re
 import shutil
+import subprocess
 import time
 from pathlib import Path
 
@@ -238,6 +240,67 @@ def codex_remove():
 
 
 # ---------------------------------------------------------------------------
+# Claude Code (the terminal app): its own MCP list, changed with its official command
+# `claude mcp add|remove -s user` (user scope: every folder). Its list lives in ~/.claude.json,
+# which Claude Code rewrites itself, so AI Face only reads that file.
+# ---------------------------------------------------------------------------
+CLAUDE_CODE_DIRS = ['~/.local/bin', '~/.claude/local', '/opt/homebrew/bin', '/usr/local/bin',
+                    '~/.npm-global/bin', '~/.bun/bin', '~/.volta/bin']
+
+
+def claude_code_cli():
+    """The `claude` command, or None when Claude Code is not installed."""
+    dirs = [os.path.expanduser(d) for d in CLAUDE_CODE_DIRS]
+    return shutil.which('claude', path=os.pathsep.join(dirs + os.environ.get('PATH', '').split(os.pathsep)))
+
+
+def claude_code_config():
+    return Path.home() / '.claude.json'
+
+
+def claude_code_status():
+    try:
+        text = claude_code_config().read_text() if claude_code_config().exists() else '{}'
+        servers = (json.loads(text or '{}') or {}).get('mcpServers') or {}
+    except (OSError, ValueError, AttributeError):
+        return 'error'
+    if not isinstance(servers, dict):
+        return 'error'
+    entry = servers.get(NAME)
+    if isinstance(entry, dict):
+        args = entry.get('args') or []
+        return 'on' if args and args[0] == str(server_path()) else 'other'
+    return 'other' if any(isinstance(servers.get(n), dict) for n in OLD_NAMES) else 'off'
+
+
+def _claude_code(*args):
+    cli = claude_code_cli()
+    if cli is None:
+        raise ValueError(T('Claude Code가 설치되어 있지 않습니다.', 'Claude Code is not installed.'))
+    env = dict(os.environ, PATH=os.pathsep.join([os.path.dirname(cli), '/opt/homebrew/bin', '/usr/local/bin',
+                                                  '/usr/bin', '/bin']))
+    try:
+        return subprocess.run([cli, 'mcp', *args], capture_output=True, text=True, timeout=15,
+                              stdin=subprocess.DEVNULL, env=env, cwd=str(Path.home()))
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise ValueError(T(f'Claude Code 명령을 실행하지 못했습니다: {exc}', f'Could not run Claude Code: {exc}'))
+
+
+def claude_code_install():
+    for name in (NAME,) + OLD_NAMES:   # replace an older registration (fine if there is none)
+        _claude_code('remove', '-s', 'user', name)
+    p = _claude_code('add', '-s', 'user', '-e', 'AIFACE_AGENT=claude', NAME, '--', PYTHON, str(server_path()))
+    if p.returncode != 0 or claude_code_status() != 'on':
+        raise ValueError(T('Claude Code에 등록하지 못했습니다: ', 'Could not register with Claude Code: ')
+                         + (p.stderr or p.stdout).strip()[:300])
+
+
+def claude_code_remove():
+    for name in (NAME,) + OLD_NAMES:
+        _claude_code('remove', '-s', 'user', name)
+
+
+# ---------------------------------------------------------------------------
 # Claude Code hooks (~/.claude/settings.json): keep the Mac awake while Claude Code works
 # ---------------------------------------------------------------------------
 HOOK_EVENTS = {'UserPromptSubmit': 'on', 'PreToolUse': 'on', 'Stop': 'off', 'SessionEnd': 'off'}
@@ -317,11 +380,13 @@ def hooks_remove():
 # ---------------------------------------------------------------------------
 TARGETS = {'claude': (claude_status, claude_install, claude_remove),
            'codex': (codex_status, codex_install, codex_remove),
+           'claude_code': (claude_code_status, claude_code_install, claude_code_remove),
            'claude_code_awake': (hooks_status, hooks_install, hooks_remove)}
 
 
 def status():
     return dict(claude=claude_status(), codex=codex_status(), codex_available=codex_available(),
+                claude_code=claude_code_status(), claude_code_available=claude_code_cli() is not None,
                 claude_code_awake=hooks_status(), server=str(server_path()), helper=str(helper_path()),
                 python=PYTHON)
 
@@ -351,5 +416,8 @@ def refresh():
     else:
         remove_old_files()
     for target in connected:
-        if TARGETS[target][0]() == 'other':
-            TARGETS[target][1]()
+        try:   # one app failing (e.g. Claude Code's command missing) must not stop the others
+            if TARGETS[target][0]() == 'other':
+                TARGETS[target][1]()
+        except Exception:
+            pass
