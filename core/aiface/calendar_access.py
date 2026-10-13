@@ -10,6 +10,7 @@ hold passcodes, and attendee lists other people's details). Python standard libr
 """
 import datetime
 import json
+import re
 import subprocess
 
 from . import moods as settings_store
@@ -96,6 +97,20 @@ def allowed(agent):
     return settings()['apps'].get(agent, False) is True
 
 
+SECRET = re.compile(r'(password|passcode|passwd|pwd|pin|암호|비밀번호)\s*[:=]?\s*\S+', re.I)
+URL = re.compile(r'https?://([^/\s?#]+)\S*', re.I)
+
+
+def place(text, details):
+    """The event's location on one line. Without details, meeting links keep only their host
+    (Zoom links often carry the passcode) and anything like "Password: 123" is dropped."""
+    text = ' '.join(str(text or '').split())
+    if not details:
+        text = SECRET.sub('', URL.sub(lambda m: m.group(1) + ' link', text))
+        text = ' '.join(text.split())
+    return text[:200]
+
+
 def _day(value, default):
     if value in (None, ''):
         return default
@@ -146,14 +161,16 @@ def events(agent, start=None, end=None, query=None, now=None):
         s = datetime.datetime.fromtimestamp(e['start'])
         f = datetime.datetime.fromtimestamp(e['end'])
         if e.get('all_day'):
-            when = f"{s:%m-%d %a} all day"
+            last = f - datetime.timedelta(seconds=1)   # all-day events end at the next midnight
+            when = f"{s:%m-%d %a} all day" if last.date() <= s.date() else f"{s:%m-%d %a} – {last:%m-%d %a} all day"
         elif s.date() == f.date():
             when = f"{s:%m-%d %a} {s:%H:%M}–{f:%H:%M}"
         else:
             when = f"{s:%m-%d %a %H:%M} – {f:%m-%d %a %H:%M}"
         line = f"- {when} {e.get('title') or '(no title)'}"
-        if e.get('location'):
-            line += f" @ {e['location']}"
+        where = place(e.get('location'), conf['details'])
+        if where:
+            line += f" @ {where}"
         line += f" [{e.get('calendar', '')}]"
         if e.get('attendees'):
             line += ' with ' + ', '.join(e['attendees'])

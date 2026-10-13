@@ -89,6 +89,12 @@ class CalendarTests(unittest.TestCase):
         moods.save_settings(mono=True)
         self.assertEqual(cal.settings()['hidden'], ['h'])
 
+    def test_place_hides_meeting_secrets_unless_details(self):
+        loc = 'https://stanford.zoom.us/j/9819?pwd=abc.1\nPassword: 42571540'
+        self.assertEqual(cal.place(loc, False), 'stanford.zoom.us link')
+        self.assertEqual(cal.place('P083 Lucas Center', False), 'P083 Lucas Center')
+        self.assertIn('pwd=abc.1 Password: 42571540', cal.place(loc, True))
+
     def test_bad_ranges_and_no_access(self):
         for start, end in (('2026-10-15', '2026-10-14'), ('2026-10-01', '2026-12-31'), ('soon', None)):
             with self.assertRaises(ValueError):
