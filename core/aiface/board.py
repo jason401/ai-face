@@ -171,7 +171,7 @@ class Device:
                     self.exchange(command, expected)
         settings = face_modes.load_settings()
         self.exchange(*face_modes.saver_command(settings['saver']))
-        self.exchange(*face_modes.style_command(settings['mono']))
+        self.exchange(*face_modes.style_command(False))   # monochrome is for the menu bar only
         self.refresh_photos()
         timer = settings['timer']
         if timer:
@@ -269,9 +269,8 @@ class Device:
         self.message = T('대기 화면 설정을 저장했습니다.', 'Screen saver saved.')
 
     def set_style(self, mono):
-        command = face_modes.style_command(mono)   # validate first
-        if self.fd is not None:       # otherwise sent when a board connects (prepare)
-            self.exchange(*command)
+        face_modes.style_command(mono)   # validate
+        # Monochrome is for the menu bar face only: the board always stays in color.
         face_modes.save_settings(mono=mono)
         self.message = T('흑백 모드를 켰습니다.', 'Monochrome on.') if mono else T('흑백 모드를 껐습니다.', 'Monochrome off.')
 

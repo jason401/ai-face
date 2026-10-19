@@ -11,7 +11,7 @@ No hardware needed: the menu bar face works on its own. Everything runs locally 
 ## What you get
 
 - **78 animated moods in 11 groups** (happy, thinking, on it!, agree, facepalm, don't know, fingers crossed, ...). The AI chooses one per reply through a local [MCP](https://modelcontextprotocol.io) server, so the face follows the tone of the conversation.
-- **Who chose it**: the ring around the face is orange for Claude, green for GPT and white when you pick a face yourself. Monochrome mode shows it with ring patterns instead.
+- **Who chose it**: the ring around the face is orange for Claude, green for GPT and white when you pick a face yourself. Monochrome mode (menu bar only; the board stays in color) shows it with ring patterns instead.
 - **Menu**: click the face for a timer (pomodoro), campfire, clock and every mood (with a small picture of each, and the ones you picked recently on top).
 - **Keep awake** (optional): keep a MacBook awake with the lid closed for 1, 2 or 4 hours, from the menu. It turns itself off at the end, on low battery, when hot and when AI Face quits. Setup installs one sudoers rule that allows only `pmset -a disablesleep 0/1` (Settings → General → Keep awake). Claude Code can hold it while it works (hooks, Settings → AI apps), `awake COMMAND` holds it while a command runs, and AIs can ask for it ("keep the Mac awake for 20 minutes").
 - **Screen savers** when the face has not changed for a while: sleepy → asleep, clock, photo, slideshow, pixel-art campfire.
