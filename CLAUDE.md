@@ -57,5 +57,11 @@ server named `ai-face`. The ESP32 round LCD board is optional. Public repo: gith
 ## Open items (ask before starting)
 - Does the Mac sleep right away when keep awake ends with the lid closed? (maybe `pmset sleepnow`)
 - Fully automatic keep awake; Claude Code hook event names not double-checked against docs.
-- Later ideas: more moods, AI-to-AI chat, token gauge, flashing the board at home.
+- Later ideas: more moods, AI-to-AI chat, token gauge.
+- Discussed 2026-10-19, not started (he has his own similar ideas to add): meeting alert 10 min before
+  (ring counts down), face reacts to mail from important senders, morning greeting by the day's load,
+  face showing Claude Code task state. Plan: a watcher thread in the app's server (not MCP: MCP only
+  runs when an AI calls it). Order 1 meeting, 2 morning, 3 mail. Mail is heavy (9-18 s per full read):
+  poll only the unread count (speed not measured yet), only while Mail is already open; important-sender
+  list, quiet hours, priority vs AI faces / timer / saver, drop missed alerts after sleep.
 - Test calendar event "☕ AI Face 캘린더 쓰기 테스트" (10/13 09:00) — delete when he asks.
