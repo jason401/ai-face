@@ -40,7 +40,7 @@ The face only changes while AI Face is running. When it is quit, the AI's face t
 ### The round LCD (optional)
 
 - Board: Seeed XIAO ESP32S3; display: GC9A01 240×240 round SPI LCD (pins in `firmware/ESP32_Display/ESP32_Display.ino`).
-- Install Arduino IDE 2 with the ESP32 board package once. After that, **Settings → Board → Update firmware** compiles and uploads the firmware.
+- Once: Arduino IDE 2 with the ESP32 board package, or without the IDE: `brew install arduino-cli`, then install the `esp32:esp32` core (board URL `https://espressif.github.io/arduino-esp32/package_esp32_index.json`) and the libraries `Adafruit GFX Library` and `Adafruit GC9A01A`. After that, **Settings → Board → Update firmware** compiles and uploads the firmware.
 - Plug the board in and the app connects to it by itself.
 
 ## Privacy

@@ -1,7 +1,7 @@
 """Compile ESP32_Display.ino and upload it to the board without opening the Arduino IDE.
 
-Uses the arduino-cli that ships inside Arduino IDE 2 (or one on PATH), with the IDE's own
-configuration, so the installed ESP32 core and libraries are the same ones the IDE uses.
+Uses the arduino-cli that ships inside Arduino IDE 2 (with the IDE's own configuration, so the
+ESP32 core and libraries are the ones the IDE uses), or one from Homebrew / PATH.
 Python standard library only.
 """
 import os
@@ -22,6 +22,9 @@ BUILD = RUNTIME / 'build'          # kept between runs: later builds only recomp
 CLI_CANDIDATES = [
     Path('/Applications/Arduino IDE.app/Contents/Resources/app/lib/backend/resources/arduino-cli'),
     Path.home() / 'Applications' / 'Arduino IDE.app/Contents/Resources/app/lib/backend/resources/arduino-cli',
+    # Homebrew (`brew install arduino-cli`, no IDE): the app's PATH does not include it.
+    Path('/opt/homebrew/bin/arduino-cli'),
+    Path('/usr/local/bin/arduino-cli'),
 ]
 IDE_CONFIG = Path.home() / '.arduinoIDE' / 'arduino-cli.yaml'
 
