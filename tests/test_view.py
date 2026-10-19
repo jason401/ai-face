@@ -79,6 +79,7 @@ class ViewTests(unittest.TestCase):
         self.assertFalse(self.d.view()['mono'])
         self.d.set_style(True)
         self.assertTrue(self.d.view()['mono'] and face_modes.load_settings()['mono'])
+        self.assertEqual(face_modes.style_command(False)[0], 'STYLE:0')   # what the board always gets
         with self.assertRaises(ValueError):
             self.d.set_style('yes')
 

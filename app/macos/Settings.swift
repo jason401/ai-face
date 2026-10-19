@@ -753,7 +753,7 @@ struct GeneralTab: View {
             Section {
                 Toggle(L("Monochrome"), isOn: Binding(get: { store.mono }, set: { store.setMono($0) }))
             } footer: {
-                Text(L("Draws the face in grays and shows who chose it by the ring pattern: you = solid, Claude = short dashes, GPT = six long arcs. Applies to the menu bar and the board."))
+                Text(L("Draws the menu bar face in grays and shows who chose it by the ring pattern: you = solid, Claude = short dashes, GPT = six long arcs. The board always stays in color."))
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
