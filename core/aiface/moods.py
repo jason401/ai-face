@@ -591,6 +591,8 @@ def load_settings():
         out['calendar']=data['calendar']   # which AIs may read the calendar (calendar_access.py)
     if isinstance(data.get('mail'),dict):
         out['mail']=data['mail']   # which AIs may read mail (mail_access.py)
+    if isinstance(data.get('auto_update'),bool):
+        out['auto_update']=data['auto_update']   # automatic updates from GitHub (updater.py)
     return out
 
 

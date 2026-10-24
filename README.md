@@ -19,6 +19,7 @@ No hardware needed: the menu bar face works on its own. Everything runs locally 
 - **Round LCD (optional)**: Seeed XIAO ESP32S3 + 1.28" GC9A01 240×240 round display, firmware included (updated from the app, no Arduino IDE window needed) and a 3D-printable case in `hardware/housing`.
 - **Calendar (optional)**: AIs you allow can read the Mac's calendars (Exchange included): titles, times and places; notes and attendees only if you turn them on. Writing is allowed separately: AIs add events to the calendars you pick and change or delete only events they added, each change waiting for your OK (on by default), with undo. Settings → Calendar.
 - **Mail (optional, read only)**: AIs you allow can list and read the Mail app's inboxes (accounts you leave on). Nothing is sent, moved, deleted or marked read; links show only their site and sign-in codes are hidden unless you turn that off. Settings → Mail.
+- **Automatic updates**: when it starts and every 3 hours the app looks for a new version on GitHub (no account needed), and installs it only after the tests and the build pass; otherwise it keeps the running version. It waits while you or an AI are busy and skips when the project folder has its own changes. Settings → General → Updates.
 - English and Korean, following your Mac's language.
 
 ## Requirements
@@ -47,6 +48,7 @@ The face only changes while AI Face is running. When it is quit, the AI's face t
 
 - Nothing leaves your Mac except what the AI apps already send: when an AI calls a tool, the result (for example the mood history) becomes part of that chat.
 - **Connect** adds one entry (`ai-face`) to Claude desktop's and Codex's settings files, after making a backup copy; other settings are left alone.
+- Automatic updates only download from the project's GitHub repository (`git fetch`); turn them off in Settings → General.
 - Data (settings, photos, history) lives in `~/Library/Application Support/AI Face/`.
 
 ## Uninstall
@@ -113,6 +115,7 @@ Claude나 GPT와 대화하면 AI가 대답마다 표정을 골라서 **맥 메�
 - 대기 화면: 졸림→잠, 시계, 사진, 슬라이드쇼, 픽셀 모닥불
 - 타이머 링, 사진 보관함, 표정 기록과 하루 통계, 보드 펌웨어 업데이트(Arduino IDE 창 없이)
 - 깨어 있기(선택): 1·2·4시간 동안 뚜껑을 닫아도 맥북이 잠들지 않게. 시간·배터리·발열·앱 종료 때 알아서 꺼져요
+- 자동 업데이트: 앱을 켤 때와 3시간마다 GitHub에서 새 버전을 찾아, 테스트와 빌드가 통과하면 알아서 설치해요
 
 보드 없이 메뉴바 얼굴만으로도 쓸 수 있고, 모든 게 맥 안에서만 돌아가요.
 

@@ -192,3 +192,20 @@
 "Hide links and codes" = "링크와 인증 코드 숨기기";
 "AI Face reads the Mail app's inboxes. It never sends, moves or deletes mail, and does not mark it as read." = "AI Face는 메일 앱의 받은 편지함을 읽기만 해요. 메일을 보내거나 옮기거나 지우지 않고, 읽음 표시도 바꾸지 않아요.";
 "Only the AIs you allow can read the accounts you leave on. With links and codes hidden, a link shows only its site and sign-in codes and passwords are left out. After a change, quit that AI app (⌘Q) and open it again." = "허용한 AI만, 켜 둔 계정의 메일을 읽을 수 있어요. 링크와 코드 숨기기를 켜 두면 링크는 사이트 이름만 보이고, 인증 코드와 비밀번호는 빠져요. 바꾼 뒤에는 그 AI 앱을 완전히 종료(⌘Q)하고 다시 여세요.";
+
+/* Automatic updates */
+"Checking for a new version…" = "새 버전 확인 중…";
+"Up to date (%@)" = "최신 버전이에요 (%@)";
+"Updated: %@ → %@" = "업데이트했어요: %@ → %@";
+"Installing the new version…" = "새 버전 설치 중…";
+"New version found, waiting: %@" = "새 버전이 있어요. 기다리는 중: %@";
+"Not updating: %@" = "업데이트 안 함: %@";
+"Update failed: %@" = "업데이트 실패: %@";
+"Could not check: %@" = "확인하지 못했어요: %@";
+"Not available (the project folder is not a git copy)" = "쓸 수 없어요 (프로젝트 폴더가 git으로 받은 폴더가 아니에요)";
+"Not checked yet" = "아직 확인 안 함";
+"Last checked %@" = "마지막 확인 %@";
+"Update automatically" = "자동 업데이트";
+"Check now" = "지금 확인";
+"Updates" = "업데이트";
+"When the app starts and every 3 hours, AI Face looks for a new version on GitHub. It installs it only after the tests and the build pass, then restarts by itself (the face is gone for a few seconds). It waits while a timer, keep awake, a calendar question or an AI chat is going on, and skips when this Mac has its own changes." = "앱을 켤 때와 3시간마다 GitHub에서 새 버전을 찾아요. 테스트와 빌드가 모두 통과해야만 설치하고, 알아서 다시 켜져요(얼굴이 몇 초 사라져요). 타이머, 깨어 있기, 캘린더 확인, AI와 대화 중에는 기다리고, 이 Mac에서 고친 내용이 있으면 건너뛰어요.";

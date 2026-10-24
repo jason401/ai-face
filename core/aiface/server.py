@@ -21,6 +21,7 @@ from . import i18n
 from .i18n import T
 from . import integrations
 from . import mail_access
+from . import updater
 from . import library as photo_library
 from . import moods as face_modes
 from . import paths
@@ -266,6 +267,8 @@ def main():
                 return self.reply(200, {'text': awake.describe(), 'status': awake.status()})
             if self.path == '/mcp':
                 return self.reply(200, integrations.status())
+            if self.path == '/update':   # automatic updates, for the settings window
+                return self.reply(200, updater.status())
             if self.path == '/state':
                 with device.lock:
                     return self.reply(200, device.state())
@@ -325,7 +328,8 @@ def main():
                     # A board that was plugged in after the app started is picked up here.
                     if action not in ('connect', 'disconnect', 'quit', 'firmware', 'mcp_install', 'mcp_remove',
                                       'awake_acquire', 'awake_release', 'awake_resume', 'calendar_settings',
-                                      'calendar_decide', 'calendar_undo', 'mail_settings') \
+                                      'calendar_decide', 'calendar_undo', 'mail_settings', 'update_settings',
+                                      'update_check') \
                             and device.fd is None and not device.paused and ports():
                         try:
                             device.connect(ports()[0])
@@ -391,6 +395,10 @@ def main():
                         calendar_access.save(data.get('changes'))
                     elif action == 'mail_settings':
                         mail_access.save(data.get('changes'))
+                    elif action == 'update_settings':
+                        updater.set_enabled(data.get('enabled'))
+                    elif action == 'update_check':   # "Check now": in the background, it can take minutes
+                        threading.Thread(target=updater.check, args=(device, True), daemon=True).start()
                     elif action == 'calendar_decide':
                         calendar_access.decide(data.get('id'), data.get('allow'))
                     elif action == 'calendar_undo':
@@ -441,6 +449,7 @@ def main():
     threading.Thread(target=auto_connect, args=(device, stop), daemon=True).start()
     threading.Thread(target=expire_working, args=(device, stop), daemon=True).start()
     threading.Thread(target=watch_awake, args=(device, stop), daemon=True).start()
+    threading.Thread(target=updater.watch, args=(device, stop), daemon=True).start()
     # The app stops the server with SIGTERM: run the cleanup below (keep awake off) then too.
     def terminated(*_):
         raise KeyboardInterrupt

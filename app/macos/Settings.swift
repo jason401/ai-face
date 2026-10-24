@@ -155,6 +155,9 @@ final class SettingsStore: NSObject, ObservableObject {
     @Published var loginItem = false
     @Published var mono = false
     @Published var version = ""
+    @Published var autoUpdate = true
+    @Published var updateRunning = false
+    @Published var updateText = ""
     // Keep awake (lid closed)
     @Published var awakeSupported = false
     @Published var awakeReady = false
@@ -238,6 +241,12 @@ final class SettingsStore: NSObject, ObservableObject {
                 self.saverSlide = (saver["slide"] as? NSNumber)?.intValue ?? 60
             }
             self.loadBoardThumbs()
+        }
+        API.shared.getJSON("update") { [weak self] json in
+            guard let self = self, let u = json as? [String: Any] else { return }
+            self.autoUpdate = (u["enabled"] as? Bool) ?? true
+            self.updateRunning = (u["running"] as? Bool) ?? false
+            self.updateText = SettingsStore.updateText(u)
         }
         API.shared.getJSON("library") { [weak self] json in
             guard let self = self, let list = json as? [[String: Any]] else { return }
@@ -669,6 +678,48 @@ final class SettingsStore: NSObject, ObservableObject {
 
     // MARK: General
 
+    // MARK: Automatic updates (core/aiface/updater.py)
+
+    static func updateText(_ u: [String: Any]) -> String {
+        if (u["running"] as? Bool) ?? false { return L("Checking for a new version…") }
+        let detail = (u["detail"] as? String) ?? ""
+        let current = (u["current"] as? String) ?? ""
+        var text: String
+        switch (u["result"] as? String) ?? "" {
+        case "latest": text = String(format: L("Up to date (%@)"), current)
+        case "updated":
+            text = String(format: L("Updated: %@ → %@"), (u["previous"] as? String) ?? "", current)
+            if let first = (u["changes"] as? [String])?.first { text += "\n" + first }
+        case "installing": text = L("Installing the new version…")
+        case "waiting": text = String(format: L("New version found, waiting: %@"), detail)
+        case "skipped": text = String(format: L("Not updating: %@"), detail)
+        case "failed": text = String(format: L("Update failed: %@"), detail)
+        case "error": text = String(format: L("Could not check: %@"), detail)
+        case "unavailable": text = L("Not available (the project folder is not a git copy)")
+        default: return L("Not checked yet")
+        }
+        if let checked = (u["checked"] as? NSNumber)?.doubleValue, checked > 0 {
+            let f = DateFormatter()
+            f.locale = APP_LOCALE
+            f.setLocalizedDateFormatFromTemplate("MMMdjmm")
+            text += "\n" + String(format: L("Last checked %@"), f.string(from: Date(timeIntervalSince1970: checked)))
+        }
+        return text
+    }
+
+    func setAutoUpdate(_ on: Bool) {
+        autoUpdate = on
+        API.shared.call("update_settings", ["enabled": on]) { [weak self] ok, reply in
+            if !ok { self?.autoUpdate = !on; self?.notice = (reply["message"] as? String) ?? "" }
+        }
+    }
+
+    func checkUpdate() {
+        updateRunning = true
+        updateText = L("Checking for a new version…")
+        API.shared.call("update_check")
+    }
+
     func setMono(_ on: Bool) {
         mono = on
         API.shared.call("style", ["mono": on]) { [weak self] ok, reply in
@@ -783,6 +834,22 @@ struct GeneralTab: View {
                         .font(.caption).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+            }
+            Section {
+                Toggle(L("Update automatically"), isOn: Binding(get: { store.autoUpdate }, set: { store.setAutoUpdate($0) }))
+                LabeledContent(L("Status")) {
+                    Text(store.updateText).foregroundStyle(.secondary).multilineTextAlignment(.trailing)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                LabeledContent("") {
+                    Button(L("Check now")) { store.checkUpdate() }.disabled(store.updateRunning)
+                }
+            } header: {
+                Text(L("Updates"))
+            } footer: {
+                Text(L("When the app starts and every 3 hours, AI Face looks for a new version on GitHub. It installs it only after the tests and the build pass, then restarts by itself (the face is gone for a few seconds). It waits while a timer, keep awake, a calendar question or an AI chat is going on, and skips when this Mac has its own changes."))
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Section(L("About")) {
                 LabeledContent(L("Version"), value: "AI Face " + store.version)
