@@ -442,10 +442,11 @@ func ownerDash(_ owner: String) -> [CGFloat]? {
     }
 }
 
+/// Same colors as AI Illuminati's menu bar meter (Claude orange, Codex/GPT green).
 func ownerColor(_ owner: String) -> NSColor {
     switch owner {
-    case "claude": return rgb(0xD9, 0x77, 0x57)
-    case "gpt": return rgb(0x10, 0xA3, 0x7F)
+    case "claude": return .systemOrange
+    case "gpt": return .systemGreen
     default: return rgb(255, 255, 255)
     }
 }
@@ -498,7 +499,7 @@ func renderFace(side: CGFloat, inset: CGFloat, view v: FaceView, pose p: Pose, f
         NSGraphicsContext.restoreGraphicsState()
         if !isClock && !isFire && !isPhoto { drawExtraEffects(p, now) }
         // Border ring: who chose the face, or the timer.
-        let RW = 20.0
+        let RW = 12.0   // thin, so the face itself stays the main thing
         let circle = NSBezierPath(ovalIn: NSRect(x: RW / 2, y: RW / 2, width: 240 - RW, height: 240 - RW))
         circle.lineWidth = CGFloat(RW)
         if v.timerEnd > 0 {
