@@ -55,8 +55,8 @@ struct WeekRow: Identifiable, Equatable {
 let OWNERS = ["claude", "gpt", "user"]
 let OWNER_LABEL = ["claude": "Claude", "gpt": "GPT", "user": L("You")]
 let OWNER_COLOR: [String: Color] = [
-    "claude": Color(red: 0xD9 / 255.0, green: 0x77 / 255.0, blue: 0x57 / 255.0),
-    "gpt": Color(red: 0x10 / 255.0, green: 0xA3 / 255.0, blue: 0x7F / 255.0),
+    "claude": Color(nsColor: ownerColor("claude")),
+    "gpt": Color(nsColor: ownerColor("gpt")),
     "user": Color.gray,
 ]
 // Emotion groups by id (from the server), with their names and colors.
