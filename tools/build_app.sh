@@ -23,20 +23,20 @@ fi
 # --compile-only stops after this (the app's automatic update checks the new version builds);
 # --prebuilt skips it and installs the AIFace.new that --compile-only made.
 if [ "$MODE" != "--prebuilt" ]; then
-msg "1/4 컴파일 (30초쯤 걸려요)" "1/4 Compiling (about 30 seconds)"
-mkdir -p "$APP/Contents/MacOS"
-ARCH="$(uname -m)"
-if ! xcrun swiftc -swift-version 5 -O -target "$ARCH-apple-macos13.0" \
-      -framework Cocoa -framework SwiftUI -framework ServiceManagement -framework EventKit \
-      -o "$APP/Contents/MacOS/AIFace.new" app/macos/*.swift >"$LOG" 2>&1; then
-  echo
-  msg "빌드 실패. 아래 내용(또는 app-build.log)을 Claude에게 알려 주세요." \
-      "Build failed. The details are below (and in app-build.log)."
-  echo "------------------------------------------------------------"
-  cat "$LOG"
-  ask
-  exit 1
-fi
+  msg "1/4 컴파일 (30초쯤 걸려요)" "1/4 Compiling (about 30 seconds)"
+  mkdir -p "$APP/Contents/MacOS"
+  ARCH="$(uname -m)"
+  if ! xcrun swiftc -swift-version 5 -O -target "$ARCH-apple-macos13.0" \
+        -framework Cocoa -framework SwiftUI -framework ServiceManagement -framework EventKit \
+        -o "$APP/Contents/MacOS/AIFace.new" app/macos/*.swift >"$LOG" 2>&1; then
+    echo
+    msg "빌드 실패. 아래 내용(또는 app-build.log)을 Claude에게 알려 주세요." \
+        "Build failed. The details are below (and in app-build.log)."
+    echo "------------------------------------------------------------"
+    cat "$LOG"
+    ask
+    exit 1
+  fi
 fi
 [ "$MODE" = "--compile-only" ] && exit 0
 if [ ! -x "$APP/Contents/MacOS/AIFace.new" ]; then
