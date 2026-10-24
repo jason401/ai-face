@@ -4,6 +4,7 @@
 cd "${0:A:h}/.." || exit 1
 APP="AI Face.app"
 LOG="app-build.log"
+MODE="$1"   # empty (normal build), --compile-only or --prebuilt (see below)
 # Messages in Korean when the Mac's first language is Korean, else English (like the app).
 if defaults read -g AppleLanguages 2>/dev/null | sed -n 2p | grep -q '"\{0,1\}ko'; then KO=1; else KO=; fi
 msg() { if [ -n "$KO" ]; then echo "$1"; else echo "$2"; fi }
@@ -18,7 +19,32 @@ if ! xcode-select -p >/dev/null 2>&1; then
   exit 1
 fi
 
-msg "1/4 실행 중인 앱 종료 (예전 ESP32 Controller 포함)" "1/4 Quitting the running app (and the old ESP32 Controller)"
+# Compile first, into AIFace.new: a failed build leaves the running app alone.
+# --compile-only stops after this (the app's automatic update checks the new version builds);
+# --prebuilt skips it and installs the AIFace.new that --compile-only made.
+if [ "$MODE" != "--prebuilt" ]; then
+msg "1/4 컴파일 (30초쯤 걸려요)" "1/4 Compiling (about 30 seconds)"
+mkdir -p "$APP/Contents/MacOS"
+ARCH="$(uname -m)"
+if ! xcrun swiftc -swift-version 5 -O -target "$ARCH-apple-macos13.0" \
+      -framework Cocoa -framework SwiftUI -framework ServiceManagement -framework EventKit \
+      -o "$APP/Contents/MacOS/AIFace.new" app/macos/*.swift >"$LOG" 2>&1; then
+  echo
+  msg "빌드 실패. 아래 내용(또는 app-build.log)을 Claude에게 알려 주세요." \
+      "Build failed. The details are below (and in app-build.log)."
+  echo "------------------------------------------------------------"
+  cat "$LOG"
+  ask
+  exit 1
+fi
+fi
+[ "$MODE" = "--compile-only" ] && exit 0
+if [ ! -x "$APP/Contents/MacOS/AIFace.new" ]; then
+  msg "새로 빌드한 앱이 없습니다." "There is no newly built app."
+  exit 1
+fi
+
+msg "2/4 실행 중인 앱 종료 (예전 ESP32 Controller 포함)" "2/4 Quitting the running app (and the old ESP32 Controller)"
 for id in local.aiface local.esp32.display; do
   osascript -e "tell application id \"$id\" to quit" >/dev/null 2>&1
 done
@@ -36,20 +62,6 @@ if [ -f "$OLD_AGENT" ]; then
 fi
 sleep 1
 
-msg "2/4 컴파일 (30초쯤 걸려요)" "2/4 Compiling (about 30 seconds)"
-mkdir -p "$APP/Contents/MacOS"
-ARCH="$(uname -m)"
-if ! xcrun swiftc -swift-version 5 -O -target "$ARCH-apple-macos13.0" \
-      -framework Cocoa -framework SwiftUI -framework ServiceManagement -framework EventKit \
-      -o "$APP/Contents/MacOS/AIFace.new" app/macos/*.swift >"$LOG" 2>&1; then
-  echo
-  msg "빌드 실패. 아래 내용(또는 app-build.log)을 Claude에게 알려 주세요." \
-      "Build failed. The details are below (and in app-build.log)."
-  echo "------------------------------------------------------------"
-  cat "$LOG"
-  ask
-  exit 1
-fi
 mv -f "$APP/Contents/MacOS/AIFace.new" "$APP/Contents/MacOS/AIFace"
 # Translations (Localizable.strings per language): the app follows the Mac's language.
 rm -rf "$APP/Contents/Resources"

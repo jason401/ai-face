@@ -29,6 +29,9 @@ server named `ai-face`. The ESP32 round LCD board is optional. Public repo: gith
 - `core/aiface/integrations.py` — connects Claude desktop, Codex, Claude Code (`claude mcp add-json -s user`;
   falls back to the copy inside Claude.app's Code tab under `~/Library/Application Support/Claude/claude-code`)
   and the Claude Code keep-awake hooks (`~/.claude/settings.json`).
+- `core/aiface/updater.py` — automatic updates: every 3 h `git fetch origin main`, fast-forward, tests,
+  `build_app.sh --compile-only`, then detached `build_app.sh --prebuilt` (quits and restarts the app);
+  any failure resets to the old commit. Skips local changes/commits; waits while busy. State in `update.json`.
 - `core/aiface/moods.py` — 78 moods in 11 groups (the MCP enum comes from here).
 - `firmware/` — ESP32 firmware; `tools/firmware_sim` checks it on the computer.
 - Data: `~/Library/Application Support/AI Face` (settings.json, history, photos, awake.json, calendar log).
