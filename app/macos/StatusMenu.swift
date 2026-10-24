@@ -2,25 +2,41 @@
 // bigger face on top, quick actions, 설정…, 종료).
 import Cocoa
 
-/// Top of the menu: a bigger animated face, the mood name and who chose it.
+/// Top of the menu: a bigger animated face (click it to pick a face), the mood name, who
+/// chose it, and two small buttons on the right: campfire and clock.
 final class MenuHeader: NSView {
     let face = NSImageView(frame: NSRect(x: 14, y: 10, width: 64, height: 64))
+    let faceButton = NSButton(frame: NSRect(x: 14, y: 10, width: 64, height: 64))
+    let fireButton = MenuHeader.symbolButton("flame", L("Light the campfire"), y: 44)
+    let clockButton = MenuHeader.symbolButton("clock", L("Show the clock"), y: 12)
     let title = NSTextField(labelWithString: "")
     let detail = NSTextField(labelWithString: "")
     let extra = NSTextField(labelWithString: "")
 
+    static func symbolButton(_ symbol: String, _ tip: String, y: CGFloat) -> NSButton {
+        let b = NSButton(frame: NSRect(x: 214, y: y, width: 28, height: 28))
+        b.image = NSImage(systemSymbolName: symbol, accessibilityDescription: tip)
+        b.bezelStyle = .recessed
+        b.showsBorderOnlyWhileMouseInside = true
+        b.toolTip = tip
+        return b
+    }
+
     init() {
-        super.init(frame: NSRect(x: 0, y: 0, width: 280, height: 84))
+        super.init(frame: NSRect(x: 0, y: 0, width: 252, height: 84))
         face.imageScaling = .scaleProportionallyUpOrDown
         addSubview(face)
+        faceButton.isTransparent = true   // the face itself is the button
+        faceButton.toolTip = L("Choose a face")
+        for b in [faceButton, fireButton, clockButton] { addSubview(b) }
         title.font = NSFont.systemFont(ofSize: 15, weight: .semibold)
         detail.font = NSFont.systemFont(ofSize: 12)
         detail.textColor = .secondaryLabelColor
         extra.font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)
         extra.textColor = .secondaryLabelColor
-        title.frame = NSRect(x: 90, y: 50, width: 180, height: 20)
-        detail.frame = NSRect(x: 90, y: 31, width: 180, height: 16)
-        extra.frame = NSRect(x: 90, y: 13, width: 180, height: 16)
+        title.frame = NSRect(x: 88, y: 50, width: 120, height: 20)
+        detail.frame = NSRect(x: 88, y: 31, width: 120, height: 16)
+        extra.frame = NSRect(x: 88, y: 13, width: 120, height: 16)
         for label in [title, detail, extra] {
             label.lineBreakMode = .byTruncatingTail
             addSubview(label)
@@ -56,6 +72,7 @@ final class StatusController: NSObject, NSMenuDelegate {
     private var icons: [String: NSImage] = [:]
 
     private let menu = NSMenu()
+    private let picker = NSPopover()
     private let header = MenuHeader()
     private let headerItem = NSMenuItem()
     private var menuOpen = false
@@ -79,6 +96,13 @@ final class StatusController: NSObject, NSMenuDelegate {
         menu.autoenablesItems = false
         item.menu = menu
         headerItem.view = header
+        header.faceButton.target = self
+        header.faceButton.action = #selector(showPicker)
+        header.fireButton.target = self
+        header.fireButton.action = #selector(campfire)
+        header.clockButton.target = self
+        header.clockButton.action = #selector(clock)
+        picker.behavior = .transient
         rebuildMenu()
         // .common: keep animating while the menu is open (event tracking run loop mode).
         let draw = Timer(timeInterval: 1.0 / 12, target: self, selector: #selector(tick), userInfo: nil, repeats: true)
@@ -169,10 +193,10 @@ final class StatusController: NSObject, NSMenuDelegate {
         }
     }
 
-    /// A small still of the mood for its menu item: its most telling frame, like the preview sheet.
-    private func icon(_ mood: [String: Any]) -> NSImage? {
+    /// A still of the mood for the face picker: its most telling frame, like the preview sheet.
+    private func icon(_ mood: [String: Any], side: CGFloat = 40) -> NSImage? {
         guard let id = mood["id"] as? String else { return nil }
-        let key = id + (view.mono ? "|mono" : "")
+        let key = id + (view.mono ? "|mono" : "") + "|\(side)"
         if let cached = icons[key] { return cached }
         let frames = framesOf(mood)
         guard !frames.isEmpty else { return nil }
@@ -183,7 +207,7 @@ final class StatusController: NSObject, NSMenuDelegate {
         for f in frames where score(f) > score(best) { best = f }
         var still = FaceView()
         still.mono = view.mono
-        let image = renderFace(side: 18, inset: 0, view: still, pose: poseOf(best), fire: fire, now: 0)
+        let image = renderFace(side: side, inset: 1, view: still, pose: poseOf(best), fire: fire, now: 0)
         icons[key] = image
         return image
     }
@@ -299,6 +323,8 @@ final class StatusController: NSObject, NSMenuDelegate {
         header.title.stringValue = name.isEmpty ? "AI Face" : name
         header.detail.stringValue = view.kind == "face" ? ownerName(view.owner) : (board ? L("Showing on the board") : L("Showing in the menu bar"))
         header.extra.stringValue = timerText(now) ?? awakeText(now) ?? (board ? L("● Board connected") : L("○ No board"))
+        header.fireButton.state = view.kind == "fire" ? .on : .off
+        header.clockButton.state = view.kind == "clock" ? .on : .off
     }
 
     // MARK: - Menu
@@ -342,12 +368,10 @@ final class StatusController: NSObject, NSMenuDelegate {
         timerMenu.addItem(.separator())
         _ = add(timerMenu, L("Custom…"), #selector(customTimer))
         timer.submenu = timerMenu
-        _ = add(menu, L("Light the campfire"), #selector(campfire))
-        _ = add(menu, L("Show the clock"), #selector(clock))
         if awakeSupported {
+            // Short: the state only when it is on; the explanation is in Settings → General.
             let now = Date.timeIntervalSinceReferenceDate
-            let title = L("Keep awake") + " · " + (view.awake
-                ? (awakeText(now) ?? "").replacingOccurrences(of: "☀ ", with: "") : L("Turned off"))
+            let title = view.awake ? (awakeText(now) ?? L("Keep awake")) : L("Keep awake")
             let item = add(menu, title, nil)
             let sub = NSMenu()
             sub.autoenablesItems = false
@@ -379,50 +403,47 @@ final class StatusController: NSObject, NSMenuDelegate {
             } else {
                 _ = add(sub, L("Set up…"), #selector(setUpAwake))
             }
-            sub.addItem(.separator())
-            let note = add(sub, L("Stays awake with the lid closed, then turns off by itself."), nil)
-            note.isEnabled = false
             item.submenu = sub
         }
 
-        if !moodList.isEmpty {
-            let faces = add(menu, L("Faces"), nil)
-            let groups = NSMenu()
-            groups.autoenablesItems = false
-            let picks = recent.compactMap { moods[$0] }
-            if !picks.isEmpty {
-                let title = add(groups, L("Recent"), nil)
-                title.isEnabled = false
-                for mood in picks { moodItem(groups, mood) }
-                groups.addItem(.separator())
-            }
-            var order: [String] = []
-            var byGroup: [String: [[String: Any]]] = [:]
-            for mood in moodList {
-                guard mood["id"] is String else { continue }
-                let g = (mood["group"] as? String) ?? L("Other")
-                if byGroup[g] == nil { order.append(g); byGroup[g] = [] }
-                byGroup[g]?.append(mood)
-            }
-            for g in order {
-                let groupItem = add(groups, g, nil)
-                let list = NSMenu()
-                list.autoenablesItems = false
-                for mood in byGroup[g] ?? [] { moodItem(list, mood) }
-                groupItem.submenu = list
-            }
-            faces.submenu = groups
-        }
         menu.addItem(.separator())
         _ = add(menu, L("Settings…"), #selector(settings), key: ",")
         _ = add(menu, L("Quit AI Face"), #selector(quit), key: "q")
     }
 
-    private func moodItem(_ list: NSMenu, _ mood: [String: Any]) {
-        let it = add(list, (mood["name"] as? String) ?? "", #selector(chooseMood(_:)), object: mood["id"])
-        it.image = icon(mood)
-        it.toolTip = mood["description"] as? String
-        if view.kind == "face" && (mood["id"] as? String) == animator.emotion { it.state = .on }
+    /// Recent picks first, then every group, in the server's order.
+    private func pickerSections() -> [(String, [[String: Any]])] {
+        var sections: [(String, [[String: Any]])] = []
+        let picks = recent.compactMap { moods[$0] }
+        if !picks.isEmpty { sections.append((L("Recent"), picks)) }
+        var order: [String] = []
+        var byGroup: [String: [[String: Any]]] = [:]
+        for mood in moodList {
+            guard mood["id"] is String else { continue }
+            let g = (mood["group"] as? String) ?? L("Other")
+            if byGroup[g] == nil { order.append(g); byGroup[g] = [] }
+            byGroup[g]?.append(mood)
+        }
+        for g in order { sections.append((g, byGroup[g] ?? [])) }
+        return sections
+    }
+
+    /// Clicking the big face: close the menu and open the face picker under the menu bar face.
+    @objc func showPicker() {
+        menu.cancelTracking()
+        guard !moodList.isEmpty else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self, let button = self.item.button else { return }
+            self.picker.contentViewController = FacePicker(
+                sections: self.pickerSections(), current: self.view.kind == "face" ? self.animator.emotion : "",
+                icon: { [weak self] mood in self?.icon(mood) },
+                choose: { [weak self] id in
+                    self?.picker.performClose(nil)
+                    API.shared.call("emotion", ["id": id]) { [weak self] ok, reply in self?.report(ok, reply) }
+                })
+            NSApp.activate(ignoringOtherApps: true)
+            self.picker.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        }
     }
 
     private func report(_ ok: Bool, _ reply: [String: Any]) {
@@ -466,16 +487,13 @@ final class StatusController: NSObject, NSMenuDelegate {
     }
 
     @objc func campfire() {
+        menu.cancelTracking()
         API.shared.call("mode", ["mode": "FIRE"]) { [weak self] ok, reply in self?.report(ok, reply) }
     }
 
     @objc func clock() {
+        menu.cancelTracking()
         API.shared.call("mode", ["mode": "CLOCK"]) { [weak self] ok, reply in self?.report(ok, reply) }
-    }
-
-    @objc func chooseMood(_ sender: NSMenuItem) {
-        guard let id = sender.representedObject as? String else { return }
-        API.shared.call("emotion", ["id": id]) { [weak self] ok, reply in self?.report(ok, reply) }
     }
 
     @objc func startAwake(_ sender: NSMenuItem) {
