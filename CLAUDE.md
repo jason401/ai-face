@@ -23,6 +23,9 @@ server named `ai-face`. The ESP32 round LCD board is optional. Public repo: gith
   `main.swift` handles `AIFace --calendar ...` (JSON CLI) before the app starts.
   `Mail.swift` reads Mail (`AIFace --mail ...`).
   Strings: `app/macos/Resources/{en,ko}.lproj/Localizable.strings` (`L("...")`; add Korean for new labels).
+- Settings window: compact cards like AI Illuminati (`SettingsKit.swift`: SettingsPage/Card/Row/Note/Action).
+  General tab is converted; other tabs still use Form (plan: 5 tabs, window 334 pt wide). Check looks with
+  `zsh tools/tests/render_settings.sh <dir>` (PNG previews, en/ko, light/dark; no real app or data touched).
 - `core/run_server.py` → `core/aiface/server.py` — local HTTP server the app starts (127.0.0.1,
   token header `X-ESP-Token`). Board serial, history, photos, keep awake, calendar.
 - `core/ai_face_mcp.py` — thin MCP shim; copied to `~/Library/Application Support/AI Face` and
