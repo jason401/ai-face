@@ -1,5 +1,5 @@
-// The settings window: toolbar tabs (일반 · 대기 화면 · 사진 · AI 연결 · 보드), each a
-// SwiftUI form, like the settings of RunCat and other menu bar apps.
+// The settings window: toolbar tabs (일반 · AI · 보드 · 기록), compact cards like AI Illuminati's.
+// This file holds the shared state; the tabs are in SettingsTabs.swift.
 import Cocoa
 import ServiceManagement
 import SwiftUI
@@ -798,481 +798,7 @@ enum LoginItem {
     }
 }
 
-// MARK: - Tabs
-
-struct GeneralTab: View {
-    @ObservedObject var store: SettingsStore
-
-    var body: some View {
-        SettingsPage {
-            SettingsCard(title: L("Menu bar")) {
-                SettingsRow(title: L("Appearance")) {
-                    Toggle(L("Monochrome"), isOn: Binding(get: { store.mono }, set: { store.setMono($0) }))
-                        .toggleStyle(.checkbox)
-                        .help(L("Draws the menu bar face in grays and shows who chose it by the ring pattern: you = solid, Claude = short dashes, GPT = six long arcs. The board always stays in color."))
-                }
-            }
-            SettingsCard(title: L("App")) {
-                SettingsRow(title: L("Open at login")) {
-                    Toggle(L("Open at login"), isOn: Binding(get: { store.loginItem }, set: { store.setLogin($0) }))
-                        .labelsHidden().toggleStyle(.switch)
-                        .help(L("The face appears in the menu bar as soon as you log in."))
-                }
-                Divider()
-                SettingsRow(title: L("Version")) {
-                    Text("AI Face " + store.version).foregroundStyle(.secondary).textSelection(.enabled)
-                }
-            }
-            if store.awakeSupported {
-                SettingsCard(title: L("Keep awake")) {
-                    SettingsRow(title: L("Status")) {
-                        Text(store.awakeStatus).foregroundStyle(.secondary)
-                    }
-                    Divider()
-                    SettingsRow(title: L("Permission")) {
-                        SettingsAction(title: store.awakeReady ? L("Remove…") : L("Set up…")) { store.setUpAwake() }
-                    }
-                    if store.awakeReady {
-                        Divider()
-                        SettingsRow(title: L("awake command")) {
-                            if store.awakeCommand {
-                                Text(L("Installed")).foregroundStyle(.secondary)
-                            } else {
-                                SettingsAction(title: L("Install…")) { store.setUpAwake() }
-                            }
-                        }
-                    }
-                    SettingsNote(text: store.awakeNotice.isEmpty
-                                 ? L("Lid closed, 1–4 hours from the menu. Turns off by itself.") : store.awakeNotice, lines: 3)
-                        .help(L("Keeps the MacBook awake even with the lid closed, for 1, 2 or 4 hours (menu → Keep awake). It turns off at the end, at 20% battery, when the Mac gets hot, in Low Power Mode and when AI Face quits. Setting it up asks for your Mac password once, in Terminal, and allows only this one setting."))
-                }
-            }
-            SettingsCard(title: L("Updates & storage")) {
-                SettingsRow(title: L("Auto update")) {
-                    Toggle(L("Update automatically"), isOn: Binding(get: { store.autoUpdate }, set: { store.setAutoUpdate($0) }))
-                        .labelsHidden().toggleStyle(.switch)
-                    SettingsAction(title: L("Check now")) { store.checkUpdate() }
-                        .disabled(store.updateRunning)
-                }
-                SettingsNote(text: store.updateText, lines: 3)
-                    .help(L("AI Face checks the stable release on GitHub at startup and every 3 hours. It tests and builds updates in its own source folder, then restarts when idle. Your development folder is never changed. Existing Python and Command Line Tools are required."))
-                Divider()
-                SettingsRow(title: L("Folders")) {
-                    SettingsAction(title: L("App data")) { store.openDataFolder() }
-                        .help(L("Settings, photos, history, the update copy and backups"))
-                    SettingsAction(title: L("App")) { store.revealApp() }
-                        .help(Bundle.main.bundlePath)
-                }
-            }
-        }
-    }
-}
-
-/// Screen saver settings on top, the photos it can show below (one tab: photos are mostly
-/// for the photo / slideshow savers).
-struct SaverTab: View {
-    @ObservedObject var store: SettingsStore
-
-    func bind<T>(_ path: ReferenceWritableKeyPath<SettingsStore, T>) -> Binding<T> {
-        return Binding(get: { store[keyPath: path] }, set: { store[keyPath: path] = $0; store.saveSaver() })
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 16) {
-                    Picker(L("Screen saver"), selection: bind(\.saverType)) {
-                        ForEach(SAVER_TYPES, id: \.self) { c in Text(c.label).tag(c.value) }
-                    }
-                    Picker(L("Wait"), selection: bind(\.saverAfter)) {
-                        ForEach(store.afterChoices, id: \.self) { m in Text(minutesText(m)).tag(m) }
-                    }
-                    .disabled(store.saverType == "off")
-                    .frame(maxWidth: 150)
-                }
-                if store.saverType == "photo" || store.saverType == "slideshow" {
-                    HStack(spacing: 16) {
-                        Toggle(L("Clock hands over photos"), isOn: bind(\.saverClock))
-                        if store.saverType == "slideshow" {
-                            Picker(L("Change every"), selection: bind(\.saverSlide)) {
-                                ForEach(store.slideChoices, id: \.self) { c in Text(c.label).tag(c.value) }
-                            }
-                            .frame(maxWidth: 200)
-                        }
-                    }
-                }
-                Text(store.saverHint + " " + L("A new face from an AI or the end of a timer brings the face back."))
-                    .font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding([.horizontal, .top], 20)
-            .padding(.bottom, 8)
-            Divider().padding(.horizontal, 20)
-            PhotosTab(store: store)
-        }
-    }
-}
-
-struct PhotosTab: View {
-    // No @State: the Command Line Tools have no SwiftUI macro plugin, and the newest SDK
-    // resolves @State to a macro. View state lives in the store instead.
-    @ObservedObject var store: SettingsStore
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text(L("Photos on the board")).font(.headline)
-                Text("\(store.photos.count)/10").foregroundStyle(.secondary)
-                Spacer()
-            }
-            if !store.connected {
-                Text(L("They show up here when a board is connected.")).foregroundStyle(.secondary).frame(height: 64)
-            } else if store.photos.isEmpty {
-                Text(L("None yet. Click a photo in the library below to send it to the board.")).foregroundStyle(.secondary).frame(height: 64)
-            } else {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 10) {
-                        ForEach(store.photos, id: \.self) { id in boardThumb(id) }
-                    }
-                    .padding(4)
-                }
-                .frame(height: 72)
-            }
-            Divider()
-            HStack {
-                Text(L("Photo library")).font(.headline)
-                Text(String(format: L("%d photos"), store.library.count)).foregroundStyle(.secondary)
-                Spacer()
-                Button(L("Add photos…")) { store.choosePictures() }
-                Button { store.openLibraryFolder() } label: { Image(systemName: "folder") }
-                    .help(L("Show in Finder"))
-            }
-            ZStack {
-                ScrollView {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 88, maximum: 110), spacing: 10)], spacing: 10) {
-                        ForEach(store.library) { item in libraryThumb(item) }
-                    }
-                    .padding(2)
-                }
-                if store.library.isEmpty || store.dropping {
-                    RoundedRectangle(cornerRadius: 12)
-                        .strokeBorder(style: StrokeStyle(lineWidth: 2, dash: [6]))
-                        .foregroundStyle(store.dropping ? Color.accentColor : Color.secondary.opacity(0.5))
-                        .overlay(Text(L("Drop pictures here")).foregroundStyle(.secondary))
-                        .background(store.dropping ? Color.accentColor.opacity(0.08) : Color.clear)
-                }
-            }
-            .frame(maxHeight: .infinity)
-            .onDrop(of: [UTType.fileURL], isTargeted: $store.dropping) { providers in
-                var urls: [URL] = []
-                let group = DispatchGroup()
-                for provider in providers {
-                    group.enter()
-                    _ = provider.loadObject(ofClass: URL.self) { url, _ in
-                        if let url = url { DispatchQueue.main.async { urls.append(url) } }
-                        group.leave()
-                    }
-                }
-                group.notify(queue: .main) { store.addPictures(urls) }
-                return true
-            }
-            Text(store.notice.isEmpty ? L("Click a photo to show it on the board. Right-click to delete.") : store.notice)
-                .font(.caption).foregroundStyle(.secondary).lineLimit(2)
-        }
-        .padding(20)
-    }
-
-    func boardThumb(_ id: Int) -> some View {
-        Button { store.showBoardPhoto(id) } label: {
-            ZStack {
-                Color.black
-                if let image = store.boardThumbs[id] {
-                    Image(nsImage: image).resizable().scaledToFill()
-                }
-            }
-            .frame(width: 60, height: 60)
-            .clipShape(Circle())
-            .overlay(Circle().stroke(id == store.currentPhoto ? Color.accentColor : Color.clear, lineWidth: 3))
-        }
-        .buttonStyle(.plain)
-        .help(L("Show this photo"))
-        .contextMenu {
-            Button(L("Show on the board")) { store.showBoardPhoto(id) }
-            Button(L("Delete from the board")) { store.deleteBoardPhoto(id) }
-        }
-    }
-
-    func libraryThumb(_ item: LibraryItem) -> some View {
-        Button { store.sendToBoard(item) } label: {
-            ZStack {
-                Color.black
-                if let image = store.thumbs[item.id] {
-                    Image(nsImage: image).resizable().scaledToFill()
-                }
-                if store.sending == item.id {
-                    Color.black.opacity(0.5)
-                    ProgressView().controlSize(.small)
-                }
-            }
-            .frame(width: 88, height: 88)
-            .clipShape(RoundedRectangle(cornerRadius: 10))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help(item.name)
-        .contextMenu {
-            Button(L("Show on the board")) { store.sendToBoard(item) }
-            Button(L("Remove from the library")) { store.deleteFromLibrary(item) }
-        }
-    }
-}
-
-struct AITab: View {
-    @ObservedObject var store: SettingsStore
-
-    func statusText(_ s: String) -> String {
-        switch s {
-        case "on": return L("Connected")
-        case "other": return L("Connected to another location")
-        case "error": return L("Cannot read its settings file")
-        default: return L("Not connected")
-        }
-    }
-
-    func row(_ title: String, _ status: String, _ target: String, available: Bool = true) -> some View {
-        LabeledContent(title) {
-            HStack(spacing: 10) {
-                Text(available ? statusText(status) : L("Not installed"))
-                    .foregroundStyle(status == "on" ? Color.green : Color.secondary)
-                if available {
-                    if status == "on" {
-                        Button(L("Disconnect")) { store.setAI(target, on: false) }
-                    } else {
-                        Button(L("Connect")) { store.setAI(target, on: true) }
-                    }
-                }
-            }
-        }
-    }
-
-    var body: some View {
-        Form {
-            Section {
-                row(L("Claude desktop"), store.claude, "claude")
-                row("Codex (GPT)", store.codex, "codex", available: store.codexAvailable)
-                row("Claude Code", store.claudeCode, "claude_code", available: store.claudeCodeAvailable)
-                if store.awakeSupported {
-                    Toggle(L("Claude Code: keep the Mac awake while it works"),
-                           isOn: Binding(get: { store.hooks == "on" },
-                                         set: { store.setAI("claude_code_awake", on: $0) }))
-                        .disabled(!store.awakeReady)
-                }
-            } header: {
-                Text(L("AI apps"))
-            } footer: {
-                Text(store.aiNotice.isEmpty
-                     ? L("Once connected, the AI picks a face for every reply. After connecting or disconnecting, quit that app (⌘Q) and open it again. Ring colors: Claude orange, GPT green, your own picks white.")
-                     : store.aiNotice)
-                    .font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Section(L("Other apps")) {
-                LabeledContent(L("Server command")) {
-                    Text(store.otherAppCommand)
-                        .font(.system(.caption, design: .monospaced))
-                        .textSelection(.enabled)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.trailing)
-                }
-            }
-        }
-        .formStyle(.grouped)
-    }
-}
-
-struct CalendarTab: View {
-    @ObservedObject var store: SettingsStore
-
-    var body: some View {
-        Form {
-            Section {
-                LabeledContent(L("Access")) {
-                    HStack(spacing: 10) {
-                        Text(store.calAccessText)
-                            .foregroundStyle(store.calAccess == "full" ? Color.green : Color.secondary)
-                        if store.calAccess != "full" && store.calAccess != "" && store.calAccess != "unavailable" {
-                            Button(store.calAccess == "notDetermined" ? L("Allow…") : L("Open System Settings")) {
-                                store.requestCalendarAccess()
-                            }
-                        }
-                    }
-                }
-            } header: {
-                Text(L("Calendar"))
-            }
-            Section {
-                Toggle(L("Claude can read it"), isOn: Binding(get: { store.calClaude },
-                                                             set: { store.setCalendar(["apps": ["claude": $0]]) }))
-                Toggle(L("GPT (Codex) can read it"), isOn: Binding(get: { store.calGPT },
-                                                                  set: { store.setCalendar(["apps": ["gpt": $0]]) }))
-                Toggle(L("Include notes and attendees"), isOn: Binding(get: { store.calDetails },
-                                                                      set: { store.setCalendar(["details": $0]) }))
-                ForEach(store.calendars) { cal in
-                    Toggle(isOn: Binding(get: { cal.shown }, set: { store.setCalendarShown(cal.id, $0) })) {
-                        Text(cal.title) + Text("  " + cal.account).foregroundColor(.secondary).font(.caption)
-                    }
-                }
-            } header: {
-                Text(L("Reading"))
-            } footer: {
-                Text(L("Only the AIs you allow see the calendars you leave on: titles, times and places; notes and attendees only if you turn them on. After a change, quit that AI app (⌘Q) and open it again."))
-                    .font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Section {
-                Toggle(L("Claude can add and change events"), isOn: Binding(get: { store.calWriteClaude },
-                    set: { store.setCalendar(["write_apps": ["claude": $0]]) }))
-                Toggle(L("GPT (Codex) can add and change events"), isOn: Binding(get: { store.calWriteGPT },
-                    set: { store.setCalendar(["write_apps": ["gpt": $0]]) }))
-                Toggle(L("Ask me before every change"), isOn: Binding(get: { store.calConfirm },
-                    set: { store.setCalendar(["confirm": $0]) }))
-                ForEach(store.calendars.filter { $0.canWrite }) { cal in
-                    Toggle(isOn: Binding(get: { cal.write }, set: { store.setCalendarWritable(cal.id, $0) })) {
-                        Text(cal.title) + Text("  " + cal.account).foregroundColor(.secondary).font(.caption)
-                    }
-                }
-            } header: {
-                Text(L("Writing"))
-            } footer: {
-                Text(L("AIs may add events to the calendars turned on here, and change or delete only events they added through AI Face; never anyone else's. With asking on, each change waits for your OK in a window. No invitations are sent."))
-                    .font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            if !store.calChanges.isEmpty {
-                Section(L("Recent changes")) {
-                    ForEach(store.calChanges) { change in
-                        HStack {
-                            Text(change.text).font(.caption).lineLimit(2)
-                                .foregroundStyle(change.undone ? Color.secondary : Color.primary)
-                            Spacer()
-                            if change.undone {
-                                Text(L("Undone")).font(.caption).foregroundStyle(.secondary)
-                            } else {
-                                Button(L("Undo")) { store.undoCalendarChange(change.n) }
-                            }
-                        }
-                    }
-                }
-            }
-            if !store.aiNotice.isEmpty {
-                Section { Text(store.aiNotice).font(.caption).foregroundStyle(.secondary) }
-            }
-        }
-        .formStyle(.grouped)
-        .onAppear { store.loadCalendar() }
-    }
-}
-
-struct MailTab: View {
-    @ObservedObject var store: SettingsStore
-
-    var body: some View {
-        Form {
-            Section {
-                LabeledContent(L("Access")) {
-                    HStack(spacing: 10) {
-                        Text(store.mailAccessText)
-                            .foregroundStyle(store.mailAccess == "allowed" ? Color.green : Color.secondary)
-                        if store.mailAsking {
-                            ProgressView().controlSize(.small)
-                        } else if store.mailAccess != "allowed" && store.mailAccess != "" && store.mailAccess != "unavailable" {
-                            Button(store.mailAccess == "denied" ? L("Open System Settings") : L("Allow…")) {
-                                store.requestMailAccess()
-                            }
-                        }
-                    }
-                }
-            } header: {
-                Text(L("Mail"))
-            } footer: {
-                Text(L("AI Face reads the Mail app's inboxes. It never sends, moves or deletes mail, and does not mark it as read."))
-                    .font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Section {
-                Toggle(L("Claude can read it"), isOn: Binding(get: { store.mailClaude },
-                                                             set: { store.setMail(["apps": ["claude": $0]]) }))
-                Toggle(L("GPT (Codex) can read it"), isOn: Binding(get: { store.mailGPT },
-                                                                  set: { store.setMail(["apps": ["gpt": $0]]) }))
-                Toggle(L("Hide links and codes"), isOn: Binding(get: { store.mailHideLinks },
-                                                               set: { store.setMail(["hide_links": $0]) }))
-                ForEach(store.mailAccounts) { acct in
-                    Toggle(acct.name, isOn: Binding(get: { acct.shown }, set: { store.setMailShown(acct.name, $0) }))
-                }
-            } header: {
-                Text(L("Reading"))
-            } footer: {
-                Text(L("Only the AIs you allow can read the accounts you leave on. With links and codes hidden, a link shows only its site and sign-in codes and passwords are left out. After a change, quit that AI app (⌘Q) and open it again."))
-                    .font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            if !store.aiNotice.isEmpty {
-                Section { Text(store.aiNotice).font(.caption).foregroundStyle(.secondary) }
-            }
-        }
-        .formStyle(.grouped)
-        .onAppear { store.loadMail() }
-    }
-}
-
-struct BoardTab: View {
-    @ObservedObject var store: SettingsStore
-
-    var body: some View {
-        Form {
-            Section(L("ESP32 display")) {
-                LabeledContent(L("Status")) {
-                    Text(store.connected ? L("Connected") : (store.ports.isEmpty ? L("Not connected") : L("Connecting or error")))
-                        .foregroundStyle(store.connected ? Color.green : Color.secondary)
-                }
-                if store.connected {
-                    LabeledContent(L("Port"), value: store.port)
-                }
-                if !store.message.isEmpty {
-                    Text(store.message).font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
-                }
-                if !store.connected && !store.ports.isEmpty {
-                    Button(L("Reconnect")) { store.reconnect() }
-                }
-            }
-            Section {
-                HStack {
-                    Button(L("Update firmware")) { store.updateFirmware() }
-                        .disabled(store.ports.isEmpty || store.firmwareBusy || store.flashing)
-                    if store.firmwareBusy || store.flashing {
-                        ProgressView().controlSize(.small)
-                    }
-                }
-                if !store.firmwareLog.isEmpty {
-                    ScrollView {
-                        Text(store.firmwareLog)
-                            .font(.system(.caption, design: .monospaced))
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .frame(height: 140)
-                }
-            } header: {
-                Text(L("Firmware"))
-            } footer: {
-                Text(L("Compiles firmware/ESP32_Display from the project and uploads it to the board. Needs Arduino IDE 2 in Applications; the first time takes 1–2 minutes."))
-                    .font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .formStyle(.grouped)
-    }
-}
+// The tabs themselves are in SettingsTabs.swift.
 
 // MARK: - Window
 
@@ -1280,13 +806,12 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     let store = SettingsStore()
     private var window: NSWindow?
 
-    static let size = NSSize(width: 520, height: 470)
+    static let size = NSSize(width: 334, height: 460)
 
     private func tab<V: View>(_ content: V, _ title: String, _ symbol: String) -> NSTabViewItem {
         let size = SettingsWindowController.size
         let host = NSHostingController(rootView: content.frame(width: size.width, height: size.height))
-        // A fixed size: otherwise the hosting view sizes itself from the forms' ideal width
-        // (long footers on one line) and the window shows it clipped edge to edge.
+        // A fixed size: otherwise the hosting view sizes itself from its content's ideal width.
         host.sizingOptions = []
         host.view.frame = NSRect(origin: .zero, size: size)
         host.preferredContentSize = size
@@ -1302,12 +827,9 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             let tabs = NSTabViewController()
             tabs.tabStyle = .toolbar
             tabs.addTabViewItem(tab(GeneralTab(store: store), L("General"), "gearshape"))
-            tabs.addTabViewItem(tab(SaverTab(store: store), L("Screen saver"), "moon.zzz"))
-            tabs.addTabViewItem(tab(HistoryTab(store: store), L("History"), "chart.bar"))
-            tabs.addTabViewItem(tab(AITab(store: store), L("AI apps"), "sparkles"))
-            tabs.addTabViewItem(tab(CalendarTab(store: store), L("Calendar"), "calendar"))
-            tabs.addTabViewItem(tab(MailTab(store: store), L("Mail"), "envelope"))
+            tabs.addTabViewItem(tab(AITab(store: store), L("AI"), "sparkles"))
             tabs.addTabViewItem(tab(BoardTab(store: store), L("Board"), "cpu"))
+            tabs.addTabViewItem(tab(HistoryTab(store: store), L("History"), "chart.bar"))
             let w = NSWindow(contentViewController: tabs)
             w.styleMask = [.titled, .closable, .miniaturizable]
             w.setContentSize(SettingsWindowController.size)
@@ -1328,85 +850,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
 
 // MARK: - 기록 tab
-
-struct HistoryTab: View {
-    @ObservedObject var store: SettingsStore
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack {
-                    Button { store.moveDay(-1) } label: { Image(systemName: "chevron.left") }
-                    Text(store.historyDayText).font(.headline).frame(minWidth: 110)
-                    Button { store.moveDay(1) } label: { Image(systemName: "chevron.right") }
-                        .disabled(store.isToday)
-                    Spacer()
-                    if !store.isToday { Button(L("Today")) { store.goToday() } }
-                    Text(String(format: L("%d changes"), store.dayTotal)).foregroundStyle(.secondary)
-                }
-                HStack(spacing: 10) {
-                    ForEach(OWNERS, id: \.self) { owner in ownerCard(owner) }
-                }
-                section(L("Emotion groups")) { distribution }
-                section(L("Timeline")) { TimelineStrip(events: store.timeline, day: store.historyDay) }
-                section(L("Last 7 days")) { WeekChart(rows: store.week) }
-                HStack(alignment: .top) {
-                    Text(L("Each face change is saved on this Mac: only the time, who chose it and the mood. No conversation text is saved."))
-                        .font(.caption).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Spacer()
-                    Button(L("Delete all history…")) { store.clearHistory() }
-                }
-            }
-            .padding(20)
-        }
-    }
-
-    func section<Content: View>(_ title: String, @ViewBuilder _ content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(.subheadline.weight(.semibold))
-            content()
-        }
-    }
-
-    func ownerCard(_ owner: String) -> some View {
-        let s = store.dayStats[owner] ?? OwnerStats()
-        return VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
-                Circle().fill(OWNER_COLOR[owner] ?? .gray).frame(width: 8, height: 8)
-                Text(OWNER_LABEL[owner] ?? owner).font(.caption).foregroundStyle(.secondary)
-            }
-            Text("\(s.count)").font(.system(size: 24, weight: .semibold)).monospacedDigit()
-            ForEach(s.top, id: \.self) { line in
-                Text(line).font(.caption).lineLimit(1)
-            }
-            if s.top.isEmpty { Text("-").font(.caption).foregroundStyle(.secondary) }
-            Spacer(minLength: 0)
-        }
-        .padding(10)
-        .frame(maxWidth: .infinity, minHeight: 110, alignment: .topLeading)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Color.secondary.opacity(0.08)))
-    }
-
-    var distribution: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ForEach(OWNERS, id: \.self) { owner in
-                let s = store.dayStats[owner] ?? OwnerStats()
-                if s.count > 0 {
-                    HStack(spacing: 8) {
-                        Text(OWNER_LABEL[owner] ?? owner).font(.caption).frame(width: 44, alignment: .leading)
-                        GroupBar(groups: s.groups, total: s.count)
-                    }
-                }
-            }
-            if store.dayTotal == 0 {
-                Text(L("Nothing recorded on this day.")).font(.caption).foregroundStyle(.secondary)
-            } else {
-                Legend()
-            }
-        }
-    }
-}
 
 struct GroupBar: View {
     let groups: [String: Int]
@@ -1432,7 +875,7 @@ struct GroupBar: View {
 
 struct Legend: View {
     var body: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 84), spacing: 6)], alignment: .leading, spacing: 4) {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 78), spacing: 6)], alignment: .leading, spacing: 4) {
             ForEach(GROUP_ORDER, id: \.self) { g in
                 HStack(spacing: 4) {
                     RoundedRectangle(cornerRadius: 2).fill(GROUP_COLOR[g] ?? .gray).frame(width: 10, height: 10)
@@ -1480,7 +923,7 @@ struct WeekChart: View {
 
     var body: some View {
         let most = max(1, rows.map { r in OWNERS.reduce(0) { $0 + (r.counts[$1] ?? 0) } }.max() ?? 1)
-        return HStack(alignment: .bottom, spacing: 10) {
+        return HStack(alignment: .bottom, spacing: 6) {
             ForEach(rows) { r in
                 VStack(spacing: 4) {
                     let total = OWNERS.reduce(0) { $0 + (r.counts[$1] ?? 0) }
@@ -1490,12 +933,12 @@ struct WeekChart: View {
                             let n = r.counts[owner] ?? 0
                             if n > 0 {
                                 Rectangle().fill(OWNER_COLOR[owner] ?? .gray)
-                                    .frame(height: max(2, 90 * CGFloat(n) / CGFloat(most)))
+                                    .frame(height: max(2, 70 * CGFloat(n) / CGFloat(most)))
                             }
                         }
                     }
                     .frame(maxWidth: .infinity)
-                    .frame(height: 90, alignment: .bottom)
+                    .frame(height: 70, alignment: .bottom)
                     Text(r.label).font(.caption2)
                 }
             }
