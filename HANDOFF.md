@@ -8,4 +8,6 @@ Final idle check freezes HTTP admissions while the old app quits, covering concu
 
 User data/MCP file paths and bundle ID unchanged; firmware flashing is not performed by app updates. Firmware builds work on a writable copy. Preserve the existing signing identity. Source trust remains the configured GitHub repository, not a pinned publisher signature. Developer ID/notarization/Sparkle/runtime bundling are follow-up scope.
 
-Verification and migration results will be recorded after live installation.
+Verified: 118 unit/regression tests, firmware simulator, and two real signed disposable-app installation/upgrade transactions pass. Initial user-app migration from the legacy bundle to `/Applications` completed at revision a2f721d. Same designated requirement, bundled Python server revision, ESP32 serial connection and login auto-start ON verified. Local backup under Application Support/migration-backups includes existing app/data/preferences (213 files). Fresh app startup with the entire developer folder temporarily renamed passed; developer folder restored immediately.
+
+Next verification: publish the corrected update explanation/version display and upgrade the installed app through its stable checkout.

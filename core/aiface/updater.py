@@ -122,7 +122,7 @@ def run_tests(root):
 
 
 def compile_app(root):
-    """Builds the new app next to the running one (AIFace.new); the running app is not touched."""
+    """Stages a complete signed candidate in the private checkout; the running app is not touched."""
     p = subprocess.run(['/bin/zsh', str(root / 'tools' / 'build_app.sh'), '--stage'], cwd=str(root),
                        capture_output=True, text=True, timeout=1200, stdin=subprocess.DEVNULL)
     return p.returncode == 0, (p.stdout + p.stderr)[-2000:]
