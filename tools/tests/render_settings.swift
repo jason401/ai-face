@@ -30,18 +30,40 @@ import SwiftUI
         store.connected = true; store.port = "/dev/cu.usbmodem14101"; store.ports = ["/dev/cu.usbmodem14101"]
         store.photos = [1, 2, 3]; store.currentPhoto = 2
         store.library = (1...7).map { LibraryItem(name: "photo\($0).jpg", mtime: $0) }
-        store.dayTotal = 18
-        store.dayStats = ["claude": OwnerStats(count: 7, top: ["Focused ×3", "Thinking ×3"], groups: ["work": 6, "joy": 1]),
-                          "gpt": OwnerStats(count: 11, top: ["Happy ×3", "Talking ×3"], groups: ["joy": 6, "work": 5])]
-        store.timeline = (0..<18).map { TimelineEvent(id: $0, t: store.historyDay.timeIntervalSince1970 + Double(32000 + $0 * 1500), owner: $0 % 3 == 0 ? "claude" : "gpt", name: "happy") }
-        store.week = ["Thu", "Fri", "Sat", "Sun", "Mon", "Tue", "Wed"].enumerated().map {
-            WeekRow(id: "\($0.offset)", label: $0.element, counts: ["claude": 3 + $0.offset, "gpt": 10 - $0.offset, "user": 1])
+        let base = Calendar.current.startOfDay(for: Date()).timeIntervalSince1970
+        func tl(_ n: Int, _ day: Double) -> [[String: Any]] {
+            (0..<n).map { ["t": day + Double(30000 + $0 * 1700), "owner": $0 % 3 == 0 ? "claude" : "gpt", "name": "Happy"] }
         }
-        let views: [(String, AnyView)] = [("1general", AnyView(GeneralTab(store: store))), ("2ai", AnyView(AITab(store: store))),
-                                          ("3board", AnyView(BoardTab(store: store))), ("4history", AnyView(HistoryTab(store: store)))]
+        func counts(_ i: Int) -> [String: Any] { ["claude": (i * 7) % 11, "gpt": (i * 5) % 9, "user": i % 4 == 0 ? 2 : 0] }
+        let owners: [String: Any] = [
+            "claude": ["count": 14, "top": [["name": "Focused", "count": 3], ["name": "Proud", "count": 3], ["name": "Thinking", "count": 3]],
+                       "groups": ["work": 8, "joy": 5, "oops": 1]],
+            "gpt": ["count": 11, "top": [["name": "Happy", "count": 3], ["name": "Talking", "count": 3]], "groups": ["joy": 6, "work": 4, "wonder": 1]]]
+        let periods: [String: [String: Any]] = [
+            "day": ["kind": "day", "total": 25, "owners": owners, "timeline": tl(18, base), "rows": []],
+            "week": ["kind": "week", "total": 25, "owners": owners, "timeline": [], "rows": (0..<7).map { i -> [String: Any] in
+                let day = Date(timeIntervalSince1970: base - Double((6 - i) * 86400))
+                return ["day": SettingsStore.dayFormat.string(from: day), "timeline": tl(i * 3 % 8, day.timeIntervalSince1970)] }],
+            "month": ["kind": "month", "total": 25, "owners": owners, "timeline": [], "rows": (1...31).map { i -> [String: Any] in
+                var r = counts(i); r["day"] = String(format: "2026-10-%02d", i); return r }],
+            "year": ["kind": "year", "total": 25, "owners": owners, "timeline": [], "rows": (1...12).map { i -> [String: Any] in
+                var r = counts(i); r["day"] = String(format: "2026-%02d", i); return r }]]
+        func history(_ kind: String) -> AnyView {
+            store.historyKind = kind
+            store.applyHistory(periods[kind] ?? [:])
+            return AnyView(HistoryTab(store: store))
+        }
+        let views: [(String, () -> AnyView)] = [
+            ("1general", { AnyView(GeneralTab(store: store)) }), ("2ai", { AnyView(AITab(store: store)) }),
+            ("2ai-calendars", { AnyView(CalendarList(store: store).background(Color(nsColor: .windowBackgroundColor))) }), ("2ai-changes", { AnyView(CalendarChanges(store: store).background(Color(nsColor: .windowBackgroundColor))) }),
+            ("2ai-mail", { AnyView(MailAccountList(store: store).background(Color(nsColor: .windowBackgroundColor))) }),
+            ("3board", { AnyView(BoardTab(store: store)) }),
+            ("4history-day", { history("day") }), ("4history-week", { history("week") }),
+            ("4history-month", { history("month") }), ("4history-year", { history("year") })]
         for appearance in [NSAppearance.Name.darkAqua, .aqua] {
-            for (name, view) in views {
-                let size = NSSize(width: SettingsWindowController.size.width, height: 1300)
+            for (name, make) in views {
+                let view = make()
+                let size = NSSize(width: SettingsWindowController.size.width, height: name.hasPrefix("2ai-") ? 420 : 1000)
                 let host = NSHostingView(rootView: view.frame(width: size.width, height: size.height))
                 let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
                 window.appearance = NSAppearance(named: appearance)

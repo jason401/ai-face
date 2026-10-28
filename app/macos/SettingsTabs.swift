@@ -46,16 +46,15 @@ struct GeneralTab: View {
             }
             SettingsCard(title: L("App")) {
                 SettingsRow(title: L("Open at login")) {
-                    Toggle(L("Open at login"), isOn: Binding(get: { store.loginItem }, set: { store.setLogin($0) }))
-                        .labelsHidden().toggleStyle(.switch)
+                    SettingsSwitch(title: L("Open at login"), isOn: Binding(get: { store.loginItem }, set: { store.setLogin($0) }))
                         .help(L("The face appears in the menu bar as soon as you log in."))
                 }
                 Divider()
                 SettingsRow(title: L("Auto update")) {
-                    Toggle(L("Update automatically"), isOn: Binding(get: { store.autoUpdate }, set: { store.setAutoUpdate($0) }))
-                        .labelsHidden().toggleStyle(.switch)
                     SettingsAction(title: L("Check now")) { store.checkUpdate() }
                         .disabled(store.updateRunning)
+                    Toggle(L("Update automatically"), isOn: Binding(get: { store.autoUpdate }, set: { store.setAutoUpdate($0) }))
+                        .labelsHidden().toggleStyle(.switch)
                 }
                 SettingsNote(text: "AI Face " + store.version + "\n" + store.updateText, lines: 4)
                     .textSelection(.enabled)
@@ -141,13 +140,6 @@ struct AITab: View {
         }
     }
 
-    func nameLabel(_ title: String, _ detail: String) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text(title).lineLimit(1)
-            if !detail.isEmpty { Text(detail).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1) }
-        }.frame(maxWidth: .infinity, alignment: .leading)
-    }
-
     var calendarButton: String? {
         let a = store.calAccess
         if a == "full" || a == "" || a == "unavailable" { return nil }
@@ -199,63 +191,27 @@ struct AITab: View {
                 }
                 Divider()
                 SettingsRow(title: L("Ask first")) {
-                    Toggle(L("Ask me before every change"), isOn: Binding(get: { store.calConfirm }, set: { store.setCalendar(["confirm": $0]) }))
-                        .labelsHidden().toggleStyle(.switch)
+                    SettingsSwitch(title: L("Ask me before every change"), isOn: Binding(get: { store.calConfirm }, set: { store.setCalendar(["confirm": $0]) }))
                         .help(L("Ask me before every change"))
+                }
+                Divider()
+                SettingsRow(title: L("Calendars")) {
+                    SettingsAction(title: String(format: L("%d of %d on…"), store.calendars.filter { $0.shown }.count, store.calendars.count)) {
+                        store.showCalendars = true
+                    }
+                    .disabled(store.calendars.isEmpty)
+                    .popover(isPresented: $store.showCalendars, arrowEdge: .bottom) { CalendarList(store: store) }
+                }
+                if !store.calChanges.isEmpty {
+                    Divider()
+                    SettingsRow(title: L("Recent changes")) {
+                        SettingsAction(title: String(format: L("%d changes…"), store.calChanges.count)) { store.showCalChanges = true }
+                            .popover(isPresented: $store.showCalChanges, arrowEdge: .bottom) { CalendarChanges(store: store) }
+                    }
                 }
                 SettingsNote(text: L("AIs change or delete only events they added. Every change can be undone."), lines: 3)
                     .help(L("Only the AIs you allow see the calendars you leave on: titles, times and places; notes and attendees only if you turn them on. After a change, quit that AI app (⌘Q) and open it again.")
                           + "\n\n" + L("AIs may add events to the calendars turned on here, and change or delete only events they added through AI Face; never anyone else's. With asking on, each change waits for your OK in a window. No invitations are sent."))
-            }
-
-            if !store.calendars.isEmpty {
-                SettingsCard(title: L("Calendars")) {
-                    HStack(spacing: 0) {
-                        Spacer()
-                        Text(L("Read")).frame(width: 40)
-                        Text(L("Change")).frame(width: 40)
-                    }
-                    .font(.system(size: 10)).foregroundStyle(.secondary)
-                    .padding(.horizontal, 10).padding(.top, 6)
-                    ForEach(store.calendars) { cal in
-                        HStack(spacing: 0) {
-                            nameLabel(cal.title, cal.account)
-                            Toggle(L("Read"), isOn: Binding(get: { cal.shown }, set: { store.setCalendarShown(cal.id, $0) }))
-                                .labelsHidden().frame(width: 40)
-                            Group {
-                                if cal.canWrite {
-                                    Toggle(L("Change"), isOn: Binding(get: { cal.write }, set: { store.setCalendarWritable(cal.id, $0) }))
-                                        .labelsHidden()
-                                } else {
-                                    Text("–").foregroundStyle(.tertiary)
-                                }
-                            }.frame(width: 40)
-                        }
-                        .toggleStyle(.checkbox)
-                        .padding(.horizontal, 10).padding(.vertical, 4)
-                    }
-                    Spacer(minLength: 4)
-                }
-            }
-
-            if !store.calChanges.isEmpty {
-                SettingsCard(title: L("Recent changes")) {
-                    ForEach(store.calChanges) { change in
-                        HStack(spacing: 8) {
-                            Text(change.text).font(.system(size: 11)).lineLimit(2)
-                                .foregroundStyle(change.undone ? Color.secondary : Color.primary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .help(change.text)
-                            if change.undone {
-                                Text(L("Undone")).font(.system(size: 11)).foregroundStyle(.secondary)
-                            } else {
-                                SettingsAction(title: L("Undo")) { store.undoCalendarChange(change.n) }.frame(width: 56)
-                            }
-                        }
-                        .padding(.horizontal, 10).padding(.vertical, 5)
-                        if change.id != store.calChanges.last?.id { Divider() }
-                    }
-                }
             }
 
             SettingsCard(title: L("Mail")) {
@@ -270,17 +226,15 @@ struct AITab: View {
                     Toggle(L("Hide links and codes"), isOn: Binding(get: { store.mailHideLinks }, set: { store.setMail(["hide_links": $0]) }))
                         .toggleStyle(.checkbox)
                 }
-                ForEach(store.mailAccounts) { acct in
-                    Divider()
-                    HStack(spacing: 0) {
-                        nameLabel(acct.name, "")
-                        Toggle(L("Read"), isOn: Binding(get: { acct.shown }, set: { store.setMailShown(acct.name, $0) }))
-                            .labelsHidden().toggleStyle(.checkbox).frame(width: 40)
+                Divider()
+                SettingsRow(title: L("Accounts")) {
+                    SettingsAction(title: String(format: L("%d of %d on…"), store.mailAccounts.filter { $0.shown }.count, store.mailAccounts.count)) {
+                        store.showMailAccounts = true
                     }
-                    .padding(.horizontal, 10).padding(.vertical, 6)
+                    .disabled(store.mailAccounts.isEmpty)
+                    .popover(isPresented: $store.showMailAccounts, arrowEdge: .bottom) { MailAccountList(store: store) }
                 }
                 SettingsNote(text: L("Read only: never sends, moves, deletes or marks mail as read."), lines: 2)
-                    .padding(.top, 2)
                     .help(L("AI Face reads the Mail app's inboxes. It never sends, moves or deletes mail, and does not mark it as read.")
                           + "\n\n" + L("Only the AIs you allow can read the accounts you leave on. With links and codes hidden, a link shows only its site and sign-in codes and passwords are left out. After a change, quit that AI app (⌘Q) and open it again."))
             }
@@ -454,13 +408,110 @@ struct BoardTab: View {
     }
 }
 
-// MARK: - History: the day's face changes and the last week
+// MARK: - AI tab popovers: lists that need not show all the time
+
+func nameLabel(_ title: String, _ detail: String) -> some View {
+    VStack(alignment: .leading, spacing: 0) {
+        Text(title).lineLimit(1)
+        if !detail.isEmpty { Text(detail).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1) }
+    }.frame(maxWidth: .infinity, alignment: .leading)
+}
+
+struct CalendarList: View {
+    @ObservedObject var store: SettingsStore
+
+    var body: some View {
+        SettingsPopover(title: L("Calendars"), listHeight: CGFloat(store.calendars.count) * 36 + 20) {
+            HStack(spacing: 0) {
+                Spacer()
+                Text(L("Read")).frame(width: 44)
+                Text(L("Change")).frame(width: 44)
+            }
+            .font(.system(size: 10)).foregroundStyle(.secondary).padding(.bottom, 4)
+            ForEach(store.calendars) { cal in
+                HStack(spacing: 0) {
+                    nameLabel(cal.title, cal.account)
+                    Toggle(L("Read"), isOn: Binding(get: { cal.shown }, set: { store.setCalendarShown(cal.id, $0) }))
+                        .labelsHidden().frame(width: 44)
+                    Group {
+                        if cal.canWrite {
+                            Toggle(L("Change"), isOn: Binding(get: { cal.write }, set: { store.setCalendarWritable(cal.id, $0) }))
+                                .labelsHidden()
+                        } else {
+                            Text("–").foregroundStyle(.tertiary)
+                        }
+                    }.frame(width: 44)
+                }
+                .toggleStyle(.checkbox)
+                .frame(height: 36)
+                if cal.id != store.calendars.last?.id { Divider() }
+            }
+        }
+    }
+}
+
+struct MailAccountList: View {
+    @ObservedObject var store: SettingsStore
+
+    var body: some View {
+        SettingsPopover(title: L("Mail accounts"), listHeight: CGFloat(store.mailAccounts.count) * 32) {
+            ForEach(store.mailAccounts) { acct in
+                HStack(spacing: 0) {
+                    nameLabel(acct.name, "")
+                    Toggle(L("Read"), isOn: Binding(get: { acct.shown }, set: { store.setMailShown(acct.name, $0) }))
+                        .labelsHidden().toggleStyle(.checkbox).frame(width: 44)
+                }
+                .frame(height: 32)
+                if acct.id != store.mailAccounts.last?.id { Divider() }
+            }
+        }
+    }
+}
+
+struct CalendarChanges: View {
+    @ObservedObject var store: SettingsStore
+
+    var body: some View {
+        SettingsPopover(title: L("Recent changes"), listHeight: CGFloat(store.calChanges.count) * 44) {
+            ForEach(store.calChanges) { change in
+                HStack(spacing: 8) {
+                    Text(change.text).font(.system(size: 11)).lineLimit(2)
+                        .foregroundStyle(change.undone ? Color.secondary : Color.primary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .help(change.text)
+                    if change.undone {
+                        Text(L("Undone")).font(.system(size: 11)).foregroundStyle(.secondary)
+                    } else {
+                        SettingsAction(title: L("Undo")) { store.undoCalendarChange(change.n) }.frame(width: 60)
+                    }
+                }
+                .frame(height: 44)
+                if change.id != store.calChanges.last?.id { Divider() }
+            }
+        }
+    }
+}
+
+// MARK: - History: face changes by day, week, month or year
 
 struct HistoryTab: View {
     @ObservedObject var store: SettingsStore
 
+    static let kinds = [(L("Day"), "day"), (L("Week"), "week"), (L("Month"), "month"), (L("Year"), "year")]
+
+    var chartTitle: String {
+        switch store.historyKind {
+        case "week": return L("Time of day")
+        case "month": return L("Changes per day")
+        case "year": return L("Changes per month")
+        default: return L("Timeline")
+        }
+    }
+
     var body: some View {
         SettingsPage {
+            SettingsSegments(options: HistoryTab.kinds,
+                             selection: Binding(get: { store.historyKind }, set: { store.setHistoryKind($0) }))
             HStack(spacing: 6) {
                 Button { store.moveDay(-1) } label: { Image(systemName: "chevron.left") }
                     .buttonStyle(.borderless)
@@ -474,14 +525,18 @@ struct HistoryTab: View {
                 Text(String(format: L("%d changes"), store.dayTotal)).foregroundStyle(.secondary)
             }
             .padding(.horizontal, 2)
-            HStack(spacing: 8) {
-                ForEach(OWNERS, id: \.self) { owner in ownerCard(owner) }
+            SettingsCard(title: L("Who chose which faces")) { owners }
+            SettingsCard(title: chartTitle) {
+                Group {
+                    switch store.historyKind {
+                    case "week": WeekTimeline(rows: store.periodRows)
+                    case "month": BarChart(rows: store.periodRows, labelEvery: 5)
+                    case "year": BarChart(rows: store.periodRows)
+                    default: TimelineStrip(events: store.timeline, day: store.periodBounds.0)
+                    }
+                }
+                .padding(10)
             }
-            SettingsCard(title: L("Emotion groups")) { distribution.padding(10) }
-            SettingsCard(title: L("Timeline")) {
-                TimelineStrip(events: store.timeline, day: store.historyDay).padding(10)
-            }
-            SettingsCard(title: L("Last 7 days")) { WeekChart(rows: store.week).padding(10) }
             SettingsCard(title: L("Saved history")) {
                 SettingsRow(title: L("Delete")) {
                     SettingsAction(title: L("Delete all history…")) { store.clearHistory() }
@@ -491,44 +546,32 @@ struct HistoryTab: View {
         }
     }
 
-    func ownerCard(_ owner: String) -> some View {
-        let s = store.dayStats[owner] ?? OwnerStats()
-        return VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 5) {
-                Circle().fill(OWNER_COLOR[owner] ?? .gray).frame(width: 7, height: 7)
-                Text(OWNER_LABEL[owner] ?? owner).font(.system(size: 10)).foregroundStyle(.secondary)
-            }
-            Text("\(s.count)").font(.system(size: 20, weight: .semibold)).monospacedDigit()
-            ForEach(s.top, id: \.self) { line in
-                Text(line).font(.system(size: 10)).lineLimit(1)
-            }
-            if s.top.isEmpty { Text("-").font(.system(size: 10)).foregroundStyle(.secondary) }
-            Spacer(minLength: 0)
-        }
-        .padding(8)
-        .frame(maxWidth: .infinity, minHeight: 96, alignment: .topLeading)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.primary.opacity(0.07)))
-    }
-
-    var distribution: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ForEach(OWNERS, id: \.self) { owner in
-                let s = store.dayStats[owner] ?? OwnerStats()
-                if s.count > 0 {
-                    HStack(spacing: 8) {
-                        Text(OWNER_LABEL[owner] ?? owner).font(.system(size: 10)).frame(width: 40, alignment: .leading)
-                        GroupBar(groups: s.groups, total: s.count)
-                    }
-                }
-            }
+    /// One row per AI (and you): how many changes, their mix of emotion groups and top moods.
+    var owners: some View {
+        VStack(alignment: .leading, spacing: 0) {
             if store.dayTotal == 0 {
-                Text(L("Nothing recorded on this day.")).font(.system(size: 11)).foregroundStyle(.secondary)
+                Text(L("Nothing recorded in this period.")).font(.system(size: 11)).foregroundStyle(.secondary)
+                    .padding(10)
             } else {
-                Legend()
+                ForEach(OWNERS.filter { (store.dayStats[$0]?.count ?? 0) > 0 }, id: \.self) { owner in
+                    let s = store.dayStats[owner] ?? OwnerStats()
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 6) {
+                            Circle().fill(OWNER_COLOR[owner] ?? .gray).frame(width: 7, height: 7)
+                            Text(OWNER_LABEL[owner] ?? owner).frame(width: 46, alignment: .leading)
+                            Text("\(s.count)").font(.system(size: 12, weight: .semibold)).monospacedDigit()
+                                .frame(width: 34, alignment: .trailing)
+                            GroupBar(groups: s.groups, total: s.count)
+                        }
+                        Text(s.top.joined(separator: " · ")).font(.system(size: 10)).foregroundStyle(.secondary)
+                            .lineLimit(1).padding(.leading, 13)
+                    }
+                    .padding(.horizontal, 10).padding(.vertical, 7)
+                    Divider()
+                }
+                Legend(shown: Set(store.dayStats.values.flatMap { $0.groups.keys }))
+                    .padding(10)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

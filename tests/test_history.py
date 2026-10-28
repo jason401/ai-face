@@ -38,6 +38,30 @@ class HistoryTests(unittest.TestCase):
         self.assertEqual([e['emotion'] for e in r], ['calm', 'sad', 'happy'])
         self.assertEqual(history.summary('bad-day', [])['total'], 0)
 
+    def test_periods(self):
+        # Sunday 2026-10-04 (week Mon 09-28 .. Sun 10-04), plus one change on 09-30 and one in March.
+        noon = time.mktime((2026, 10, 4, 12, 0, 0, 0, 0, -1))
+        for i, (who, mood) in enumerate([('claude', 'happy'), ('gpt', 'sad'), ('user', 'calm')]):
+            history.record(who, mood, noon + i * 60)
+        history.record('claude', 'idea', noon - 4 * 86400)
+        history.record('gpt', 'happy', time.mktime((2026, 3, 15, 9, 0, 0, 0, 0, -1)))
+        emotions = moods.emotions()
+        self.assertEqual(history.period_range('week', '2026-10-04')[0].isoformat(), '2026-09-28')
+        self.assertEqual(history.period_range('month', '2026-02-10')[1].isoformat(), '2026-02-28')
+        d = history.period('day', '2026-10-04', emotions)
+        self.assertEqual((d['total'], len(d['timeline']), d['rows']), (3, 3, []))
+        w = history.period('week', '2026-10-01', emotions)
+        self.assertEqual((w['start'], w['end'], w['total']), ('2026-09-28', '2026-10-04', 4))
+        self.assertEqual([len(r['timeline']) for r in w['rows']], [0, 0, 1, 0, 0, 0, 3])
+        self.assertEqual(w['owners']['claude']['count'], 2)
+        m = history.period('month', '2026-10-20', emotions)
+        self.assertEqual((len(m['rows']), m['total'], m['rows'][3]), (31, 3, dict(day='2026-10-04', claude=1, gpt=1, user=1)))
+        y = history.period('year', '2026-06-01', emotions)
+        self.assertEqual((len(y['rows']), y['total']), (12, 5))
+        self.assertEqual(y['rows'][2], dict(day='2026-03', claude=0, gpt=1, user=0))
+        self.assertEqual(y['rows'][8]['claude'], 1)
+        self.assertEqual(history.period('nonsense', '2026-10-04', emotions)['kind'], 'day')
+
     def test_picks_are_hand_picked_moods_once(self):
         now = time.time()
         for i, (who, mood) in enumerate([('user', 'happy'), ('claude', 'processing'), ('user', 'calm'),

@@ -85,10 +85,8 @@ def picks(n=5, known=None, now=None, days=60):
     return out
 
 
-def summary(day, moods):
-    """Counts for one day. moods: [{id, name, group}] (the catalog) for names and groups."""
-    info = {m['id']: m for m in moods}
-    list_ = events(day)
+def _owners(list_, info):
+    """Per owner: how many changes, the top 3 moods and the count per emotion group."""
     per = {}
     for owner in OWNERS:
         mine = [e for e in list_ if e['owner'] == owner]
@@ -101,10 +99,77 @@ def summary(day, moods):
         per[owner] = dict(count=len(mine),
                           top=[dict(id=k, name=info.get(k, {}).get('name', k), count=v) for k, v in top],
                           groups=groups)
-    timeline = [dict(t=e['t'], owner=e['owner'], emotion=e['emotion'],
-                     name=info.get(e['emotion'], {}).get('name', e['emotion']),
-                     group=info.get(e['emotion'], {}).get('group_id', OTHER)) for e in list_]
-    return dict(day=day, total=len(list_), owners=per, timeline=timeline)
+    return per
+
+
+def _timeline(list_, info):
+    return [dict(t=e['t'], owner=e['owner'], emotion=e['emotion'],
+                 name=info.get(e['emotion'], {}).get('name', e['emotion']),
+                 group=info.get(e['emotion'], {}).get('group_id', OTHER)) for e in list_]
+
+
+def summary(day, moods):
+    """Counts for one day. moods: [{id, name, group}] (the catalog) for names and groups."""
+    info = {m['id']: m for m in moods}
+    list_ = events(day)
+    return dict(day=day, total=len(list_), owners=_owners(list_, info), timeline=_timeline(list_, info))
+
+
+KINDS = ('day', 'week', 'month', 'year')
+
+
+def period_range(kind, day):
+    """First and last date of the day, week (Monday to Sunday), month or year holding <day>."""
+    try:
+        d = datetime.date.fromisoformat(day)
+    except (ValueError, TypeError):
+        d = datetime.date.today()
+    if kind == 'week':
+        start = d - datetime.timedelta(days=d.weekday())
+        return start, start + datetime.timedelta(days=6)
+    if kind == 'month':
+        start = d.replace(day=1)
+        following = (start + datetime.timedelta(days=32)).replace(day=1)
+        return start, following - datetime.timedelta(days=1)
+    if kind == 'year':
+        return datetime.date(d.year, 1, 1), datetime.date(d.year, 12, 31)
+    return d, d
+
+
+def period(kind, day, moods):
+    """Counts for the day, week, month or year holding <day>, plus what its chart needs:
+    day -> timeline (every change); week -> rows per day, each with its changes' times;
+    month -> rows per day with counts per owner; year -> rows per month with counts."""
+    kind = kind if kind in KINDS else 'day'
+    info = {m['id']: m for m in moods}
+    start, end = period_range(kind, day)
+    last = min(end, datetime.date.today())
+    days = {}
+    d = start
+    while d <= last:
+        days[d.isoformat()] = events(d.isoformat())
+        d += datetime.timedelta(days=1)
+    every = [e for list_ in days.values() for e in list_]
+
+    def counts(list_):
+        return {owner: sum(1 for e in list_ if e['owner'] == owner) for owner in OWNERS}
+
+    rows = []
+    if kind == 'week':
+        for back in range(7):
+            key = (start + datetime.timedelta(days=back)).isoformat()
+            rows.append(dict(day=key, timeline=[dict(t=e['t'], owner=e['owner']) for e in days.get(key, [])]))
+    elif kind == 'month':
+        d = start
+        while d <= end:
+            rows.append(dict(day=d.isoformat(), **counts(days.get(d.isoformat(), []))))
+            d += datetime.timedelta(days=1)
+    elif kind == 'year':
+        for month in range(1, 13):
+            prefix = f'{start.year:04d}-{month:02d}'
+            rows.append(dict(day=prefix, **counts([e for k, list_ in days.items() if k.startswith(prefix) for e in list_])))
+    return dict(kind=kind, start=start.isoformat(), end=end.isoformat(), total=len(every),
+                owners=_owners(every, info), timeline=_timeline(every, info) if kind == 'day' else [], rows=rows)
 
 
 def week(day):
