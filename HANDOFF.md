@@ -10,4 +10,10 @@ User data/MCP file paths and bundle ID unchanged; firmware flashing is not perfo
 
 Verified: 118 unit/regression tests, firmware simulator, and two real signed disposable-app installation/upgrade transactions pass. Initial user-app migration from the legacy bundle to `/Applications` completed at revision a2f721d. Same designated requirement, bundled Python server revision, ESP32 serial connection and login auto-start ON verified. Local backup under Application Support/migration-backups includes existing app/data/preferences (213 files). Fresh app startup with the entire developer folder temporarily renamed passed; developer folder restored immediately.
 
-Next verification: publish the corrected update explanation/version display and upgrade the installed app through its stable checkout.
+Actual stable update passed: installed app a2f721d -> Check now -> private stable checkout fetch/fast-forward -> all 118 regression tests -> local signed build -> normal quit -> replacement -> live server revision acknowledgement 3613ce9. Settings visibly show 2.1.0 (3613ce9), automatic updates ON and Open at login ON. ESP32 connected without firmware flashing. Installed signature passes deep/strict validation and the original designated requirement.
+
+After update, all 213 pre-migration files were compared again: 0 missing; only controller.json and update.json changed as expected. Settings/photos/history and MCP shim files unchanged. Both private source checkout and developer working tree were clean before recording these documentation notes.
+
+Stable runtime release is 3613ce9. This final verification documentation is main-only so it does not trigger another app rebuild/restart. Existing app, preferences and data remain backed up locally. The previous project-folder app is retained as a recovery copy; do not launch it while the installed app is running.
+
+Scope: current-Mac migration is verified. Other-Mac legacy login-item migration and fresh signing identity bootstrap need separate testing before treating this as general public binary distribution. Current builds require the existing signing identity, Python and Command Line Tools.
