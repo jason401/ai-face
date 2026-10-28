@@ -34,9 +34,10 @@ server named `ai-face`. The ESP32 round LCD board is optional. Public repo: gith
 - `core/aiface/integrations.py` — connects Claude desktop, Codex, Claude Code (`claude mcp add-json -s user`;
   falls back to the copy inside Claude.app's Code tab under `~/Library/Application Support/Claude/claude-code`)
   and the Claude Code keep-awake hooks (`~/.claude/settings.json`).
-- `core/aiface/updater.py` — automatic updates: every 3 h `git fetch origin main`, fast-forward, tests,
-  `build_app.sh --compile-only`, then detached `build_app.sh --prebuilt` (quits and restarts the app);
-  any failure resets to the old commit. Skips local changes/commits; waits while busy. State in `update.json`.
+- `core/aiface/updater.py` — automatic updates: at start and every 3 h fetches `origin stable` into its private
+  checkout (`Application Support/AI Face/source`), tests, `build_app.sh --stage`, then the transactional
+  installer swaps `/Applications/AI Face.app`. Never installs a version older than the running one.
+  Waits while busy. State in `update.json`.
 - `core/aiface/moods.py` — 78 moods in 11 groups (the MCP enum comes from here).
 - `firmware/` — ESP32 firmware; `tools/firmware_sim` checks it on the computer.
 - Data: `~/Library/Application Support/AI Face` (settings.json, history, photos, awake.json, calendar log).
@@ -44,8 +45,11 @@ server named `ai-face`. The ESP32 round LCD board is optional. Public repo: gith
 
 ## Build and test
 - Tests: `python3 -m unittest discover -s tests` and `bash tools/firmware_sim/run.sh`. Run both before committing.
-- App: `zsh tools/build_app.sh < /dev/null` (same as double-clicking `Build AI Face.command`; it quits,
-  rebuilds and restarts the app; log in `app-build.log`). Compiled with `xcrun swiftc`
+- App (same rule as AI Illuminati): the installed app changes only through stable updates. Check a build with
+  `zsh tools/build_app.sh --stage < /dev/null` (stages `AI Face.update.app`, touches nothing; log in
+  `app-build.log`). To ship: tests pass → push `main` → `git push origin main:stable` (fast-forward only, never
+  partial work) → Settings → General → Check now (or wait for the 3-hourly check). A plain build installs
+  only on a Mac without `/Applications/AI Face.app`. Compiled with `xcrun swiftc`
   (Cocoa, SwiftUI, ServiceManagement, EventKit) — no Xcode project, so no SwiftUI macros like `#Preview`.
 - Signing: preserve the existing "AI Face Local Signing" identity; signing failure stops installation. No ad-hoc fallback.
 
