@@ -804,76 +804,67 @@ struct GeneralTab: View {
     @ObservedObject var store: SettingsStore
 
     var body: some View {
-        Form {
-            Section {
-                Toggle(L("Open at login"), isOn: Binding(get: { store.loginItem }, set: { store.setLogin($0) }))
-            } footer: {
-                Text(L("The face appears in the menu bar as soon as you log in.")).font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+        SettingsPage {
+            SettingsCard(title: L("Menu bar")) {
+                SettingsRow(title: L("Appearance")) {
+                    Toggle(L("Monochrome"), isOn: Binding(get: { store.mono }, set: { store.setMono($0) }))
+                        .toggleStyle(.checkbox)
+                        .help(L("Draws the menu bar face in grays and shows who chose it by the ring pattern: you = solid, Claude = short dashes, GPT = six long arcs. The board always stays in color."))
+                }
             }
-            Section {
-                Toggle(L("Monochrome"), isOn: Binding(get: { store.mono }, set: { store.setMono($0) }))
-            } footer: {
-                Text(L("Draws the menu bar face in grays and shows who chose it by the ring pattern: you = solid, Claude = short dashes, GPT = six long arcs. The board always stays in color."))
-                    .font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+            SettingsCard(title: L("App")) {
+                SettingsRow(title: L("Open at login")) {
+                    Toggle(L("Open at login"), isOn: Binding(get: { store.loginItem }, set: { store.setLogin($0) }))
+                        .labelsHidden().toggleStyle(.switch)
+                        .help(L("The face appears in the menu bar as soon as you log in."))
+                }
+                Divider()
+                SettingsRow(title: L("Version")) {
+                    Text("AI Face " + store.version).foregroundStyle(.secondary).textSelection(.enabled)
+                }
             }
             if store.awakeSupported {
-                Section {
-                    LabeledContent(L("Status"), value: store.awakeStatus)
-                    LabeledContent(L("Permission")) {
-                        Button(store.awakeReady ? L("Remove…") : L("Set up…")) { store.setUpAwake() }
+                SettingsCard(title: L("Keep awake")) {
+                    SettingsRow(title: L("Status")) {
+                        Text(store.awakeStatus).foregroundStyle(.secondary)
+                    }
+                    Divider()
+                    SettingsRow(title: L("Permission")) {
+                        SettingsAction(title: store.awakeReady ? L("Remove…") : L("Set up…")) { store.setUpAwake() }
                     }
                     if store.awakeReady {
-                        LabeledContent(L("awake command")) {
+                        Divider()
+                        SettingsRow(title: L("awake command")) {
                             if store.awakeCommand {
                                 Text(L("Installed")).foregroundStyle(.secondary)
                             } else {
-                                Button(L("Install…")) { store.setUpAwake() }
+                                SettingsAction(title: L("Install…")) { store.setUpAwake() }
                             }
                         }
                     }
-                    if !store.awakeNotice.isEmpty {
-                        Text(store.awakeNotice).font(.caption).foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                } header: {
-                    Text(L("Keep awake"))
-                } footer: {
-                    Text(L("Keeps the MacBook awake even with the lid closed, for 1, 2 or 4 hours (menu → Keep awake). It turns off at the end, at 20% battery, when the Mac gets hot, in Low Power Mode and when AI Face quits. Setting it up asks for your Mac password once, in Terminal, and allows only this one setting."))
-                        .font(.caption).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                    SettingsNote(text: store.awakeNotice.isEmpty
+                                 ? L("Lid closed, 1–4 hours from the menu. Turns off by itself.") : store.awakeNotice, lines: 3)
+                        .help(L("Keeps the MacBook awake even with the lid closed, for 1, 2 or 4 hours (menu → Keep awake). It turns off at the end, at 20% battery, when the Mac gets hot, in Low Power Mode and when AI Face quits. Setting it up asks for your Mac password once, in Terminal, and allows only this one setting."))
                 }
             }
-            Section {
-                Toggle(L("Update automatically"), isOn: Binding(get: { store.autoUpdate }, set: { store.setAutoUpdate($0) }))
-                LabeledContent(L("Status")) {
-                    Text(store.updateText).foregroundStyle(.secondary).multilineTextAlignment(.trailing)
-                        .fixedSize(horizontal: false, vertical: true)
+            SettingsCard(title: L("Updates & storage")) {
+                SettingsRow(title: L("Auto update")) {
+                    Toggle(L("Update automatically"), isOn: Binding(get: { store.autoUpdate }, set: { store.setAutoUpdate($0) }))
+                        .labelsHidden().toggleStyle(.switch)
+                    SettingsAction(title: L("Check now")) { store.checkUpdate() }
+                        .disabled(store.updateRunning)
                 }
-                LabeledContent("") {
-                    Button(L("Check now")) { store.checkUpdate() }.disabled(store.updateRunning)
-                }
-            } header: {
-                Text(L("Updates"))
-            } footer: {
-                Text(L("AI Face checks the stable release on GitHub at startup and every 3 hours. It tests and builds updates in its own source folder, then restarts when idle. Your development folder is never changed. Existing Python and Command Line Tools are required."))
-                    .font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Section(L("About")) {
-                LabeledContent(L("Version"), value: "AI Face " + store.version)
-                LabeledContent(L("App data")) {
-                    Button(L("Show in Finder")) { store.openDataFolder() }
+                SettingsNote(text: store.updateText, lines: 3)
+                    .help(L("AI Face checks the stable release on GitHub at startup and every 3 hours. It tests and builds updates in its own source folder, then restarts when idle. Your development folder is never changed. Existing Python and Command Line Tools are required."))
+                Divider()
+                SettingsRow(title: L("Folders")) {
+                    SettingsAction(title: L("App data")) { store.openDataFolder() }
                         .help(L("Settings, photos, history, the update copy and backups"))
-                }
-                LabeledContent(L("App")) {
-                    Button(L("Show in Finder")) { store.revealApp() }
+                    SettingsAction(title: L("App")) { store.revealApp() }
                         .help(Bundle.main.bundlePath)
                 }
             }
         }
-        .formStyle(.grouped)
     }
 }
 
