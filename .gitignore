@@ -9,3 +9,4 @@ tools/firmware_sim/test_core
 tools/firmware_sim/test_fire
 tools/firmware_sim/test_notice
 tools/firmware_sim/render_fire
+.aiface-build-*/
