@@ -1,5 +1,6 @@
 #!/bin/zsh
-# Stage a complete signed bundle without touching the running app.
+# Stage a complete signed bundle (AI Face.update.app) without touching the running app.
+# No option: also install it, but only when AI Face is not installed yet (first installation).
 set -eu
 cd "${0:A:h}/.."
 MODE="${1:-}"
@@ -59,9 +60,9 @@ cat > "$CANDIDATE/Contents/Info.plist" <<'PLIST'
 <key>LSMinimumSystemVersion</key><string>13.0</string>
 <key>LSUIElement</key><true/>
 <key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>
-<key>NSAppleEventsUsageDescription</key><string>AI Face reads your mail in the Mail app (read only) so the AI apps you allow (Settings → Mail) can answer questions about it. It never sends, moves or deletes mail.</string>
-<key>NSCalendarsFullAccessUsageDescription</key><string>AI Face reads your calendar so the AI apps you allow (Settings → AI apps) can answer questions about your schedule. It never changes events.</string>
-<key>NSCalendarsUsageDescription</key><string>AI Face reads your calendar so the AI apps you allow (Settings → AI apps) can answer questions about your schedule. It never changes events.</string>
+<key>NSAppleEventsUsageDescription</key><string>AI Face reads your mail in the Mail app (read only) so the AI apps you allow (Settings → AI) can answer questions about it. It never sends, moves or deletes mail.</string>
+<key>NSCalendarsFullAccessUsageDescription</key><string>AI Face reads your calendar so the AI apps you allow (Settings → AI) can answer questions about your schedule. It never changes events.</string>
+<key>NSCalendarsUsageDescription</key><string>AI Face reads your calendar so the AI apps you allow (Settings → AI) can answer questions about your schedule. It never changes events.</string>
 </dict></plist>
 PLIST
 REVISION="$(git rev-parse HEAD)"
@@ -76,5 +77,12 @@ rm -rf "$APP"
 mv "$CANDIDATE" "$APP"
 echo "Staged $APP ($REVISION)"
 if [ -z "$MODE" ]; then
+  # Like AI Illuminati: an installed app changes only through its stable updates. A plain
+  # build installs only on a Mac without AI Face in /Applications (first installation).
+  if [ -d "/Applications/AI Face.app" ]; then
+    echo "AI Face is already installed and was not changed. It installs new versions from the"
+    echo "stable branch by itself: git push origin main:stable, then Settings → General → Check now."
+    exit 0
+  fi
   exec /usr/bin/python3 tools/deploy_app.py
 fi

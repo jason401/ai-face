@@ -98,7 +98,7 @@ python3 -m unittest discover -s tests     # Python tests + firmware simulator
 bash tools/firmware_sim/run.sh            # firmware simulator only (needs a C++ compiler)
 ```
 
-- After changing code, run `Build AI Face.command` again (`zsh tools/build_app.sh --stage` only stages a candidate). Publish tested commits to `main`, then fast-forward `stable` separately. The app also refreshes the installed MCP server file when it starts, and moves data and registrations from older versions (`ESP32Face`, `esp32-face`) over to the new names.
+- After changing code, check the build with `zsh tools/build_app.sh --stage` (it only stages `AI Face.update.app`). Once AI Face is installed, it changes only through its own stable updates, never from a development build: publish tested commits to `main`, then fast-forward `stable` (`git push origin main:stable`) and click Settings → General → Check now. The app also refreshes the installed MCP server file when it starts, and moves data and registrations from older versions (`ESP32Face`, `esp32-face`) over to the new names.
 - The app is built with `xcrun swiftc -swift-version 5` (no Xcode project). Do not use SwiftUI macros such as `@State`: the Command Line Tools do not ship the macro plugin.
 - Languages: the app follows the Mac's preferred languages (English and Korean so far; anything else falls back to English). App texts are English in the code with translations in `app/macos/Resources/<lang>.lproj/Localizable.strings`; Python messages use `T(korean, english)` from `core/aiface/i18n.py`, and mood names are in `moods.EN`. The app passes its language to the server (`AIFACE_LANG`), which saves it for the MCP server.
 - In the firmware, every struct used in a function signature must be declared above the `RingColorFn` typedef (where the Arduino builder inserts prototypes). The simulator follows the same rule.
@@ -126,7 +126,7 @@ Claude나 GPT와 대화하면 AI가 대답마다 표정을 골라서 **맥 메�
 ### 설치
 
 1. `xcode-select --install`로 Xcode 명령줄 도구 설치(없을 때만)
-2. `Build AI Face.command` 더블클릭 → `AI Face.app`이 만들어지고 실행돼요(메뉴바 얼굴, 설정 창).
+2. `Build AI Face.command` 더블클릭 → `AI Face.app`이 `/Applications`에 설치되고 실행돼요(메뉴바 얼굴, 설정 창). 그다음부터는 앱이 stable 브랜치에서 스스로 업데이트하고, 이 파일을 다시 실행해도 시험용 사본만 만들어요.
 3. 설정 → **AI** 탭에서 Claude 데스크톱 / Codex **연결**
 4. Claude(와 Codex)를 ⌘Q로 껐다가 다시 실행
 
