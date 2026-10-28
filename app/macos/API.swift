@@ -50,7 +50,7 @@ final class API {
     /// "message" (the result or the error, in Korean).
     func call(_ action: String, _ params: [String: Any] = [:], timeout: TimeInterval = 60,
               done: ((Bool, [String: Any]) -> Void)? = nil) {
-        guard ready, let u = url("api") else {
+        guard ready, let u = url(action == "install_cancel" ? "install/cancel" : (action == "install_prepare" ? "install/prepare" : "api")) else {
             done?(false, ["message": L("AI Face is still starting. Try again in a moment.")])
             return
         }

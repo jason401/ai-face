@@ -1,14 +1,12 @@
-"""Automatic updates: the app checks GitHub (the project's `origin`, a public repository, so
-no login) when it starts and every few hours, and installs a newer version by itself.
-
-Safe order: fetch -> fast-forward -> tests -> compile the new app next to the running one.
-Only when all of that passes is the app swapped and restarted (tools/build_app.sh --prebuilt,
-run detached because it quits this server). Anything failing puts the folder back where it
-was and the running app stays. Skipped when this Mac has its own changes or commits, and
-postponed while the user or an AI is busy (timer, keep awake, a calendar question, a face
-an AI set a few minutes ago).
+"""App-owned stable checkout -> tests -> complete signed candidate -> transactional install.
+Never changes the developer checkout. Runtime code is sealed in the installed bundle.
 """
+import fcntl
+import importlib.util
 import json
+import shutil
+import tempfile
+from pathlib import Path
 import os
 import subprocess
 import sys
@@ -21,7 +19,9 @@ from . import moods as face_modes
 from . import paths
 from .i18n import T
 
-BRANCH = 'main'
+BRANCH = 'stable'
+REPOSITORY = 'https://github.com/jason401/ai-face.git'
+TARGET = Path('/Applications/AI Face.app')
 EVERY = 3 * 3600          # seconds between checks
 RETRY = 10 * 60           # when busy, try again this soon
 FIRST = 60                # first check this long after the app starts
@@ -29,6 +29,42 @@ AI_QUIET = 10 * 60        # an AI changed the face this recently: the user is pr
 
 _lock = threading.Lock()   # one update at a time
 _running = False
+_gate = threading.RLock()
+_active_requests = 0
+_quiescing = False
+
+
+def request_started():
+    global _active_requests
+    with _gate:
+        if _quiescing:
+            return False
+        _active_requests += 1
+        return True
+
+
+def request_finished():
+    global _active_requests
+    with _gate:
+        _active_requests -= 1
+
+
+def prepare_installation(device):
+    global _quiescing
+    with _gate:
+        # The preparation POST is the only permitted in-flight request.
+        if _active_requests > 1:
+            return T('요청을 처리하는 중', 'A request is still running')
+        reason = busy(device, manual=True)
+        if not reason:
+            _quiescing = True
+        return reason
+
+
+def cancel_installation():
+    global _quiescing
+    with _gate:
+        _quiescing = False
 
 
 def state_path():
@@ -81,22 +117,56 @@ def run_tests(root):
     """The project's own tests (Python and the firmware simulator). Returns (ok, output)."""
     p = subprocess.run([sys.executable, '-m', 'unittest', 'discover', '-s', 'tests'], cwd=str(root),
                        capture_output=True, text=True, timeout=1200, stdin=subprocess.DEVNULL,
-                       env={k: v for k, v in os.environ.items() if k != 'AIFACE_TEST_HOME'})
+                       env={k: v for k, v in os.environ.items() if not k.startswith('AIFACE_')})
     return p.returncode == 0, (p.stdout + p.stderr)[-2000:]
 
 
 def compile_app(root):
     """Builds the new app next to the running one (AIFace.new); the running app is not touched."""
-    p = subprocess.run(['/bin/zsh', str(root / 'tools' / 'build_app.sh'), '--compile-only'], cwd=str(root),
+    p = subprocess.run(['/bin/zsh', str(root / 'tools' / 'build_app.sh'), '--stage'], cwd=str(root),
                        capture_output=True, text=True, timeout=1200, stdin=subprocess.DEVNULL)
     return p.returncode == 0, (p.stdout + p.stderr)[-2000:]
 
 
 def install_app(root):
-    """Swaps in the compiled app and restarts it. Detached: it quits this server too."""
-    subprocess.Popen(['/bin/zsh', str(root / 'tools' / 'build_app.sh'), '--prebuilt'], cwd=str(root),
-                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                     start_new_session=True)
+    """Installer owns the transaction. Swift checks idle atomically before normal quit."""
+    bundle = paths.app_bundle()
+    if bundle is None:
+        raise RuntimeError('AI Face must be running from a bundle')
+    staged = root / 'AI Face.update.app' if root != bundle else bundle
+    spec = importlib.util.spec_from_file_location('face_deploy', staged / 'Contents/Resources/deploy_app.py')
+    deploy = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(deploy)
+    process = deploy.deploy(staged, bundle, paths.DATA)
+    # Success terminates this server. If preparation/normal quit fails, report it here.
+    code = process.wait(timeout=180)
+    if code:
+        raise RuntimeError('Installer failed; see updates/install.log')
+    return process
+
+
+def source_checkout():
+    """Only this private checkout may ever be updated or reset."""
+    root = paths.update_source()
+    if root.is_symlink() or root.resolve() != root.absolute():
+        raise RuntimeError('Update source must not be a symbolic link')
+    if not root.exists():
+        paths.DATA.mkdir(parents=True, exist_ok=True, mode=0o700)
+        temporary = Path(tempfile.mkdtemp(prefix='source-clone-', dir=paths.DATA))
+        try:
+            p = subprocess.run(['git', 'clone', '--branch', BRANCH, '--single-branch',
+                                REPOSITORY, str(temporary)], capture_output=True, text=True,
+                               timeout=180, stdin=subprocess.DEVNULL,
+                               env=dict(os.environ, GIT_TERMINAL_PROMPT='0'))
+            if p.returncode:
+                raise RuntimeError(p.stderr.strip()[-1000:])
+            temporary.rename(root)
+        finally:
+            if temporary.exists():
+                shutil.rmtree(temporary)
+    if _out(root, 'remote', 'get-url', 'origin') != REPOSITORY:
+        raise RuntimeError('Unexpected update repository')
+    return root
 
 
 def busy(device, now=None, manual=False):
@@ -140,42 +210,65 @@ def check(device=None, manual=False):
 
 
 def _check(device, manual):
-    root = paths.project_root()
-    if root is None or not (root / '.git').exists():
-        return dict(result='unavailable', detail='')
+    paths.DATA.mkdir(parents=True, exist_ok=True, mode=0o700)
+    journal = paths.DATA / 'updates/transaction.json'
+    if journal.exists():
+        transaction = json.loads(journal.read_text())
+        if transaction.get('phase') not in ('complete', 'failed'):
+            return dict(result='waiting', detail='Installation in progress or interrupted; see updates/transaction.json')
+    with (paths.DATA / 'source.lock').open('w') as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return dict(result='waiting', detail='Another updater is running')
+        return _check_locked(device, manual)
+
+
+def _check_locked(device, manual):
+    bundle = paths.app_bundle()
+    if bundle is not None and bundle != TARGET:
+        reason = busy(device, manual=True)
+        if reason:
+            return dict(result='waiting', detail=reason)
+        install_app(bundle)
+        return dict(result='installing', detail='')
+    root = source_checkout()
     if _out(root, 'rev-parse', '--abbrev-ref', 'HEAD') != BRANCH:
-        return dict(result='skipped', detail=T(f'{BRANCH} 브랜치가 아님', f'not on the {BRANCH} branch'))
-    if _out(root, 'status', '--porcelain', '--untracked-files=no'):
-        return dict(result='skipped', detail=T('이 Mac에 아직 커밋하지 않은 변경이 있음',
-                                               'this Mac has changes that are not committed'))
+        return dict(result='skipped', detail=f'not on the {BRANCH} branch')
+    if _out(root, 'status', '--porcelain', '--untracked-files=normal'):
+        return dict(result='skipped', detail=T('업데이트 소스에 로컬 변경이 있음', 'Update source has local changes'))
     p = git(root, 'fetch', '--quiet', 'origin', BRANCH, timeout=120)
     if p.returncode != 0:
         return dict(result='error', detail=T('GitHub에 연결하지 못함', 'could not reach GitHub'))
     old, new = _out(root, 'rev-parse', 'HEAD'), _out(root, 'rev-parse', 'FETCH_HEAD')
-    if old == new:
-        return dict(result='latest', detail='', current=_short(old))
-    if git(root, 'merge-base', '--is-ancestor', 'HEAD', 'FETCH_HEAD').returncode != 0:
-        return dict(result='skipped', detail=T('이 Mac에만 있는 커밋이 있음', 'this Mac has commits GitHub does not'))
+    running = paths.running_revision()
+    if running == new:
+        return dict(result='latest', detail='', current=_short(running))
+    if git(root, 'merge-base', '--is-ancestor', 'HEAD', new).returncode != 0:
+        return dict(result='skipped', detail='Update source has local commits or stable was rewound')
+    if running and git(root, 'cat-file', '-e', running + '^{commit}').returncode == 0:
+        if git(root, 'merge-base', '--is-ancestor', running, new).returncode != 0:
+            return dict(result='skipped', detail='Stable is older than the running app')
     if not manual and load_state().get('failed') == new:
-        return dict(result='failed', detail=load_state().get('detail', ''))   # same broken version: wait for a fix
+        return dict(result='failed', detail=load_state().get('detail', ''))
     reason = busy(device, manual=manual)
     if reason:
         return dict(result='waiting', detail=reason)
-    subjects = _out(root, 'log', '--format=%s', f'{old}..{new}').splitlines()[:10]
+    subjects = _out(root, 'log', '--format=%s', f'{running or old}..{new}').splitlines()[:10]
     _out(root, 'merge', '--ff-only', '--quiet', new)
     ok, log = run_tests(root)
-    step = T('테스트', 'tests')
     if ok:
         ok, log = compile_app(root)
-        step = T('앱 빌드', 'building the app')
     if not ok:
-        git(root, 'reset', '--hard', '--quiet', old)   # back to the version that runs now
-        return dict(result='failed', failed=new, current=_short(old),
-                    detail=T(f'새 버전({_short(new)})의 {step}가 실패해서 지금 버전을 그대로 씀',
-                             f'{step} failed for the new version ({_short(new)}); keeping this one'),
-                    log=log)
-    save_state(result='installing', previous=_short(old), current=_short(new), changes=subjects,
-               installed=int(time.time()), announce=True, failed=None, detail='')
+        git(root, 'reset', '--hard', '--quiet', old)
+        return dict(result='failed', failed=new, current=_short(running or old),
+                    detail='New version failed tests or build; keeping the running app', log=log)
+    # Building can take minutes: do not interrupt work started since the first check.
+    reason = busy(device, manual=manual)
+    if reason:
+        return dict(result='waiting', detail=reason)
+    save_state(result='installing', previous=_short(running or old), current=_short(new),
+               changes=subjects, failed=None, detail='')
     install_app(root)
     return dict(result='installing', detail='')
 
@@ -209,9 +302,9 @@ def watch(device, stop):
         announce(device)
     except OSError:
         pass
-    wait = FIRST
+    wait = 2 if paths.app_bundle() and paths.app_bundle() != TARGET else FIRST
     while not stop.wait(wait):
-        if not enabled():
+        if not enabled() and (paths.app_bundle() is None or paths.app_bundle() == TARGET):
             wait = RETRY
             continue
         result = check(device).get('result')

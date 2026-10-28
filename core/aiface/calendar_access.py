@@ -35,8 +35,7 @@ MAX_DAYS = 62
 
 
 def binary():
-    root = paths.project_root()
-    return root / 'AI Face.app' / 'Contents' / 'MacOS' / 'AIFace' if root else None
+    return paths.app_executable()
 
 
 def _run(*args, timeout=20, data=None):

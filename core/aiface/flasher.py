@@ -68,7 +68,7 @@ def _summary(output, limit=30):
 
 def _save_log(sketch, text):
     """Full output next to the sketch folder (firmware-build.log) and in the runtime folder."""
-    for path in (sketch.parent / 'firmware-build.log', RUNTIME / 'firmware-build.log'):
+    for path in (RUNTIME / 'firmware-build.log',):
         try:
             path.write_text(text)
         except OSError:
@@ -88,7 +88,10 @@ def flash(port, progress=None):
     The serial port must not be open in another program (controller app, Serial Monitor)."""
     say = progress or (lambda text: None)
     cli = find_cli()
-    sketch = sketch_dir()
+    original = sketch_dir()
+    sketch = RUNTIME / 'firmware-work' / 'ESP32_Display'
+    sketch.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(original, sketch, dirs_exist_ok=True)
     base = [cli, '--no-color'] + (['--config-file', str(IDE_CONFIG)] if IDE_CONFIG.is_file() else [])
     BUILD.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
