@@ -71,7 +71,7 @@
 "Off" = "사용 안 함";
 "Once connected, the AI picks a face for every reply. After connecting or disconnecting, quit that app (⌘Q) and open it again. Ring colors: Claude orange, GPT green, your own picks white." = "연결하면 AI가 대답할 때마다 표정을 골라요. 연결하거나 해제한 뒤에는 그 앱을 완전히 종료(⌘Q)하고 다시 실행하세요. 테두리 색: Claude 주황, GPT 초록, 직접 고르면 흰색.";
 "Only picture files can be added." = "사진 파일만 넣을 수 있어요.";
-"Open at login" = "로그인할 때 자동 실행";
+"Open at login" = "로그인 시 실행";
 "Other" = "기타";
 "Other apps" = "다른 앱";
 "Photo library" = "사진 보관함";
@@ -214,3 +214,9 @@
 "App data" = "앱 데이터";
 "App" = "앱";
 "Settings, photos, history, the update copy and backups" = "설정, 사진, 기록, 업데이트용 사본과 백업";
+"Menu bar" = "메뉴바";
+"Appearance" = "표시 효과";
+"Updates & storage" = "업데이트와 저장 위치";
+"Auto update" = "자동 업데이트";
+"Folders" = "저장 폴더";
+"Lid closed, 1–4 hours from the menu. Turns off by itself." = "메뉴에서 1–4시간, 뚜껑을 닫아도 깨어 있어요. 알아서 꺼져요.";
