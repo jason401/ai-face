@@ -78,4 +78,8 @@ server named `ai-face`. The ESP32 round LCD board is optional. Public repo: gith
   runs when an AI calls it). Order 1 meeting, 2 morning, 3 mail. Mail is heavy (9-18 s per full read):
   poll only the unread count (speed not measured yet), only while Mail is already open; important-sender
   list, quiet hours, priority vs AI faces / timer / saver, drop missed alerts after sleep.
+- Discussed 2026-10-28, left for later: merge expression history across Macs. Plan: an iCloud Drive folder
+  (`iCloud Drive/AI Face/history/<Mac name>/YYYY-MM-DD.jsonl`), each Mac writes only its own folder, reads
+  merge all. Undecided: "Delete all history" for all Macs or this one. CloudKit needs a paid Apple Developer
+  account (Team ID); he decided not to get one for now (worth it mainly for iPhone apps or giving the apps to others).
 - Test calendar event "☕ AI Face 캘린더 쓰기 테스트" (10/13 09:00) — delete when he asks.
