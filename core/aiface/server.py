@@ -225,7 +225,8 @@ def main():
                 return self.reply(200, data, kind)
             if self.path == '/view':   # for the menu bar face; no lock (a flash can hold it for minutes)
                 return self.reply(200, dict(device.view(), awake=awake.status(),
-                                            calendar_pending=calendar_access.pending()))
+                                            calendar_pending=calendar_access.pending(),
+                                            update_available=updater.load_state().get('result') == 'available'))
             if self.path == '/status':   # for the settings window; no lock either
                 return self.reply(200, dict(device.status(), version=VERSION, revision=paths.running_revision(), awake=awake.status()))
             if self.path.startswith('/history'):
@@ -354,7 +355,7 @@ def main():
                     if action not in ('connect', 'disconnect', 'quit', 'firmware', 'mcp_install', 'mcp_remove',
                                       'awake_acquire', 'awake_release', 'awake_resume', 'calendar_settings',
                                       'calendar_decide', 'calendar_undo', 'mail_settings', 'update_settings',
-                                      'update_check') \
+                                      'update_check', 'update_install') \
                             and device.fd is None and not device.paused and ports():
                         try:
                             device.connect(ports()[0])
@@ -422,8 +423,10 @@ def main():
                         mail_access.save(data.get('changes'))
                     elif action == 'update_settings':
                         updater.set_enabled(data.get('enabled'))
-                    elif action == 'update_check':   # "Check now": in the background, it can take minutes
+                    elif action == 'update_check':   # "Check now": only looks for a new version
                         threading.Thread(target=updater.check, args=(device, True), daemon=True).start()
+                    elif action == 'update_install':   # "Update now": tests, builds, installs (minutes)
+                        threading.Thread(target=updater.request_install, args=(device,), daemon=True).start()
                     elif action == 'calendar_decide':
                         calendar_access.decide(data.get('id'), data.get('allow'))
                     elif action == 'calendar_undo':

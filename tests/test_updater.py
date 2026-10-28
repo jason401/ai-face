@@ -116,10 +116,15 @@ class UpdaterTests(unittest.TestCase):
         self.assertEqual(s['result'], 'skipped')
         self.assertEqual(self.installs, [])
 
-    def test_installs_new_version(self):
+    def test_check_only_finds_and_the_button_installs(self):
         self.commit('b.txt', 'two', 'Add b')
-        s = updater.check(FakeDevice())
+        s = updater.check(FakeDevice())   # the automatic check
+        self.assertEqual((s['result'], s['changes']), ('available', ['Add b']))
+        self.assertFalse((self.work / 'b.txt').exists())
+        self.assertEqual((self.installs, self.ran_tests), ([], 0))
+        s = updater.request_install(FakeDevice())   # "Update now"
         self.assertEqual(s['result'], 'installing')
+        self.assertFalse(updater.load_state()['want_install'])
         self.assertTrue((self.work / 'b.txt').exists())
         self.assertEqual(self.installs, [self.work])
         self.assertEqual(updater.load_state()['changes'], ['Add b'])
@@ -136,7 +141,7 @@ class UpdaterTests(unittest.TestCase):
         old = self.head()
         self.commit('b.txt', 'two', 'Broken')
         self.tests_ok = False
-        s = updater.check(FakeDevice())
+        s = updater.check(FakeDevice(), manual=True, install=True)
         self.assertEqual(s['result'], 'failed')
         self.assertEqual(self.head(), old)
         self.assertFalse((self.work / 'b.txt').exists())
@@ -144,7 +149,7 @@ class UpdaterTests(unittest.TestCase):
         updater.check(FakeDevice())   # the same broken version is not tried again by itself
         self.assertEqual(self.ran_tests, 1)
         self.tests_ok = True
-        self.assertEqual(updater.check(FakeDevice(), manual=True)['result'], 'installing')   # "Check now" does
+        self.assertEqual(updater.check(FakeDevice(), manual=True, install=True)['result'], 'installing')   # the button does
 
     def test_skips_local_changes_and_commits(self):
         self.commit('b.txt', 'two', 'Add b')
@@ -156,18 +161,19 @@ class UpdaterTests(unittest.TestCase):
         self.assertFalse((self.work / 'b.txt').exists())
         self.assertEqual(self.installs, [])
 
-    def test_waits_while_an_ai_is_chatting(self):
+    def test_checking_does_not_disturb_and_the_button_installs_while_chatting(self):
         self.commit('b.txt', 'two', 'Add b')
         device = FakeDevice()
         device.owner, device.changed = 'claude', time.time()
-        self.assertEqual(updater.check(device)['result'], 'waiting')
+        self.assertEqual(updater.check(device)['result'], 'available')
         self.assertEqual(self.installs, [])
-        self.assertEqual(updater.check(device, manual=True)['result'], 'installing')
+        self.assertEqual(updater.request_install(device)['result'], 'installing')
 
     def test_waits_for_a_timer(self):
         self.commit('b.txt', 'two', 'Add b')
         face_modes.save_settings(timer={'end': time.time() + 60, 'total': 60, 'color': 'blue'})
-        self.assertEqual(updater.check(FakeDevice(), manual=True)['result'], 'waiting')
+        self.assertEqual(updater.request_install(FakeDevice())['result'], 'waiting')
+        self.assertTrue(updater.load_state()['want_install'])   # retried by the background loop
 
     def test_busy_started_during_build_prevents_install(self):
         self.commit('b.txt', 'two', 'Add b')
@@ -176,11 +182,11 @@ class UpdaterTests(unittest.TestCase):
             device.flashing = True
             return True, ''
         with patch.object(updater, 'compile_app', side_effect=compile_with_new_work):
-            self.assertEqual(updater.check(device, manual=True)['result'], 'waiting')
+            self.assertEqual(updater.check(device, manual=True, install=True)['result'], 'waiting')
         self.assertEqual(self.installs, [])
         # HEAD is already new, but the installed revision is old. Retry must still install.
         device.flashing = False
-        self.assertEqual(updater.check(device, manual=True)['result'], 'installing')
+        self.assertEqual(updater.check(device, manual=True, install=True)['result'], 'installing')
         self.assertEqual(self.installs, [self.work])
 
     def test_no_reset_of_developer_changes(self):
@@ -191,7 +197,7 @@ class UpdaterTests(unittest.TestCase):
         self.commit('b.txt', 'two', 'Broken')
         self.tests_ok = False
         with patch.object(paths, 'project_root', return_value=developer):
-            updater.check(FakeDevice())
+            updater.check(FakeDevice(), manual=True, install=True)
         self.assertEqual(marker.read_text(), 'uncommitted research notes')
 
     def test_prepare_freezes_only_when_idle(self):

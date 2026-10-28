@@ -50,15 +50,26 @@ struct GeneralTab: View {
                         .help(L("The face appears in the menu bar as soon as you log in."))
                 }
                 Divider()
-                SettingsRow(title: L("Auto update")) {
+                SettingsRow(title: L("Auto check")) {
                     SettingsAction(title: L("Check now")) { store.checkUpdate() }
                         .disabled(store.updateRunning)
-                    Toggle(L("Update automatically"), isOn: Binding(get: { store.autoUpdate }, set: { store.setAutoUpdate($0) }))
+                    Toggle(L("Check for updates automatically"), isOn: Binding(get: { store.autoUpdate }, set: { store.setAutoUpdate($0) }))
                         .labelsHidden().toggleStyle(.switch)
+                        .help(L("Check for updates automatically"))
+                }
+                if store.updateAvailable {
+                    Divider()
+                    SettingsRow(title: L("New version")) {
+                        Button(action: { store.installUpdate() }) {
+                            Text(L("Update now")).lineLimit(1).foregroundStyle(.white)
+                                .frame(maxWidth: .infinity, minHeight: 24)
+                                .background(RoundedRectangle(cornerRadius: 5).fill(Color.accentColor))
+                        }.buttonStyle(.plain)
+                    }
                 }
                 SettingsNote(text: "AI Face " + store.version + "\n" + store.updateText, lines: 4)
                     .textSelection(.enabled)
-                    .help(L("AI Face checks the stable release on GitHub at startup and every 3 hours. It tests and builds updates in its own source folder, then restarts when idle. Your development folder is never changed. Existing Python and Command Line Tools are required."))
+                    .help(L("AI Face looks for a new stable version on GitHub at startup and every 3 hours, but installs it only when you click Update now (here or in the menu). It then tests and builds it in its own source folder and restarts. Your development folder is never changed. Existing Python and Command Line Tools are required."))
                 Divider()
                 SettingsRow(title: L("Folders")) {
                     SettingsAction(title: L("App data")) { store.openDataFolder() }

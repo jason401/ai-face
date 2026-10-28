@@ -19,7 +19,7 @@ No hardware needed: the menu bar face works on its own. Everything runs locally 
 - **Round LCD (optional)**: Seeed XIAO ESP32S3 + 1.28" GC9A01 240×240 round display, firmware included (updated from the app, no Arduino IDE window needed) and a 3D-printable case in `hardware/housing`.
 - **Calendar (optional)**: AIs you allow can read the Mac's calendars (Exchange included): titles, times and places; notes and attendees only if you turn them on. Writing is allowed separately: AIs add events to the calendars you pick and change or delete only events they added, each change waiting for your OK (on by default), with undo. Settings → AI → Calendar.
 - **Mail (optional, read only)**: AIs you allow can list and read the Mail app's inboxes (accounts you leave on). Nothing is sent, moved, deleted or marked read; links show only their site and sign-in codes are hidden unless you turn that off. Settings → AI → Mail.
-- **Automatic updates**: when it starts and every 3 hours the app looks for a new version on GitHub (no account needed), and installs it only after the tests and the build pass; otherwise it keeps the running version. It waits while you or an AI are busy and never modifies the development folder. Settings → General → App.
+- **Updates** (same as AI Illuminati): when it starts and every 3 hours the app looks for a new stable version on GitHub (no account needed). It installs one only when you click **Update now** (Settings → General) or **Install new version** (menu), and only after the tests and the build pass; otherwise it keeps the running version. It waits while a timer, keep awake or a firmware upload is running and never modifies the development folder.
 - English and Korean, following your Mac's language.
 
 ## Requirements

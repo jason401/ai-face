@@ -14,7 +14,8 @@ import SwiftUI
         store.awakeSupported = true
         store.awakeReady = true
         store.awakeCommand = true
-        store.updateText = String(format: L("Up to date (%@)"), "3613ce9") + "\n" + String(format: L("Last checked %@"), "Oct 28, 11:13")
+        store.updateText = String(format: L("New version available (%@)"), "90a4d6e") + "\nBuild like AI Illuminati\n" + String(format: L("Last checked %@"), "Oct 28, 11:13")
+        store.updateAvailable = true
         store.saverType = "slideshow"
         store.claude = "on"; store.claudeCode = "on"; store.claudeCodeAvailable = true; store.codexAvailable = true
         store.hooks = "on"

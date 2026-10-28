@@ -1,5 +1,7 @@
 """App-owned stable checkout -> tests -> complete signed candidate -> transactional install.
 Never changes the developer checkout. Runtime code is sealed in the installed bundle.
+Like AI Illuminati: checks run by themselves, but a new version is installed only after the
+user clicks "Update now" (install=True).
 """
 import fcntl
 import importlib.util
@@ -194,14 +196,18 @@ def _short(rev):
     return rev[:7]
 
 
-def check(device=None, manual=False):
-    """One check, and the update when there is one. Returns the new state (also saved)."""
+def check(device=None, manual=False, install=False):
+    """One check. With install (the user clicked "Update now"), also test, build and install
+    the new version. Returns the new state (also saved)."""
     global _running
     if not _lock.acquire(blocking=False):
         return status()
     _running = True
     try:
-        return save_state(**_check(device, manual), checked=int(time.time()))
+        result = _check(device, manual, install)
+        if install and result.get('result') != 'waiting':
+            result['want_install'] = False   # done, failed or nothing to install: stop retrying
+        return save_state(**result, checked=int(time.time()))
     except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
         return save_state(result='error', detail=str(exc)[:300], checked=int(time.time()))
     finally:
@@ -209,7 +215,13 @@ def check(device=None, manual=False):
         _lock.release()
 
 
-def _check(device, manual):
+def request_install(device):
+    """"Update now": remembered, so a busy Mac (timer, keep awake...) installs once it is free."""
+    save_state(want_install=True)
+    return check(device, manual=True, install=True)
+
+
+def _check(device, manual, install):
     paths.DATA.mkdir(parents=True, exist_ok=True, mode=0o700)
     journal = paths.DATA / 'updates/transaction.json'
     if journal.exists():
@@ -221,10 +233,10 @@ def _check(device, manual):
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             return dict(result='waiting', detail='Another updater is running')
-        return _check_locked(device, manual)
+        return _check_locked(device, manual, install)
 
 
-def _check_locked(device, manual):
+def _check_locked(device, manual, install):
     bundle = paths.app_bundle()
     if bundle is not None and bundle != TARGET:
         reason = busy(device, manual=True)
@@ -260,10 +272,13 @@ def _check_locked(device, manual):
                         detail=T('이 맥의 앱이 stable보다 새 버전이에요', 'this Mac already runs a newer version than stable'))
     if not manual and load_state().get('failed') == new:
         return dict(result='failed', detail=load_state().get('detail', ''))
+    subjects = _out(root, 'log', '--format=%s', f'{running or old}..{new}').splitlines()[:10]
+    if not install:
+        return dict(result='available', current=_short(running or old), next=_short(new),
+                    changes=subjects, detail='')
     reason = busy(device, manual=manual)
     if reason:
         return dict(result='waiting', detail=reason)
-    subjects = _out(root, 'log', '--format=%s', f'{running or old}..{new}').splitlines()[:10]
     _out(root, 'merge', '--ff-only', '--quiet', new)
     ok, log = run_tests(root)
     if ok:
@@ -286,7 +301,8 @@ def status():
     s = load_state()
     return dict(enabled=enabled(), running=_running, result=s.get('result', ''), detail=s.get('detail', ''),
                 checked=s.get('checked', 0), current=s.get('current', ''), previous=s.get('previous', ''),
-                installed=s.get('installed', 0), changes=s.get('changes', []))
+                next=s.get('next', ''), installed=s.get('installed', 0), changes=s.get('changes', []),
+                want_install=bool(s.get('want_install')))
 
 
 def announce(device):
@@ -313,8 +329,11 @@ def watch(device, stop):
         pass
     wait = 2 if paths.app_bundle() and paths.app_bundle() != TARGET else FIRST
     while not stop.wait(wait):
-        if not enabled() and (paths.app_bundle() is None or paths.app_bundle() == TARGET):
+        if not enabled() and not load_state().get('want_install') \
+                and (paths.app_bundle() is None or paths.app_bundle() == TARGET):
             wait = RETRY
             continue
-        result = check(device).get('result')
+        # A new version is only looked for; it is installed when the user asked ("Update now").
+        install = bool(load_state().get('want_install'))
+        result = check(device, manual=install, install=install).get('result')
         wait = RETRY if result in ('waiting', 'error') else EVERY

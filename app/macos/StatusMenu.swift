@@ -65,6 +65,7 @@ final class StatusController: NSObject, NSMenuDelegate {
     var awakeEnd = 0.0
     var awakeLeases: [[String: Any]] = []   // who asks for it: label, left (s), job
     var awakePaused = 0                     // s left of the user's pause of automatic requests
+    var updateAvailable = false             // a new stable version waits for "Install new version"
     private var heatSent = false
     private var confirming = false           // a calendar confirmation window is open
     private var answered: Set<String> = []
@@ -248,6 +249,7 @@ final class StatusController: NSObject, NSMenuDelegate {
             watchHeat()
         }
         view.clockOnPhoto = (v["clock"] as? Bool) ?? false
+        updateAvailable = (v["update_available"] as? Bool) ?? false
         if kind == "photo" {
             let id = (v["photo"] as? NSNumber)?.intValue ?? -1
             let version = (v["photo_v"] as? NSNumber)?.intValue ?? 0
@@ -407,6 +409,9 @@ final class StatusController: NSObject, NSMenuDelegate {
         }
 
         menu.addItem(.separator())
+        if updateAvailable {   // like AI Illuminati: found by itself, installed only from here or Settings
+            _ = add(menu, L("Install new version"), #selector(installUpdate))
+        }
         _ = add(menu, L("Settings…"), #selector(settings), key: ",")
         _ = add(menu, L("Quit AI Face"), #selector(quit), key: "q")
     }
@@ -511,6 +516,11 @@ final class StatusController: NSObject, NSMenuDelegate {
 
     @objc func setUpAwake() {
         API.shared.call("awake_setup") { [weak self] ok, reply in self?.report(ok, reply) }
+    }
+
+    @objc func installUpdate() {
+        updateAvailable = false
+        API.shared.call("update_install")
     }
 
     @objc func settings() {
