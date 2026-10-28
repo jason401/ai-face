@@ -241,3 +241,16 @@
 "The bundled AI Face server is missing. Rebuild the app." = "앱 안의 AI Face 서버가 없어요. 앱을 다시 빌드해 주세요.";
 "Update" = "업데이트";
 "While Claude Code works" = "Claude Code 작업 중";
+"%d of %d on…" = "%d / %d개 켜짐…";
+"%d changes…" = "%d개 보기…";
+"Accounts" = "계정";
+"Mail accounts" = "메일 계정";
+"Day" = "일";
+"Week" = "주";
+"Month" = "월";
+"Year" = "연";
+"Time of day" = "요일별 시간대";
+"Changes per day" = "일별 변화";
+"Changes per month" = "월별 변화";
+"Who chose which faces" = "누가 어떤 표정을 골랐나";
+"Nothing recorded in this period." = "이 기간에는 기록이 없어요.";

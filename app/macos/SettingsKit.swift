@@ -130,3 +130,56 @@ struct SettingsStatus: View {
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
+
+/// An on/off switch at the right end of its row.
+struct SettingsSwitch: View {
+    let title: String
+    @Binding var isOn: Bool
+
+    var body: some View {
+        HStack {
+            Spacer(minLength: 0)
+            Toggle(title, isOn: $isOn).labelsHidden().toggleStyle(.switch)
+        }
+    }
+}
+
+struct SettingsSegments<Value: Hashable>: View {
+    let options: [(String, Value)]
+    @Binding var selection: Value
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(options.indices, id: \.self) { index in
+                Button { selection = options[index].1 } label: {
+                    Text(options[index].0).lineLimit(1)
+                        .frame(maxWidth: .infinity, minHeight: 22)
+                        .foregroundStyle(selection == options[index].1 ? Color.white : Color.primary)
+                        .background(RoundedRectangle(cornerRadius: 4).fill(selection == options[index].1 ? Color.accentColor : Color.clear))
+                        .contentShape(Rectangle())
+                }.buttonStyle(.plain)
+                    .accessibilityAddTraits(selection == options[index].1 ? [.isSelected] : [])
+            }
+        }
+        .padding(2).background(RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.06)))
+    }
+}
+
+/// The content of a popover opened from a row: a title and a scrolling list.
+struct SettingsPopover<Content: View>: View {
+    let title: String
+    var listHeight: CGFloat = 200   // the list scrolls past this
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title).font(.system(size: 12, weight: .semibold))
+            ScrollView { VStack(spacing: 0) { content } }
+                .frame(height: min(360, listHeight))
+        }
+        .font(.system(size: 12))
+        .controlSize(.small)
+        .padding(12)
+        .frame(width: 320)
+    }
+}

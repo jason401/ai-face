@@ -231,6 +231,9 @@ def main():
             if self.path.startswith('/history'):
                 query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
                 day = (query.get('day') or [time.strftime('%Y-%m-%d')])[0]
+                if self.path.startswith('/history/period'):
+                    kind = (query.get('kind') or ['day'])[0]
+                    return self.reply(200, history.period(kind, day, face_modes.emotions()))
                 if self.path.startswith('/history/week'):
                     return self.reply(200, history.week(day))
                 return self.reply(200, history.summary(day, face_modes.emotions()))

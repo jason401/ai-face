@@ -46,10 +46,13 @@ struct TimelineEvent: Identifiable, Equatable {
     let name: String
 }
 
-struct WeekRow: Identifiable, Equatable {
-    let id: String                    // yyyy-MM-dd
-    let label: String                 // weekday
-    let counts: [String: Int]         // owner -> changes
+/// One row of a week, month or year chart: a day (week, month) or a month (year).
+struct PeriodRow: Identifiable, Equatable {
+    let id: String                    // yyyy-MM-dd or yyyy-MM
+    let label: String                 // weekday, day of the month or month
+    var counts: [String: Int]         // owner -> changes
+    var events: [TimelineEvent] = []  // week only: that day's changes
+    var start = Date()                // week only: that day's midnight
 }
 
 let OWNERS = ["claude", "gpt", "user"]
@@ -151,6 +154,10 @@ final class SettingsStore: NSObject, ObservableObject {
     @Published var mailAsking = false
     @Published var hooks = "off"
     @Published var aiNotice = ""
+    // Popovers in the AI tab (no @State in views: see BoardTab)
+    @Published var showCalendars = false
+    @Published var showCalChanges = false
+    @Published var showMailAccounts = false
     // General
     @Published var loginItem = false
     @Published var mono = false
@@ -166,13 +173,13 @@ final class SettingsStore: NSObject, ObservableObject {
     @Published var awakeNotice = ""
     @Published var awakeCommand = false
     // Expression history (기록 tab)
-    @Published var historyDay = Calendar.current.startOfDay(for: Date())
+    @Published var historyKind = "day"   // day, week, month, year
+    @Published var historyDay = Calendar.current.startOfDay(for: Date())   // any day in the period
     @Published var dayTotal = 0
     @Published var dayStats: [String: OwnerStats] = [:]
     @Published var timeline: [TimelineEvent] = []
-    @Published var week: [WeekRow] = []
+    @Published var periodRows: [PeriodRow] = []
     private var historyKey = ""
-    private var weekKey = ""
 
     private var saverLoaded = false
     private var timer: Timer?
@@ -274,21 +281,60 @@ final class SettingsStore: NSObject, ObservableObject {
         return f
     }()
 
+    var periodUnit: Calendar.Component {
+        switch historyKind {
+        case "week": return .weekOfYear
+        case "month": return .month
+        case "year": return .year
+        default: return .day
+        }
+    }
+
+    /// First and last day of the shown period (weeks run Monday to Sunday, as on the server).
+    var periodBounds: (Date, Date) {
+        var cal = Calendar(identifier: .gregorian)
+        cal.firstWeekday = 2
+        cal.minimumDaysInFirstWeek = 4
+        let interval = cal.dateInterval(of: periodUnit == .day ? .day : periodUnit, for: historyDay)
+        let start = interval?.start ?? historyDay
+        let end = cal.date(byAdding: .day, value: -1, to: interval?.end ?? historyDay) ?? historyDay
+        return (start, end)
+    }
+
     var historyDayText: String {
         let f = DateFormatter()
         f.locale = APP_LOCALE
-        f.setLocalizedDateFormatFromTemplate("MMMdE")
-        return f.string(from: historyDay)
+        let (start, end) = periodBounds
+        switch historyKind {
+        case "week":
+            f.setLocalizedDateFormatFromTemplate("MMMd")
+            return f.string(from: start) + " – " + f.string(from: end)
+        case "month": f.setLocalizedDateFormatFromTemplate("yMMMM")
+        case "year": f.setLocalizedDateFormatFromTemplate("y")
+        default: f.setLocalizedDateFormatFromTemplate("MMMdE")
+        }
+        return f.string(from: start)
     }
 
-    var isToday: Bool { return Calendar.current.isDateInToday(historyDay) }
+    /// The shown period holds today (no "next" and no "Today" button).
+    var isToday: Bool {
+        let (start, end) = periodBounds
+        let today = Calendar.current.startOfDay(for: Date())
+        return start <= today && today <= end
+    }
 
-    func moveDay(_ days: Int) {
-        let next = Calendar.current.date(byAdding: .day, value: days, to: historyDay) ?? historyDay
-        if next > Date() { return }
-        historyDay = Calendar.current.startOfDay(for: next)
+    func setHistoryKind(_ kind: String) {
+        historyKind = kind
         historyKey = ""
-        weekKey = ""
+        loadHistory()
+    }
+
+    func moveDay(_ steps: Int) {
+        let next = Calendar.current.date(byAdding: periodUnit, value: steps, to: historyDay) ?? historyDay
+        let (start, _) = periodBounds
+        if steps > 0 && (Calendar.current.date(byAdding: periodUnit, value: steps, to: start) ?? next) > Date() { return }
+        historyDay = Calendar.current.startOfDay(for: min(next, Date()))
+        historyKey = ""
         loadHistory()
     }
 
@@ -304,7 +350,6 @@ final class SettingsStore: NSObject, ObservableObject {
         API.shared.call("history_clear") { [weak self] _, _ in
             guard let self = self else { return }
             self.historyKey = ""
-            self.weekKey = ""
             self.loadHistory()
         }
     }
@@ -312,57 +357,65 @@ final class SettingsStore: NSObject, ObservableObject {
     func goToday() {
         historyDay = Calendar.current.startOfDay(for: Date())
         historyKey = ""
-        weekKey = ""
         loadHistory()
     }
 
     func loadHistory() {
         let day = SettingsStore.dayFormat.string(from: historyDay)
-        API.shared.get("history?day=" + day) { [weak self] data in
+        API.shared.get("history/period?kind=" + historyKind + "&day=" + day) { [weak self] data in
             guard let self = self, let data = data else { return }
             let key = String(decoding: data, as: UTF8.self)
             if key == self.historyKey { return }
             self.historyKey = key
             guard let s = (try? JSONSerialization.jsonObject(with: data, options: [])) as? [String: Any] else { return }
-            self.dayTotal = (s["total"] as? NSNumber)?.intValue ?? 0
-            var stats: [String: OwnerStats] = [:]
-            let owners = (s["owners"] as? [String: Any]) ?? [:]
-            for owner in OWNERS {
-                let o = (owners[owner] as? [String: Any]) ?? [:]
-                var st = OwnerStats()
-                st.count = (o["count"] as? NSNumber)?.intValue ?? 0
-                st.top = ((o["top"] as? [[String: Any]]) ?? []).map { item in
-                    "\((item["name"] as? String) ?? "") ×\((item["count"] as? NSNumber)?.intValue ?? 0)"
-                }
-                for (g, n) in (o["groups"] as? [String: Any]) ?? [:] {
-                    st.groups[g] = (n as? NSNumber)?.intValue ?? 0
-                }
-                stats[owner] = st
+            self.applyHistory(s)
+        }
+    }
+
+    /// Show a /history/period reply (also used by the settings preview renderer).
+    func applyHistory(_ s: [String: Any]) {
+        dayTotal = (s["total"] as? NSNumber)?.intValue ?? 0
+        var stats: [String: OwnerStats] = [:]
+        let owners = (s["owners"] as? [String: Any]) ?? [:]
+        for owner in OWNERS {
+            let o = (owners[owner] as? [String: Any]) ?? [:]
+            var st = OwnerStats()
+            st.count = (o["count"] as? NSNumber)?.intValue ?? 0
+            st.top = ((o["top"] as? [[String: Any]]) ?? []).map { item in
+                "\((item["name"] as? String) ?? "") ×\((item["count"] as? NSNumber)?.intValue ?? 0)"
             }
-            self.dayStats = stats
-            let events = (s["timeline"] as? [[String: Any]]) ?? []
-            self.timeline = events.enumerated().map { pair in
+            for (g, n) in (o["groups"] as? [String: Any]) ?? [:] {
+                st.groups[g] = (n as? NSNumber)?.intValue ?? 0
+            }
+            stats[owner] = st
+        }
+        dayStats = stats
+        func events(_ list: [[String: Any]]) -> [TimelineEvent] {
+            return list.enumerated().map { pair in
                 let e = pair.element
                 return TimelineEvent(id: pair.offset, t: (e["t"] as? NSNumber)?.doubleValue ?? 0,
                                      owner: (e["owner"] as? String) ?? "user", name: (e["name"] as? String) ?? "")
             }
         }
-        API.shared.get("history/week?day=" + day) { [weak self] data in
-            guard let self = self, let data = data else { return }
-            let key = String(decoding: data, as: UTF8.self)
-            if key == self.weekKey { return }
-            self.weekKey = key
-            let rows = ((try? JSONSerialization.jsonObject(with: data, options: [])) as? [[String: Any]]) ?? []
-            let weekday = DateFormatter()
-            weekday.locale = APP_LOCALE
-            weekday.dateFormat = "E"
-            self.week = rows.map { r in
-                let d = (r["day"] as? String) ?? ""
-                var counts: [String: Int] = [:]
-                for owner in OWNERS { counts[owner] = (r[owner] as? NSNumber)?.intValue ?? 0 }
-                let label = SettingsStore.dayFormat.date(from: d).map { weekday.string(from: $0) } ?? d
-                return WeekRow(id: d, label: label, counts: counts)
+        timeline = events((s["timeline"] as? [[String: Any]]) ?? [])
+        let label = DateFormatter()
+        label.locale = APP_LOCALE
+        let month = DateFormatter()
+        month.dateFormat = "yyyy-MM"
+        let kind = (s["kind"] as? String) ?? "day"
+        label.setLocalizedDateFormatFromTemplate(kind == "week" ? "E" : kind == "year" ? "MMM" : "d")
+        periodRows = ((s["rows"] as? [[String: Any]]) ?? []).map { r in
+            let d = (r["day"] as? String) ?? ""
+            var counts: [String: Int] = [:]
+            for owner in OWNERS { counts[owner] = (r[owner] as? NSNumber)?.intValue ?? 0 }
+            let date = SettingsStore.dayFormat.date(from: d) ?? month.date(from: d)
+            var row = PeriodRow(id: d, label: date.map { label.string(from: $0) } ?? d, counts: counts)
+            if let list = r["timeline"] as? [[String: Any]] {
+                row.events = events(list)
+                row.counts = OWNERS.reduce(into: [:]) { c, o in c[o] = row.events.filter { $0.owner == o }.count }
+                row.start = date ?? Date()
             }
+            return row
         }
     }
 
@@ -874,60 +927,106 @@ struct GroupBar: View {
 }
 
 struct Legend: View {
+    var shown: Set<String>? = nil   // only these groups (nil: all)
+
     var body: some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 78), spacing: 6)], alignment: .leading, spacing: 4) {
-            ForEach(GROUP_ORDER, id: \.self) { g in
+            ForEach(GROUP_ORDER.filter { shown?.contains($0) ?? true }, id: \.self) { g in
                 HStack(spacing: 4) {
-                    RoundedRectangle(cornerRadius: 2).fill(GROUP_COLOR[g] ?? .gray).frame(width: 10, height: 10)
-                    Text(GROUP_LABEL[g] ?? g).font(.caption2).foregroundStyle(.secondary)
+                    RoundedRectangle(cornerRadius: 2).fill(GROUP_COLOR[g] ?? .gray).frame(width: 9, height: 9)
+                    Text(GROUP_LABEL[g] ?? g).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(2)
                 }
             }
         }
     }
 }
 
-/// 24 hours left to right; every face change is a tick in the color of who chose it.
+/// One day's changes as ticks along 24 hours, in the color of who chose the face.
+struct TimelineTicks: View {
+    let events: [TimelineEvent]
+    let day: Date
+    var height: CGFloat = 30
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 3).fill(Color.secondary.opacity(0.08))
+                ForEach(events) { e in
+                    let x = geo.size.width * CGFloat(max(0, min(86400, e.t - day.timeIntervalSince1970)) / 86400)
+                    Rectangle().fill(OWNER_COLOR[e.owner] ?? .gray)
+                        .frame(width: 2, height: max(2, geo.size.height - 6))
+                        .offset(x: min(geo.size.width - 2, x))
+                        .help(e.name)
+                }
+            }
+        }
+        .frame(height: height)
+    }
+}
+
+struct HourLabels: View {
+    var body: some View {
+        HStack {
+            ForEach(["0", "6", "12", "18", "24"], id: \.self) { label in
+                Text(label + ":00").font(.system(size: 9)).foregroundStyle(.secondary)
+                if label != "24" { Spacer() }
+            }
+        }
+    }
+}
+
+/// The day view: 24 hours left to right.
 struct TimelineStrip: View {
     let events: [TimelineEvent]
     let day: Date
 
     var body: some View {
-        VStack(spacing: 2) {
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 4).fill(Color.secondary.opacity(0.08))
-                    ForEach(events) { e in
-                        let start = day.timeIntervalSince1970
-                        let x = geo.size.width * CGFloat(max(0, min(86400, e.t - start)) / 86400)
-                        Rectangle().fill(OWNER_COLOR[e.owner] ?? .gray)
-                            .frame(width: 2, height: geo.size.height - 6)
-                            .offset(x: min(geo.size.width - 2, x))
-                            .help(e.name)
-                    }
+        VStack(spacing: 3) {
+            TimelineTicks(events: events, day: day)
+            HourLabels()
+        }
+    }
+}
+
+/// The week view: one 24-hour strip per day, so habits by time of day line up.
+struct WeekTimeline: View {
+    let rows: [PeriodRow]
+
+    var body: some View {
+        VStack(spacing: 4) {
+            ForEach(rows) { r in
+                HStack(spacing: 6) {
+                    Text(r.label).font(.system(size: 10)).foregroundStyle(.secondary).frame(width: 24, alignment: .leading)
+                    TimelineTicks(events: r.events, day: r.start, height: 14)
+                    Text(r.events.isEmpty ? "" : "\(r.events.count)").font(.system(size: 9)).foregroundStyle(.secondary)
+                        .monospacedDigit().frame(width: 20, alignment: .trailing)
                 }
             }
-            .frame(height: 30)
-            HStack {
-                ForEach(["0:00", "6:00", "12:00", "18:00", "24:00"], id: \.self) { label in
-                    Text(label).font(.caption2).foregroundStyle(.secondary)
-                    if label != "24:00" { Spacer() }
-                }
+            HStack(spacing: 6) {
+                Spacer().frame(width: 24)
+                HourLabels()
+                Spacer().frame(width: 20)
             }
         }
     }
 }
 
-/// Changes per day for the last 7 days, stacked by who chose the face.
-struct WeekChart: View {
-    let rows: [WeekRow]
+/// Changes per day (month view) or per month (year view), stacked by who chose the face.
+struct BarChart: View {
+    let rows: [PeriodRow]
+    var labelEvery = 1     // label every n-th bar (and the last); a month has too many for all
 
     var body: some View {
-        let most = max(1, rows.map { r in OWNERS.reduce(0) { $0 + (r.counts[$1] ?? 0) } }.max() ?? 1)
-        return HStack(alignment: .bottom, spacing: 6) {
-            ForEach(rows) { r in
-                VStack(spacing: 4) {
-                    let total = OWNERS.reduce(0) { $0 + (r.counts[$1] ?? 0) }
-                    Text(total > 0 ? "\(total)" : "").font(.caption2).foregroundStyle(.secondary)
+        let totals = rows.map { r in OWNERS.reduce(0) { $0 + (r.counts[$1] ?? 0) } }
+        let most = max(1, totals.max() ?? 1)
+        let spacing: CGFloat = rows.count > 12 ? 2 : 5
+        return HStack(alignment: .bottom, spacing: spacing) {
+            ForEach(Array(rows.enumerated()), id: \.element.id) { index, r in
+                VStack(spacing: 3) {
+                    if rows.count <= 12 {
+                        Text(totals[index] > 0 ? "\(totals[index])" : "").font(.system(size: 9)).foregroundStyle(.secondary)
+                            .lineLimit(1).minimumScaleFactor(0.7)
+                    }
                     VStack(spacing: 1) {
                         ForEach(OWNERS.reversed(), id: \.self) { owner in
                             let n = r.counts[owner] ?? 0
@@ -939,7 +1038,11 @@ struct WeekChart: View {
                     }
                     .frame(maxWidth: .infinity)
                     .frame(height: 70, alignment: .bottom)
-                    Text(r.label).font(.caption2)
+                    .background(Rectangle().fill(Color.secondary.opacity(0.06)))
+                    .help("\(r.label): \(totals[index])")
+                    Text(index % labelEvery == 0 || index == rows.count - 1 ? r.label : " ")
+                        .font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(1).fixedSize()
+                        .frame(width: rows.count > 12 ? 4 : nil)
                 }
             }
         }

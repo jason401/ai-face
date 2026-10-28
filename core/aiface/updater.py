@@ -246,9 +246,18 @@ def _check_locked(device, manual):
         return dict(result='latest', detail='', current=_short(running))
     if git(root, 'merge-base', '--is-ancestor', 'HEAD', new).returncode != 0:
         return dict(result='skipped', detail='Update source has local commits or stable was rewound')
-    if running and git(root, 'cat-file', '-e', running + '^{commit}').returncode == 0:
+    if running:
+        # A build installed from main (or a local build) may be ahead of stable: never go back.
+        def known():
+            return git(root, 'cat-file', '-e', running + '^{commit}').returncode == 0
+        if not known():
+            git(root, 'fetch', '--quiet', 'origin', 'main', timeout=120)
+        if not known():
+            return dict(result='skipped', current=_short(running),
+                        detail=T('이 맥의 앱은 GitHub에 없는 로컬 빌드예요', 'this Mac runs a local build that is not on GitHub'))
         if git(root, 'merge-base', '--is-ancestor', running, new).returncode != 0:
-            return dict(result='skipped', detail='Stable is older than the running app')
+            return dict(result='skipped', current=_short(running),
+                        detail=T('이 맥의 앱이 stable보다 새 버전이에요', 'this Mac already runs a newer version than stable'))
     if not manual and load_state().get('failed') == new:
         return dict(result='failed', detail=load_state().get('detail', ''))
     reason = busy(device, manual=manual)

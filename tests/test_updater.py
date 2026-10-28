@@ -97,6 +97,25 @@ class UpdaterTests(unittest.TestCase):
         self.assertEqual(updater.check(FakeDevice())['result'], 'latest')
         self.assertEqual(self.installs, [])
 
+    def test_never_goes_back_from_a_newer_build(self):
+        # The running app was built from a main commit that stable does not have yet.
+        self.commit('n.txt', 'new', 'Newer on main', where=self.work)
+        newer = self.head()
+        run(self.work, 'push', '-q', 'origin', 'HEAD:refs/heads/dev')
+        run(self.work, 'reset', '-q', '--hard', 'HEAD~1')
+        run(self.work, 'reflog', 'expire', '--expire=now', '--all')
+        run(self.work, 'gc', '-q', '--prune=now')
+        with patch.object(paths, 'running_revision', return_value=newer):
+            s = updater.check(FakeDevice())
+        self.assertEqual(s['result'], 'skipped')
+        self.assertEqual(self.installs, [])
+
+    def test_unknown_local_build_is_not_replaced(self):
+        with patch.object(paths, 'running_revision', return_value='0' * 40):
+            s = updater.check(FakeDevice())
+        self.assertEqual(s['result'], 'skipped')
+        self.assertEqual(self.installs, [])
+
     def test_installs_new_version(self):
         self.commit('b.txt', 'two', 'Add b')
         s = updater.check(FakeDevice())
