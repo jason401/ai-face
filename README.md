@@ -13,13 +13,13 @@ No hardware needed: the menu bar face works on its own. Everything runs locally 
 - **78 animated moods in 11 groups** (happy, thinking, on it!, agree, facepalm, don't know, fingers crossed, ...). The AI chooses one per reply through a local [MCP](https://modelcontextprotocol.io) server, so the face follows the tone of the conversation.
 - **Who chose it**: the ring around the face is orange for Claude, green for GPT and white when you pick a face yourself. Monochrome mode (menu bar only; the board stays in color) shows it with ring patterns instead.
 - **Menu**: click the face for a short menu: timer (pomodoro) and keep awake, campfire and clock buttons next to the big face, and a click on the big face opens a picture grid of every mood (the ones you picked recently on top).
-- **Keep awake** (optional): keep a MacBook awake with the lid closed for 1, 2 or 4 hours, from the menu. It turns itself off at the end, on low battery, when hot and when AI Face quits. Setup installs one sudoers rule that allows only `pmset -a disablesleep 0/1` (Settings → General → Keep awake). Claude Code can hold it while it works (hooks, Settings → AI apps), `awake COMMAND` holds it while a command runs, and AIs can ask for it ("keep the Mac awake for 20 minutes").
+- **Keep awake** (optional): keep a MacBook awake with the lid closed for 1, 2 or 4 hours, from the menu. It turns itself off at the end, on low battery, when hot and when AI Face quits. Setup installs one sudoers rule that allows only `pmset -a disablesleep 0/1` (Settings → General → Keep awake). Claude Code can hold it while it works (hooks, Settings → AI), `awake COMMAND` holds it while a command runs, and AIs can ask for it ("keep the Mac awake for 20 minutes").
 - **Screen savers** when the face has not changed for a while: sleepy → asleep, clock, photo, slideshow, pixel-art campfire.
 - **History**: a daily log of which AI made which face, with stats and a timeline. Only the mood and the time are saved, never conversation text. AIs can read it too ("how were our faces today?").
 - **Round LCD (optional)**: Seeed XIAO ESP32S3 + 1.28" GC9A01 240×240 round display, firmware included (updated from the app, no Arduino IDE window needed) and a 3D-printable case in `hardware/housing`.
-- **Calendar (optional)**: AIs you allow can read the Mac's calendars (Exchange included): titles, times and places; notes and attendees only if you turn them on. Writing is allowed separately: AIs add events to the calendars you pick and change or delete only events they added, each change waiting for your OK (on by default), with undo. Settings → Calendar.
-- **Mail (optional, read only)**: AIs you allow can list and read the Mail app's inboxes (accounts you leave on). Nothing is sent, moved, deleted or marked read; links show only their site and sign-in codes are hidden unless you turn that off. Settings → Mail.
-- **Automatic updates**: when it starts and every 3 hours the app looks for a new version on GitHub (no account needed), and installs it only after the tests and the build pass; otherwise it keeps the running version. It waits while you or an AI are busy and never modifies the development folder. Settings → General → Updates.
+- **Calendar (optional)**: AIs you allow can read the Mac's calendars (Exchange included): titles, times and places; notes and attendees only if you turn them on. Writing is allowed separately: AIs add events to the calendars you pick and change or delete only events they added, each change waiting for your OK (on by default), with undo. Settings → AI → Calendar.
+- **Mail (optional, read only)**: AIs you allow can list and read the Mail app's inboxes (accounts you leave on). Nothing is sent, moved, deleted or marked read; links show only their site and sign-in codes are hidden unless you turn that off. Settings → AI → Mail.
+- **Automatic updates**: when it starts and every 3 hours the app looks for a new version on GitHub (no account needed), and installs it only after the tests and the build pass; otherwise it keeps the running version. It waits while you or an AI are busy and never modifies the development folder. Settings → General → App.
 - English and Korean, following your Mac's language.
 
 ## Requirements
@@ -32,7 +32,7 @@ No hardware needed: the menu bar face works on its own. Everything runs locally 
 1. Install the Xcode Command Line Tools if you do not have them: `xcode-select --install`
 2. Get the code: `git clone https://github.com/jason401/ai-face.git` (or download the ZIP).
 3. Double-click **`Build AI Face.command`**. It stages a complete signed app and installs it in `/Applications`: a face appears in the menu bar and the settings window opens. The app is built on your own Mac, so it opens without a Gatekeeper warning. (If you downloaded the ZIP, macOS may block the `.command` file the first time: right-click it → Open, or allow it in System Settings → Privacy & Security.)
-4. In **Settings → AI apps**, click **Connect** next to Claude desktop, Codex and/or Claude Code, then quit (⌘Q) and reopen those apps (start a new Claude Code session). Claude Code is registered for all folders (user scope) through its own `claude mcp add-json` command (if there is no `claude` on PATH, the copy inside the Claude app's Code tab is used).
+4. In **Settings → AI**, click **Connect** next to Claude desktop, Codex and/or Claude Code, then quit (⌘Q) and reopen those apps (start a new Claude Code session). Claude Code is registered for all folders (user scope) through its own `claude mcp add-json` command (if there is no `claude` on PATH, the copy inside the Claude app's Code tab is used).
 
 The build installs `/Applications/AI Face.app`. Runtime Python code, firmware sources and setup scripts are included in the bundle; the development folder is not needed to run the installed app. Existing settings, photos, history and MCP paths stay in `~/Library/Application Support/AI Face/`.
 
@@ -55,7 +55,7 @@ The face only changes while AI Face is running. When it is quit, the AI's face t
 
 ## Uninstall
 
-1. Settings → AI apps → **Disconnect** for each app (or `python3 tools/install_mcp.py --remove`), and turn off **Open at login** in Settings → General.
+1. Settings → AI → **Disconnect** for each app (or `python3 tools/install_mcp.py --remove`), and turn off **Open at login** in Settings → General.
    If you set up keep awake, remove its rule there too (Settings → General → Keep awake → Remove…).
 2. Quit AI Face from its menu, then delete the project folder and, if you want, `~/Library/Application Support/AI Face/`.
 
@@ -127,7 +127,7 @@ Claude나 GPT와 대화하면 AI가 대답마다 표정을 골라서 **맥 메�
 
 1. `xcode-select --install`로 Xcode 명령줄 도구 설치(없을 때만)
 2. `Build AI Face.command` 더블클릭 → `AI Face.app`이 만들어지고 실행돼요(메뉴바 얼굴, 설정 창).
-3. 설정 → **AI 연결**에서 Claude 데스크톱 / Codex **연결**
+3. 설정 → **AI** 탭에서 Claude 데스크톱 / Codex **연결**
 4. Claude(와 Codex)를 ⌘Q로 껐다가 다시 실행
 
 AI Face가 켜져 있을 때만 얼굴이 바뀌어요. 꺼져 있으면 AI의 표정 도구는 조용히 아무것도 하지 않고 대화는 평소처럼 이어져요.
