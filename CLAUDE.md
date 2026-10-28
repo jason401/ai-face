@@ -1,5 +1,7 @@
 # AI Face — notes for Claude
 
+Read `HANDOFF.md` and `AGENTS.md` first. The installed app and stable update checkout are independent of this developer folder. The current build stages a complete signed bundle; old instructions about sibling runtime code and ad-hoc fallback below are superseded.
+
 Younghun's macOS menu bar face. AIs (Claude, Codex/GPT) set its expression through a local MCP
 server named `ai-face`. The ESP32 round LCD board is optional. Public repo: github.com/jason401/ai-face (MIT).
 
@@ -42,8 +44,7 @@ server named `ai-face`. The ESP32 round LCD board is optional. Public repo: gith
 - App: `zsh tools/build_app.sh < /dev/null` (same as double-clicking `Build AI Face.command`; it quits,
   rebuilds and restarts the app; log in `app-build.log`). Compiled with `xcrun swiftc`
   (Cocoa, SwiftUI, ServiceManagement, EventKit) — no Xcode project, so no SwiftUI macros like `#Preview`.
-- Signing: self-signed identity "AI Face Local Signing" (keeps the calendar permission across builds);
-  falls back to ad-hoc.
+- Signing: preserve the existing "AI Face Local Signing" identity; signing failure stops installation. No ad-hoc fallback.
 
 ## Rules that must stay true (agreed with Younghun)
 - Never ask for, store or handle his password. sudo is only ever `sudo -n` (keep awake uses a sudoers

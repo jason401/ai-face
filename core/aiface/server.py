@@ -182,6 +182,25 @@ def main():
             return self.headers.get('Host') == '127.0.0.1:' + str(self.server.server_port)
 
         def do_GET(self):
+            if self.path in ('/', '/view', '/status', '/update', '/emotions', '/recent', '/awake', '/expression'):
+                return self.handle_get()
+            self.tracked(self.handle_get)
+
+        def do_POST(self):
+            if self.path == '/install/cancel' and self.allowed() and self.headers.get('X-ESP-Token') == token:
+                updater.cancel_installation()
+                return self.reply(200, {})
+            self.tracked(self.handle_post)
+
+        def tracked(self, operation):
+            if not updater.request_started():
+                return self.reply(503, {'message': 'AI Face is installing an update. Try again shortly.'})
+            try:
+                operation()
+            finally:
+                updater.request_finished()
+
+        def handle_get(self):
             if not self.allowed():
                 return self.reply(403, {'error': 'Invalid host'})
             if self.path == '/':
@@ -208,7 +227,7 @@ def main():
                 return self.reply(200, dict(device.view(), awake=awake.status(),
                                             calendar_pending=calendar_access.pending()))
             if self.path == '/status':   # for the settings window; no lock either
-                return self.reply(200, dict(device.status(), version=VERSION, awake=awake.status()))
+                return self.reply(200, dict(device.status(), version=VERSION, revision=paths.running_revision(), awake=awake.status()))
             if self.path.startswith('/history'):
                 query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
                 day = (query.get('day') or [time.strftime('%Y-%m-%d')])[0]
@@ -274,9 +293,12 @@ def main():
                     return self.reply(200, device.state())
             self.reply(404, {})
 
-        def do_POST(self):
+        def handle_post(self):
             if not self.allowed() or self.headers.get('X-ESP-Token') != token:
                 return self.reply(403, {'error': 'Invalid token'})
+            if self.path == '/install/prepare':
+                reason = updater.prepare_installation(device)
+                return self.reply(409 if reason else 200, {'message': reason})
             if self.path == '/library':
                 # Raw image bytes; the original file name comes URL-encoded in X-File-Name.
                 try:

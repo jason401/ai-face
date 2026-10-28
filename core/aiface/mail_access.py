@@ -28,8 +28,7 @@ CODE = re.compile(r'(code|코드|인증\s*번호|인증번호|otp)\D{0,20}\d{4,8
 
 
 def binary():
-    root = paths.project_root()
-    return root / 'AI Face.app' / 'Contents' / 'MacOS' / 'AIFace' if root else None
+    return paths.app_executable()
 
 
 def _run(*args, timeout=60, data=None):

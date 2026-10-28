@@ -16,26 +16,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         background = CommandLine.arguments.contains("--background") || launchedAtLogin()
         LoginItem.refresh()
-        let root = (Bundle.main.bundlePath as NSString).deletingLastPathComponent
+        let root = Bundle.main.resourceURL!.path
         let script = (root as NSString).appendingPathComponent("core/run_server.py")
         guard FileManager.default.fileExists(atPath: script) else {
-            fail(L("Keep AI Face.app in the AI Face project folder (next to the core folder)."))
+            fail(L("The bundled AI Face server is missing. Rebuild the app."))
             return
         }
         let face = StatusController()
         face.openSettings = { [weak self] in self?.settings.show() }
         status = face
 
-        logPath = (root as NSString).appendingPathComponent("app-launch.log")
+        try? FileManager.default.createDirectory(at: Deployment.support, withIntermediateDirectories: true)
+        logPath = Deployment.support.appendingPathComponent("app-launch.log").path
         FileManager.default.createFile(atPath: logPath, contents: nil, attributes: nil)
         let output = Pipe()
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
-        task.arguments = [script]
+        task.arguments = ["-B", script]
         task.currentDirectoryURL = URL(fileURLWithPath: root)
         // The server and the MCP server speak the language the app picked (en / ko).
         var env = ProcessInfo.processInfo.environment
+        for key in env.keys.filter({ $0.hasPrefix("PYTHON") || $0.hasPrefix("AIFACE_") }) { env.removeValue(forKey: key) }
         env["AIFACE_LANG"] = APP_LANGUAGE
+        env["PYTHONDONTWRITEBYTECODE"] = "1"
+        env["AIFACE_APP_BUNDLE"] = Bundle.main.bundlePath
+        env["AIFACE_REVISION"] = Bundle.main.object(forInfoDictionaryKey: "AISourceRevision") as? String ?? ""
+        env["AIFACE_APP_PID"] = String(ProcessInfo.processInfo.processIdentifier)
         task.environment = env
         task.standardOutput = output
         task.standardError = FileHandle(forWritingAtPath: logPath) ?? FileHandle.nullDevice
@@ -80,7 +86,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         API.shared.token = lines[1].trimmingCharacters(in: .whitespaces)
         handle.readabilityHandler = nil
         status?.start()
-        if !background { settings.show() }
+        Deployment.acknowledge { [weak self] in
+            guard let self else { return }
+            if !self.background { self.settings.show() }
+        }
     }
 
     private func serverEnded(_ code: Int32) {
@@ -107,10 +116,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return true
     }
 
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        return Deployment.shouldTerminate(sender)
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         if let task = server, task.isRunning {
             task.terminationHandler = nil
             task.terminate()
+            task.waitUntilExit() // Release serial port and complete keep-awake cleanup before replacement.
         }
     }
 }
@@ -124,6 +138,11 @@ if let i = CommandLine.arguments.firstIndex(of: "--mail") {
     exit(MailCLI.run(Array(CommandLine.arguments[(i + 1)...])))
 }
 
+if !NSRunningApplication.runningApplications(withBundleIdentifier: "local.aiface")
+    .filter({ $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }).isEmpty {
+    fputs("Another AI Face app is already running.\n", stderr)
+    exit(1)
+}
 let app = NSApplication.shared
 let delegate = AppDelegate()
 app.delegate = delegate

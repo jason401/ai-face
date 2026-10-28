@@ -28,3 +28,32 @@ def project_root():
     if (here / 'firmware').is_dir() and (here / 'core').is_dir():
         return here
     return None
+
+
+def app_bundle():
+    """Installed bundle inferred from this package, or the explicit app launch context."""
+    import os
+    configured = os.environ.get('AIFACE_APP_BUNDLE')
+    if configured:
+        return Path(configured)
+    for parent in PACKAGE.parents:
+        if parent.suffix == '.app' and (parent / 'Contents/Info.plist').is_file():
+            return parent
+    return None
+
+
+def app_executable():
+    bundle = app_bundle()
+    if bundle:
+        return bundle / 'Contents/MacOS/AIFace'
+    root = project_root()
+    return root / 'AI Face.app/Contents/MacOS/AIFace' if root else None
+
+
+def running_revision():
+    import os
+    return os.environ.get('AIFACE_REVISION', '')
+
+
+def update_source():
+    return DATA / 'source'
