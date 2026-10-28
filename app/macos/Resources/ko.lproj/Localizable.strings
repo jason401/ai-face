@@ -206,7 +206,9 @@
 "Update automatically" = "자동 업데이트";
 "Check now" = "지금 확인";
 "Updates" = "업데이트";
-"When the app starts and every 3 hours, AI Face looks for a new version on GitHub. It installs it only after the tests and the build pass, then restarts by itself (the face is gone for a few seconds). It waits while a timer, keep awake, a calendar question or an AI chat is going on, and skips when this Mac has its own changes." = "앱을 켤 때와 3시간마다 GitHub에서 새 버전을 찾아요. 테스트와 빌드가 모두 통과해야만 설치하고, 알아서 다시 켜져요(얼굴이 몇 초 사라져요). 타이머, 깨어 있기, 캘린더 확인, AI와 대화 중에는 기다리고, 이 Mac에서 고친 내용이 있으면 건너뛰어요.";
 
 /* Menu header */
 "Choose a face" = "표정 고르기";
+
+"AI Face checks the stable release on GitHub at startup and every 3 hours. It tests and builds updates in its own source folder, then restarts when idle. Your development folder is never changed. Existing Python and Command Line Tools are required." = "시작할 때와 3시간마다 GitHub의 stable 배포를 확인해요. 앱 전용 소스 폴더에서 테스트·빌드하고, 사용 중인 작업이 없을 때 다시 시작해요. 개발 폴더는 수정하지 않아요. 기존 Python과 Command Line Tools가 필요해요.";
+"Installed version (%@)" = "설치된 버전 (%@)";

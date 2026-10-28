@@ -176,7 +176,7 @@ def install(staged, target, current, support, parent_pid, token, restore_login, 
             record['phase'] = 'complete'
             atomic_json(journal, record)
             previous_state = json.loads((support / 'update.json').read_text()) if (support / 'update.json').exists() else {}
-            atomic_json(support / 'update.json', dict(previous_state, result='updated', current=revision[:7], previous=previous_revision[:7], announce=True,
+            atomic_json(support / 'update.json', dict(previous_state, result='updated', current=revision[:7], previous=previous_revision[:7], announce=True, installed=int(time.time()), checked=int(time.time()),
                         at=datetime.datetime.now(datetime.timezone.utc).isoformat()))
             shutil.rmtree(work)
             journal.unlink()

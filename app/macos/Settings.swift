@@ -221,6 +221,9 @@ final class SettingsStore: NSObject, ObservableObject {
             self.message = (s["message"] as? String) ?? ""
             self.flashing = (s["flashing"] as? Bool) ?? false
             self.version = (s["version"] as? String) ?? ""
+            if let revision = s["revision"] as? String, !revision.isEmpty {
+                self.version += " (" + revision.prefix(7) + ")"
+            }
             self.mono = (s["mono"] as? Bool) ?? false
             if let a = s["awake"] as? [String: Any] {
                 self.awakeSupported = (a["supported"] as? Bool) ?? false
@@ -688,7 +691,10 @@ final class SettingsStore: NSObject, ObservableObject {
         switch (u["result"] as? String) ?? "" {
         case "latest": text = String(format: L("Up to date (%@)"), current)
         case "updated":
-            text = String(format: L("Updated: %@ → %@"), (u["previous"] as? String) ?? "", current)
+            let previous = (u["previous"] as? String) ?? ""
+            text = previous.isEmpty || previous == "legacy"
+                ? String(format: L("Installed version (%@)"), current)
+                : String(format: L("Updated: %@ → %@"), previous, current)
             if let first = (u["changes"] as? [String])?.first { text += "\n" + first }
         case "installing": text = L("Installing the new version…")
         case "waiting": text = String(format: L("New version found, waiting: %@"), detail)
@@ -847,7 +853,7 @@ struct GeneralTab: View {
             } header: {
                 Text(L("Updates"))
             } footer: {
-                Text(L("When the app starts and every 3 hours, AI Face looks for a new version on GitHub. It installs it only after the tests and the build pass, then restarts by itself (the face is gone for a few seconds). It waits while a timer, keep awake, a calendar question or an AI chat is going on, and skips when this Mac has its own changes."))
+                Text(L("AI Face checks the stable release on GitHub at startup and every 3 hours. It tests and builds updates in its own source folder, then restarts when idle. Your development folder is never changed. Existing Python and Command Line Tools are required."))
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
