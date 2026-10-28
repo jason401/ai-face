@@ -165,6 +165,7 @@ final class SettingsStore: NSObject, ObservableObject {
     @Published var autoUpdate = true
     @Published var updateRunning = false
     @Published var updateText = ""
+    @Published var updateAvailable = false   // found by the automatic check, waits for "Update now"
     // Keep awake (lid closed)
     @Published var awakeSupported = false
     @Published var awakeReady = false
@@ -257,6 +258,7 @@ final class SettingsStore: NSObject, ObservableObject {
             self.autoUpdate = (u["enabled"] as? Bool) ?? true
             self.updateRunning = (u["running"] as? Bool) ?? false
             self.updateText = SettingsStore.updateText(u)
+            self.updateAvailable = (u["result"] as? String) == "available" && !self.updateRunning
         }
         API.shared.getJSON("library") { [weak self] json in
             guard let self = self, let list = json as? [[String: Any]] else { return }
@@ -737,7 +739,9 @@ final class SettingsStore: NSObject, ObservableObject {
     // MARK: Automatic updates (core/aiface/updater.py)
 
     static func updateText(_ u: [String: Any]) -> String {
-        if (u["running"] as? Bool) ?? false { return L("Checking for a new version…") }
+        if (u["running"] as? Bool) ?? false {
+            return (u["want_install"] as? Bool) ?? false ? L("Updating to the new version…") : L("Checking for a new version…")
+        }
         let detail = (u["detail"] as? String) ?? ""
         let current = (u["current"] as? String) ?? ""
         var text: String
@@ -748,6 +752,9 @@ final class SettingsStore: NSObject, ObservableObject {
             text = previous.isEmpty || previous == "legacy"
                 ? String(format: L("Installed version (%@)"), current)
                 : String(format: L("Updated: %@ → %@"), previous, current)
+            if let first = (u["changes"] as? [String])?.first { text += "\n" + first }
+        case "available":
+            text = String(format: L("New version available (%@)"), (u["next"] as? String) ?? "")
             if let first = (u["changes"] as? [String])?.first { text += "\n" + first }
         case "installing": text = L("Installing the new version…")
         case "waiting": text = String(format: L("New version found, waiting: %@"), detail)
@@ -777,6 +784,13 @@ final class SettingsStore: NSObject, ObservableObject {
         updateRunning = true
         updateText = L("Checking for a new version…")
         API.shared.call("update_check")
+    }
+
+    func installUpdate() {
+        updateRunning = true
+        updateAvailable = false
+        updateText = L("Updating to the new version…")
+        API.shared.call("update_install")
     }
 
     func setMono(_ on: Bool) {

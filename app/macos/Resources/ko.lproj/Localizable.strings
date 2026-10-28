@@ -254,3 +254,11 @@
 "Changes per month" = "월별 변화";
 "Who chose which faces" = "누가 어떤 표정을 골랐나";
 "Nothing recorded in this period." = "이 기간에는 기록이 없어요.";
+"Install new version" = "새 버전 설치";
+"Updating to the new version…" = "새 버전으로 업데이트하는 중…";
+"New version available (%@)" = "새 버전이 있어요 (%@)";
+"Auto check" = "자동 확인";
+"Check for updates automatically" = "업데이트 자동 확인";
+"New version" = "새 버전";
+"Update now" = "지금 업데이트";
+"AI Face looks for a new stable version on GitHub at startup and every 3 hours, but installs it only when you click Update now (here or in the menu). It then tests and builds it in its own source folder and restarts. Your development folder is never changed. Existing Python and Command Line Tools are required." = "앱을 켤 때와 3시간마다 GitHub에서 새 stable 버전을 찾지만, 설치는 여기나 메뉴에서 '지금 업데이트'를 눌러야 해요. 누르면 앱 전용 소스 폴더에서 테스트·빌드하고 다시 켜요. 개발 폴더는 수정하지 않아요. 기존 Python과 Command Line Tools가 필요해요.";
