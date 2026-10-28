@@ -756,6 +756,10 @@ final class SettingsStore: NSObject, ObservableObject {
             .appendingPathComponent("Library/Application Support/AI Face")
         NSWorkspace.shared.open(folder)
     }
+
+    func revealApp() {
+        NSWorkspace.shared.activateFileViewerSelecting([Bundle.main.bundleURL])
+    }
 }
 
 /// Open at login: the app itself as a login item (System Settings → General → Login Items →
@@ -859,8 +863,13 @@ struct GeneralTab: View {
             }
             Section(L("About")) {
                 LabeledContent(L("Version"), value: "AI Face " + store.version)
-                LabeledContent(L("Settings and photo library")) {
+                LabeledContent(L("App data")) {
                     Button(L("Show in Finder")) { store.openDataFolder() }
+                        .help(L("Settings, photos, history, the update copy and backups"))
+                }
+                LabeledContent(L("App")) {
+                    Button(L("Show in Finder")) { store.revealApp() }
+                        .help(Bundle.main.bundlePath)
                 }
             }
         }
