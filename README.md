@@ -19,16 +19,18 @@
 
 ## Download and install
 
-1. Open the official [Releases page](https://github.com/jason401/ai-face/releases). Download **AI-Face-2.1.0-macOS-universal.zip** and **SHA256SUMS.txt** from the published release. If no release is listed yet, a ready-to-run download is not yet available; GitHub's source ZIP is not an installer.
+1. Open the official [Releases page](https://github.com/jason401/ai-face/releases). Download **AI-Face-2.1.0-macOS-universal.zip**. This is the only download needed to install the app; **SHA256SUMS.txt** is optional and is used only to check file integrity. If no release is listed yet, a ready-to-run download is not yet available; GitHub's source ZIP is not an installer.
 2. Requires **macOS 13+** and **Xcode Command Line Tools**, which supply the external `/usr/bin/python3` runtime. If missing, run `xcode-select --install` and complete Apple's installation. A paid Apple Developer membership is not required.
-3. Compare `shasum -a 256 <downloaded-zip>` with the release checksum, extract the ZIP, and move **AI Face.app** into **Applications**. The app is Universal 2 (Apple silicon + Intel); architecture inclusion is verified during packaging, but execution on every hardware/OS combination is not guaranteed.
+3. Extract the ZIP and move **AI Face.app** into **Applications**. The app is Universal 2 (Apple silicon + Intel); architecture inclusion is verified during packaging, but execution on every hardware/OS combination is not guaranteed.
 4. Open AI Face. In **Settings → AI**, connect Claude desktop, Codex and/or Claude Code, then fully quit and reopen that AI app. The conversation must expose the registered local MCP tools; this does not connect mobile/web chats or all chat modes automatically.
 
 No hardware, signing private key or source checkout is required to run the downloaded app. The face changes while AI Face is running. Full instructions and uninstall steps: [Installation guide](docs/INSTALL_RELEASE.md).
 
+Optional integrity check: download `SHA256SUMS.txt` and compare it with `shasum -a 256 <downloaded-zip>`. This is not required for installation and does not certify that an app is safe.
+
 ### macOS security warning
 
-The app uses a local signature, **not Apple Developer ID signing or notarization**. Apple has not verified this release. After verifying the official source and checksum, try opening the app once. If blocked as an unidentified developer, use **System Settings → Privacy & Security → Open Anyway** for this specific trusted app and confirm. [Apple's guidance](https://support.apple.com/en-us/102445).
+The app uses a local signature, **not Apple Developer ID signing or notarization**. Apple has not verified this release. After confirming the download came from the official release page, try opening the app once. If blocked as an unidentified developer, use **System Settings → Privacy & Security → Open Anyway** for this specific trusted app and confirm. [Apple's guidance](https://support.apple.com/en-us/102445).
 
 Do not disable Gatekeeper globally, remove quarantine recursively, or bypass malware/computer-damage warnings. Stop if the checksum does not match. An individual Gatekeeper exception does not install a missing Python runtime.
 

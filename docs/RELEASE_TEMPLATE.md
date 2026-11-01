@@ -16,7 +16,7 @@ Free, open-source macOS menu bar face for AI conversations. Optional ESP32 round
 
 ## Install
 
-1. Download the archive matching your Mac from this release and compare `shasum -a 256 <archive>` with SHA256SUMS.txt.
+1. Download the app ZIP matching your Mac. Only the ZIP is needed to install; SHA256SUMS.txt is an optional integrity check.
 2. Extract the archive and move AI Face.app into Applications, following any tested prerequisites listed above.
 3. If a verified, trusted download is blocked as an unidentified developer, try opening it once, then use System Settings → Privacy & Security → Open Anyway. Do not disable Gatekeeper or bypass a malware/damage warning. [Apple guidance](https://support.apple.com/en-us/102445).
 4. Open AI Face, connect the desired local AI app in Settings → AI, and quit/reopen that AI app.

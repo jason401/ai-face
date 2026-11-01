@@ -10,12 +10,16 @@ Free, open-source software under the MIT License. The desktop app works without 
 
 ## Installation
 
-1. Download the app ZIP and `SHA256SUMS.txt` from [the official release page](https://github.com/jason401/ai-face/releases). Verify the downloaded ZIP with `shasum -a 256 <filename>` against the published checksum.
+1. Download the app ZIP from [the official release page](https://github.com/jason401/ai-face/releases). **Only the ZIP is needed to install.** `SHA256SUMS.txt` is an optional integrity-check file.
 2. Extract the ZIP. Move **AI Face.app** from the extracted **AI Face** folder into **Applications**. Keep the license and notices for your records.
 3. Open AI Face. It is locally signed, not Apple Developer ID signed or notarized. If a trusted download is blocked as an unidentified developer, try opening it once, then go to **System Settings → Privacy & Security → Open Anyway** and confirm. Do not disable Gatekeeper globally or bypass a malware / computer-damage warning. [Apple's guidance](https://support.apple.com/en-us/102445).
 4. A face appears in the menu bar. In **Settings → AI**, connect your AI app, quit that AI app completely and reopen it. The conversation must support the registered local MCP tools.
 
 You do not need the maintainer's signing identity, private key, source checkout or Arduino toolchain to run this app. Calendar, Mail, login launch, keep-awake setup and the ESP32 are optional; enable only what you want. Installing the app does not flash firmware or enable those permissions for you.
+
+## Optional integrity check
+
+If you want to check that your ZIP matches the published file, also download `SHA256SUMS.txt` and compare its value with `shasum -a 256 <filename>`. This step is optional, is not needed to install or run the app, and is not a malware or safety certification.
 
 ## Updates
 
