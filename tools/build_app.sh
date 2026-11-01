@@ -25,7 +25,7 @@ case "$ARCH" in arm64|x86_64) ;; *) echo "Unsupported architecture: $ARCH" >&2; 
 xcrun swiftc -swift-version 5 -O -target "$ARCH-apple-macos13.0" \
   -framework Cocoa -framework SwiftUI -framework ServiceManagement -framework EventKit \
   -o "$CANDIDATE/Contents/MacOS/AIFace" app/macos/*.swift >"$LOG" 2>&1
-xcrun swiftc -swift-version 5 -O -framework Cocoa tools/install_bridge.swift \
+xcrun swiftc -swift-version 5 -O -target "$ARCH-apple-macos13.0" -framework Cocoa tools/install_bridge.swift \
   -o "$CANDIDATE/Contents/Helpers/InstallBridge" >>"$LOG" 2>&1
 cp -R app/macos/Resources/*.lproj "$CANDIDATE/Contents/Resources/"
 # Copy only runtime resources, never the developer git checkout or tests.
