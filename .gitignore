@@ -10,3 +10,22 @@ tools/firmware_sim/test_fire
 tools/firmware_sim/test_notice
 tools/firmware_sim/render_fire
 .aiface-build-*/
+
+# Local credentials, signing material and runtime data must not be published.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.mobileprovision
+controller.json
+settings.json
+awake.json
+update.json
+moods.json
+Photo Library/
+사진 보관함/
+history/
+release-artifacts/

@@ -20,7 +20,8 @@ STAGING="$(mktemp -d "$PWD/.aiface-build-XXXXXX")"
 trap 'rm -rf "$STAGING"' EXIT
 CANDIDATE="$STAGING/$APP"
 mkdir -p "$CANDIDATE/Contents/MacOS" "$CANDIDATE/Contents/Helpers" "$CANDIDATE/Contents/Resources"
-ARCH="$(uname -m)"
+ARCH="${AIFACE_BUILD_ARCH:-$(uname -m)}"
+case "$ARCH" in arm64|x86_64) ;; *) echo "Unsupported architecture: $ARCH" >&2; exit 2 ;; esac
 xcrun swiftc -swift-version 5 -O -target "$ARCH-apple-macos13.0" \
   -framework Cocoa -framework SwiftUI -framework ServiceManagement -framework EventKit \
   -o "$CANDIDATE/Contents/MacOS/AIFace" app/macos/*.swift >"$LOG" 2>&1
@@ -32,6 +33,7 @@ mkdir -p "$CANDIDATE/Contents/Resources/core" "$CANDIDATE/Contents/Resources/too
 cp core/*.py "$CANDIDATE/Contents/Resources/core/"
 cp -R core/aiface "$CANDIDATE/Contents/Resources/core/"
 find "$CANDIDATE" -name __pycache__ -type d -prune -exec rm -rf {} +
+cp LICENSE THIRD_PARTY_NOTICES.md "$CANDIDATE/Contents/Resources/"
 mkdir -p "$CANDIDATE/Contents/Resources/firmware"
 cp -R firmware/ESP32_Display "$CANDIDATE/Contents/Resources/firmware/"
 cp 'tools/Set up Keep Awake.command' "$CANDIDATE/Contents/Resources/tools/"
