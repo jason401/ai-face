@@ -1,5 +1,5 @@
 // The menu bar face and its menu (like RunCat: click the icon, a short menu with a
-// bigger face on top, quick actions, 설정…, 종료).
+// bigger face on top, quick actions, Settings…, Quit).
 import Cocoa
 
 /// Top of the menu: a bigger animated face (click it to pick a face), the mood name, who

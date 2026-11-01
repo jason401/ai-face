@@ -43,7 +43,7 @@ func poseOf(_ f: Frame) -> Pose {
     return p
 }
 
-// Monochrome style (설정 → 일반): every color becomes its gray (luminance), like the LCD.
+// Monochrome style (Settings → General): every color becomes its gray (luminance), like the LCD.
 var MONO = false
 
 func rgb(_ r: Double, _ g: Double, _ b: Double) -> NSColor {

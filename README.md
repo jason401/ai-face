@@ -2,7 +2,7 @@
 
 **A little face for your AI.** AI Face is a free, open-source macOS menu bar app. While you chat with Claude or Codex, the AI can choose an animated expression for each reply through a local MCP connection. An optional ESP32 round LCD can show the same face on your desk.
 
-[Download from GitHub Releases](https://github.com/jason401/ai-face/releases) · [Installation guide](docs/INSTALL_RELEASE.md) · [MIT License](LICENSE)
+[Download from GitHub Releases](https://github.com/jason401/ai-face/releases) · [Installation guide](docs/INSTALL_RELEASE.md) · [User guide](docs/USER_GUIDE.md) · [MIT License](LICENSE)
 
 ![78 expression previews rendered from the firmware](docs/faces-en.png)
 
@@ -69,23 +69,3 @@ Developed with assistance from Claude and ChatGPT/Codex for implementation, debu
 ## License
 
 Copyright © 2026 jason401. Project-owned material is available under the [MIT License](LICENSE), permitting use, modification and redistribution, including commercial use, with its required notices. External dependencies retain their own licenses; see [Third-party notices](THIRD_PARTY_NOTICES.md). Product names are trademarks of their owners; this is an unofficial project.
-
----
-
-## 한국어
-
-AI와 대화할 때마다 표정을 보여 주는 무료 오픈소스 맥 메뉴바 앱입니다. 78가지 움직이는 표정, 타이머, 사진·시계·모닥불 대기 화면, 표정 기록을 지원합니다. ESP32 원형 LCD는 선택 사항입니다.
-
-### 설치
-
-1. 공식 [GitHub Releases](https://github.com/jason401/ai-face/releases)에서 Universal ZIP과 체크섬을 받으세요. 소스 코드 ZIP은 설치 프로그램이 아닙니다.
-2. macOS 13 이상과 무료 Xcode 명령줄 도구가 필요합니다. 없다면 `xcode-select --install`로 설치하세요. 유료 개발자 계정이나 제작자의 서명 키는 필요하지 않습니다.
-3. 체크섬을 확인하고 압축을 푼 뒤 **AI Face.app**을 **응용 프로그램**으로 옮기세요.
-4. Apple 공증이 없어 차단되면 공식 파일인지 확인한 뒤 **시스템 설정 → 개인정보 보호 및 보안 → 확인 없이 열기**로 개별 허용하세요. 악성코드·컴퓨터 손상 경고는 우회하지 마세요.
-5. 앱 설정 → AI에서 사용할 AI 앱을 연결하고, 그 AI 앱을 완전히 종료했다가 다시 실행하세요. 대화에서 로컬 MCP 도구를 사용할 수 있어야 합니다.
-
-다운로드 사용자는 이후 버전도 Releases에서 받아 앱을 종료한 뒤 교체하세요. 앱 안의 업데이트는 기존 로컬 서명 환경을 사용하는 소스 빌드 방식입니다. [자세한 설치·업데이트·삭제 안내](docs/INSTALL_RELEASE.md)
-
-사진과 설정은 맥에 저장되지만, AI 도구로 읽은 결과는 AI 서비스에 전달될 수 있습니다. 캘린더·메일 접근은 필요한 경우에만 허용하세요.
-
-Claude와 ChatGPT/Codex의 도움을 받아 개발한 AI-assisted development 프로젝트입니다. 프로젝트 소유 자료는 [MIT License](LICENSE)이며 외부 구성요소는 각자의 라이선스를 따릅니다.

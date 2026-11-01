@@ -1,4 +1,4 @@
-// The four settings tabs (일반 · AI · 보드 · 기록), built from the cards in SettingsKit.swift.
+// The four settings tabs (General · AI · Board · History), built from the cards in SettingsKit.swift.
 import Cocoa
 import SwiftUI
 import UniformTypeIdentifiers

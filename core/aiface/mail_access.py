@@ -23,7 +23,7 @@ from .i18n import T
 DEFAULTS = dict(apps=dict(claude=True, gpt=False), hidden=[], hide_links=True)
 MAX_DAYS = 60
 MAX_TEXT = 8000
-# "code: 123456", "인증번호 123456", "verification code is 123456"
+# Match code labels in English and Korean, followed by a verification code.
 CODE = re.compile(r'(code|코드|인증\s*번호|인증번호|otp)\D{0,20}\d{4,8}', re.I)
 
 

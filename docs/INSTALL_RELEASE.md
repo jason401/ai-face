@@ -26,11 +26,3 @@ The current in-app updater checks the `stable` source branch and compiles locall
 ## Uninstall
 
 Disconnect integrations in Settings → AI and turn off Open at login. Remove the optional keep-awake rule in its settings if you installed it. Quit the app, delete it from Applications, and optionally delete `~/Library/Application Support/AI Face/` to remove its local data.
-
-## 한국어
-
-macOS 13 이상, Apple silicon·Intel을 지원합니다. 무료 Xcode 명령줄 도구가 필요하며, 없다면 터미널에서 `xcode-select --install`을 실행하고 설치를 완료하세요. 유료 개발자 계정이나 제작자 서명 키는 필요하지 않습니다.
-
-공식 Releases의 ZIP과 체크섬을 받아 확인하고, 압축을 푼 폴더 안의 **AI Face.app**을 **응용 프로그램**으로 옮기세요. Apple 공증이 없어서 차단되면 신뢰하는 공식 파일인지 확인한 뒤 **시스템 설정 → 개인정보 보호 및 보안 → 확인 없이 열기**로 개별 허용하세요. 악성코드 경고는 우회하지 마세요.
-
-앱 설정 → AI에서 사용할 앱을 연결하고 그 AI 앱을 완전히 껐다 켜세요. 일반 다운로드 사용자는 이후 버전도 Releases에서 받아 앱을 종료한 뒤 교체하면 됩니다. 현재 앱 안의 업데이트 기능은 개발자용 소스 빌드 방식이므로, 다른 Mac에서는 Releases를 통한 수동 업데이트를 사용하세요.

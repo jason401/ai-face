@@ -193,7 +193,7 @@ EN = {
 }
 
 CATALOG = [
-  # ----- 기쁨 -----
+  # ----- Joy -----
   ('happy','행복','☺',JOY,'미소와 웃음, 가끔 윙크',0,[
     F(400,800),F(400,800,x=10),F(100,40,0,0,x=10),F(180,900,x=10),
     F(400,800,w=90,s=26,o=12,eyes=ARC,fx=BLUSH),F(140,220,0,100,s=24),F(400,800,lift=5),F(400,800,x=-10)]),
@@ -230,7 +230,7 @@ CATALOG = [
   ('farewell','배웅','🖐',LOVE,'손을 흔들며 웃는 얼굴로 배웅해요',None,[
     F(300,900,w=80,s=24,o=8,lift=6,fx=WAVE),F(160,500,100,0,w=80,s=24,o=6,lift=6,fx=WAVE),
     F(300,1200,w=85,s=24,o=12,eyes=ARC,lift=6,fx=WAVE)]),
-  # ----- 사랑·유대 -----
+  # ----- Love & connection -----
   ('affectionate','다정함','♡',LOVE,'부드러운 미소와 느린 눈인사',None,[
     F(850,1400,65,65,w=75,s=22),F(550,450,w=80,s=24,eyes=ARC,fx=BLUSH),
     F(700,1300,65,65,x=3,w=75,s=22),F(900,1200,75,75,x=-3,w=70,s=20)]),
@@ -256,7 +256,7 @@ CATALOG = [
   ('pleading','부탁','🥺',LOVE,'초롱초롱한 눈으로 간절히 바라봐요',None,[
     F(500,1200,y=-4,w=26,s=-4,eyes=BIG,brow=8,lift=7),F(300,500,y=-5,w=22,s=-6,o=4,eyes=BIG,brow=9,lift=8,shake=1),
     F(160,80,0,0,y=-4,w=26,s=-4,brow=8,lift=7),F(500,1300,x=-4,y=-4,w=26,s=-2,eyes=BIG,brow=8,lift=7,fx=SPARKLE)]),
-  # ----- 놀람·관심 -----
+  # ----- Surprise & interest -----
   ('surprised','놀람','!',WONDER,'눈썹이 번쩍, 작은 입이 벌어져요',None,[
     F(120,700,y=-3,w=22,s=0,o=30,lift=10,fx=EXCLAIM),F(150,120,25,25,w=25,s=0,o=18,lift=9),
     F(120,1000,w=24,s=0,o=28,lift=10,fx=EXCLAIM),F(650,800,80,80,w=38,s=3,o=4,lift=6)]),
@@ -284,7 +284,7 @@ CATALOG = [
     F(500,1000,100,55,x=-6,y=-4,w=40,s=0,brow=4,lift=6,tilt=6,fx=QUESTION),
     F(500,900,55,100,x=6,y=-4,w=40,s=0,brow=4,lift=6,tilt=-6,fx=QUESTION),
     F(140,80,0,0,w=40,s=0,brow=4,lift=6),F(400,1200,90,70,w=38,s=-3,brow=5,lift=7,tilt=4,fx=QUESTION)]),
-  # ----- 생각·대화 -----
+  # ----- Thinking & conversation -----
   ('determined','결의','💪',STANCE,'눈에 힘을 주고 입을 꾹, 이제 해볼게요',None,[
     F(400,900,60,60,w=50,s=6,lift=5,brow=-5),F(200,250,60,60,y=4,w=50,s=6,lift=5,brow=-5),
     F(200,250,60,60,y=-1,w=52,s=8,lift=5,brow=-5),F(400,1200,55,55,w=55,s=10,lift=6,brow=-6,fx=SPARKLE)]),
@@ -313,7 +313,7 @@ CATALOG = [
     F(250,150,70,70,x=-10,y=-6,w=30,s=0,color=BLUE),F(250,150,70,70,x=-10,y=4,w=30,s=0,color=BLUE),
     F(250,150,70,70,x=0,y=7,w=30,s=0,color=BLUE),F(250,150,70,70,x=10,y=4,w=30,s=0,color=BLUE),
     F(120,60,0,0,w=30,s=0,color=BLUE),F(400,1000,w=50,s=12,lift=5,fx=SPARKLE)]),
-  # ----- 평온·휴식 -----
+  # ----- Calm & rest -----
   ('calm','차분함','◡',REST,'느긋한 눈 깜빡임과 시선',1,[
     F(400,800,s=0),F(400,800,x=-10,s=0),F(100,40,0,0,s=0),F(180,1200,s=0,eyes=CALM),F(400,800,x=10,s=3)]),
   ('sleepy','졸림','☾',REST,'스르르 감기는 눈과 하품',3,[
@@ -337,7 +337,7 @@ CATALOG = [
   ('dazed','멍함','😶',REST,'작은 눈으로 허공을 멍하니 봐요',None,[
     F(1500,2500,x=-4,y=3,w=24,s=0,o=6,eyes=DOT),F(1800,2500,x=4,y=4,w=22,s=0,o=8,eyes=DOT),
     F(400,200,0,0,w=24,s=0),F(1500,2000,y=2,w=26,s=0,o=4,eyes=DOT)]),
-  # ----- 슬픔 -----
+  # ----- Sadness -----
   ('sad','슬픔','☹',SAD,'처진 눈썹과 느린 움직임',2,[
     F(400,800,60,60,y=5,s=-20,brow=7,lift=4),F(150,100,0,0,y=5,s=-20,brow=7,lift=4),
     F(300,1800,60,60,x=-6,y=7,s=-24,brow=8,lift=4)]),
@@ -367,7 +367,7 @@ CATALOG = [
   ('exhausted','지침','😩',SAD,'축 처진 눈에 땀, 기운이 없어요',None,[
     F(1000,1500,30,30,y=6,w=40,s=-6,o=8,brow=4,lift=3,fx=SWEAT),F(1200,600,10,10,y=8,w=44,s=-8,o=14,brow=4,lift=3,fx=SWEAT),
     F(900,1500,35,35,y=6,w=40,s=-6,o=6,brow=4,lift=3),F(600,400,0,0,y=8,w=40,s=-6,o=4)]),
-  # ----- 불안·긴장 -----
+  # ----- Anxiety & tension -----
   ('afraid','두려움','◉',TENSE,'좌우를 급히 살피며 움츠러들어요',None,[
     F(140,280,x=-12,y=5,w=38,s=-8,o=12,brow=8,lift=7,shake=1),F(150,240,x=12,y=5,w=38,s=-8,o=12,brow=8,lift=7,shake=1),
     F(100,100,0,0,y=6,w=32,s=-15,brow=8,lift=7),F(180,650,x=-5,y=5,w=35,s=-10,o=15,brow=9,lift=8,shake=2),
@@ -398,7 +398,7 @@ CATALOG = [
   ('cringe','오글거림','><',OOPS,'> < 눈을 질끈 감고 몸서리쳐요',None,[
     F(200,900,w=60,s=-6,eyes=SQUEEZE,tilt=-5,shake=1,fx=SWEAT),F(400,700,40,40,x=-12,w=55,s=-4,brow=5,lift=4,tilt=5),
     F(200,800,y=3,w=64,s=-8,eyes=SQUEEZE,tilt=4,shake=2,fx=SWEAT),F(500,900,60,60,x=10,w=55,s=-2,brow=5,lift=4)]),
-  # ----- 분노·불쾌 -----
+  # ----- Anger & displeasure -----
   ('angry','화남','💢',ANGRY,'눈썹을 찌푸리고 입을 꾹 다물어요',None,[
     F(250,1100,25,25,w=80,s=-20,brow=-8,lift=2),F(180,450,20,20,x=-6,w=90,s=-24,brow=-9,lift=2,fx=ANGER),
     F(180,450,20,20,x=6,w=90,s=-24,brow=-9,lift=2,fx=ANGER,color=RED),F(120,100,0,0,w=85,s=-20,brow=-8,lift=2),
@@ -422,7 +422,7 @@ CATALOG = [
   ('jealous','질투','😾',ANGRY,'곁눈질하며 입을 삐죽, 부글부글',None,[
     F(600,1500,50,50,x=-13,w=30,s=-10,brow=-4,lift=3),F(400,700,45,45,x=-14,y=2,w=26,s=-12,brow=-5,lift=2,tilt=-4),
     F(150,80,0,0,w=30,s=-10,brow=-4,lift=3),F(500,1300,55,55,x=12,w=32,s=-8,brow=-3,lift=3,fx=ANGER)]),
-  # ----- 몸 상태 -----
+  # ----- Physical states -----
   ('sick','아픔','🤢',BODY,'초록빛 얼굴로 울렁거려요',None,[
     F(800,1200,50,50,y=3,w=50,s=-8,brow=6,lift=4,tilt=5,fx=SWEAT,color=GREEN),
     F(800,1200,45,45,y=4,w=50,s=-8,brow=6,lift=4,tilt=-5,fx=SWEAT,color=GREEN,shake=1),

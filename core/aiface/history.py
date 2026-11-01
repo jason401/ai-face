@@ -1,5 +1,5 @@
 """Expression log: every face change (when, who chose it, which mood), one JSON line per
-change in a file per day, and summaries for the app's 기록 tab and the get_expression
+change in a file per day, and summaries for the app's History tab and the get_expression
 MCP tool. Only the mood is kept, never anything from the conversation.
 Python standard library only."""
 import datetime

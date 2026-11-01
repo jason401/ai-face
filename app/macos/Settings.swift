@@ -1,4 +1,4 @@
-// The settings window: toolbar tabs (일반 · AI · 보드 · 기록), compact cards like AI Illuminati's.
+// The settings window: toolbar tabs (General · AI · Board · History), compact cards like AI Illuminati's.
 // This file holds the shared state; the tabs are in SettingsTabs.swift.
 import Cocoa
 import ServiceManagement
@@ -35,7 +35,7 @@ func secondsText(_ s: Int) -> String {
 
 struct OwnerStats: Equatable {
     var count = 0
-    var top: [String] = []            // "행복 ×3"
+    var top: [String] = []            // "Happy ×3"
     var groups: [String: Int] = [:]   // emotion group -> count
 }
 
@@ -173,7 +173,7 @@ final class SettingsStore: NSObject, ObservableObject {
     @Published var awakeLeft = 0
     @Published var awakeNotice = ""
     @Published var awakeCommand = false
-    // Expression history (기록 tab)
+    // Expression history (History tab)
     @Published var historyKind = "day"   // day, week, month, year
     @Published var historyDay = Calendar.current.startOfDay(for: Date())   // any day in the period
     @Published var dayTotal = 0
@@ -916,7 +916,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 }
 
 
-// MARK: - 기록 tab
+// MARK: - History tab
 
 struct GroupBar: View {
     let groups: [String: Int]
