@@ -184,6 +184,27 @@ struct AITab: View {
                     .help(L("Once connected, the AI picks a face for every reply. After connecting or disconnecting, quit that app (⌘Q) and open it again. Ring colors: Claude orange, GPT green, your own picks white."))
             }
 
+            SettingsCard(title: L("Shared folders")) {
+                SettingsRow(title: L("Can read")) {
+                    perAI(store.folderClaude, store.folderGPT) { ai, on in store.setFolderApps(ai, on) }
+                }
+                Divider()
+                SettingsRow(title: L("Folder list")) {
+                    SettingsAction(title: store.folders.isEmpty ? L("Add folders…")
+                                   : String(format: L("%d of %d on…"), store.folders.filter { $0.on }.count, store.folders.count)) {
+                        if store.folders.isEmpty { store.chooseFolders() } else { store.showFolders = true }
+                    }
+                    .popover(isPresented: $store.showFolders, arrowEdge: .bottom) { FolderList(store: store) }
+                }
+                SettingsNote(text: store.folderNotice.isEmpty ? L("Read only. Drop folders here. Hidden and secret files are never shown.") : store.folderNotice, lines: 2)
+                    .help(L("Folders you share here can be listed, searched and read from Claude desktop, Claude Code and Codex on this Mac, by the AIs you allow. Nothing is changed or deleted. Hidden files, keys and .env files are never shown, and paths cannot leave the folder. File text sent to an AI becomes part of that conversation."))
+            }
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.accentColor, lineWidth: 2)
+                .opacity(store.folderDropping ? 1 : 0))
+            .onDrop(of: [UTType.fileURL], isTargeted: $store.folderDropping) { providers in
+                droppedURLs(providers) { store.addFolders($0) }
+            }
+
             SettingsCard(title: L("Calendar")) {
                 accessRow(store.calAccessText, ok: store.calAccess == "full", button: calendarButton) { store.requestCalendarAccess() }
                 Divider()
@@ -262,7 +283,7 @@ struct AITab: View {
                     .textSelection(.enabled)
             }
         }
-        .onAppear { store.loadCalendar(); store.loadMail() }
+        .onAppear { store.loadCalendar(); store.loadMail(); store.loadFolders() }
     }
 }
 
@@ -457,6 +478,84 @@ struct CalendarList: View {
                 .frame(height: 36)
                 if cal.id != store.calendars.last?.id { Divider() }
             }
+        }
+    }
+}
+
+/// The file URLs in a drop, on the main thread.
+func droppedURLs(_ providers: [NSItemProvider], _ done: @escaping ([URL]) -> Void) -> Bool {
+    var urls: [URL] = []
+    let group = DispatchGroup()
+    for provider in providers {
+        group.enter()
+        _ = provider.loadObject(ofClass: URL.self) { url, _ in
+            if let url = url { DispatchQueue.main.async { urls.append(url) } }
+            group.leave()
+        }
+    }
+    group.notify(queue: .main) { done(urls) }
+    return true
+}
+
+struct FolderList: View {
+    @ObservedObject var store: SettingsStore
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(L("Shared folders")).font(.system(size: 12, weight: .semibold))
+            ScrollView {
+                VStack(spacing: 0) {
+                    if store.folders.isEmpty {
+                        Text(L("No folders yet. Add one, or drop folders here."))
+                            .foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 60)
+                    }
+                    ForEach(store.folders) { folder in row(folder) }
+                }
+            }
+            .frame(height: min(320, max(60, CGFloat(store.folders.count) * 41)))
+            .background(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.accentColor, lineWidth: 2)
+                .opacity(store.folderDropping ? 1 : 0))
+            .onDrop(of: [UTType.fileURL], isTargeted: $store.folderDropping) { providers in
+                droppedURLs(providers) { store.addFolders($0) }
+            }
+            SettingsAction(title: L("Add folder…")) { store.chooseFolders() }
+            if !store.folderNotice.isEmpty {
+                Text(store.folderNotice).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(3)
+            }
+        }
+        .font(.system(size: 12))
+        .controlSize(.small)
+        .padding(12)
+        .frame(width: 320)
+    }
+
+    func row(_ folder: SharedFolder) -> some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                if folder.missing {
+                    Image(systemName: "questionmark.folder").foregroundStyle(.secondary).frame(width: 18)
+                } else {
+                    Image(nsImage: NSWorkspace.shared.icon(for: .folder)).resizable().frame(width: 18, height: 18)
+                }
+                nameLabel(folder.name, folder.missing ? L("Not found: moved or deleted?")
+                          : (folder.last.isEmpty ? folder.shortPath : folder.last))
+                    .help(folder.path)
+                    .opacity(folder.on || folder.missing ? 1 : 0.5)
+                if folder.missing {
+                    SettingsAction(title: L("Locate…")) { store.locateFolder(folder) }.frame(width: 64)
+                } else {
+                    Toggle(L("Share"), isOn: Binding(get: { folder.on }, set: { store.setFolderOn(folder, $0) }))
+                        .labelsHidden().toggleStyle(.switch).controlSize(.mini)
+                        .help(L("Off: paused, the AIs cannot read it until you turn it on again"))
+                }
+                Button { store.removeFolder(folder) } label: {
+                    Image(systemName: "minus.circle").foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help(L("Stop sharing (the folder itself is not touched)"))
+            }
+            .frame(height: 40)
+            if folder.id != store.folders.last?.id { Divider() }
         }
     }
 }

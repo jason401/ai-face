@@ -11,7 +11,7 @@ for SOURCE in app/macos/*.swift; do
   SOURCES+=("$SOURCE")
 done
 xcrun swiftc -swift-version 5 -target "$(uname -m)-apple-macos13.0" -module-cache-path "$WORK/cache" \
-  -framework Cocoa -framework SwiftUI -framework ServiceManagement -framework EventKit \
+  -framework Cocoa -framework SwiftUI -framework ServiceManagement -framework EventKit -framework PDFKit \
   -o "$WORK/render" "${SOURCES[@]}" tools/tests/render_settings.swift
 # Localizable.strings next to the binary, so L() finds them as in the app bundle.
 cp -R app/macos/Resources/*.lproj "$WORK/"

@@ -24,6 +24,7 @@ Click the menu bar face to open the menu.
 - The **Campfire** and **Clock** buttons stay active until another expression arrives.
 - **Timer** offers 5, 25 or 50 minutes and a custom duration. Cancel an active timer from the same menu.
 - **Keep awake** offers 1, 2 or 4 hours. Active sessions show remaining time and a small sun above the face.
+- **Shared folders** lists the folders shared with the AIs; click one to pause or resume it, or add a folder.
 - **Settings…** uses ⌘, and **Quit AI Face** uses ⌘Q.
 
 Ring colors identify the selecting agent: orange for Claude, green for GPT and white for manual selection. Timers use a progress ring. Expression changes can bounce or shake. Working expressions such as processing and reading return to calm after three minutes without a new expression.
@@ -74,7 +75,7 @@ Connect or disconnect **Claude desktop**, **Codex** and **Claude Code** from the
 
 Other local stdio MCP clients can use the displayed server command. Set `AIFACE_AGENT=claude` or `gpt` to identify the ring owner. The `ai-face` bridge forwards requests to the app; its file and mood catalog refresh when AI Face starts.
 
-Tools include `set_expression`, `get_expression`, `start_timer`, `cancel_timer`, `show_clock`, `show_photo` and `update_firmware`. Optional Calendar, Mail and keep-awake tools depend on settings.
+Tools include `set_expression`, `get_expression`, `start_timer`, `cancel_timer`, `show_clock`, `show_photo` and `update_firmware`. Optional Calendar, Mail, shared-folder and keep-awake tools depend on settings.
 
 ### Calendar
 
@@ -89,6 +90,19 @@ Writing is separately controlled per AI and calendar. AIs may add events and cha
 Mail access is optional and controlled per AI and account. macOS requests permission to control Mail; Mail may open in the background when a request needs it. Restart the AI app after changing tool availability.
 
 The integration reads inbox messages only. It never sends, moves, deletes or marks messages read. **Hide links and codes**, on by default, reduces links to their site and removes common sign-in code/password patterns. Message content is untrusted sender text, not an instruction to the AI. Tools are `mail_messages` and `mail_read`; their results become part of the AI conversation.
+
+### Shared folders (read only)
+
+Share folders with the connected AIs in **Settings → AI → Shared folders**: click **Add folders…**, or drop folders from Finder onto the card or the folder list. The menu bar menu's **Shared folders** submenu also adds folders and pauses or resumes each one with a click. Claude may read them by default; turn GPT on separately. Restart the AI app after changing which AIs may read them.
+
+- **Read only.** AIs can list, search (names, and the text of plain-text files) and read files: text and code, PDF (10 pages at a time), Word (.docx) and PowerPoint (.pptx). Nothing is changed, moved or deleted.
+- **Pause or stop.** A folder's switch pauses it; **−** stops sharing it. Neither touches the folder itself.
+- **Stays inside.** Paths cannot leave a shared folder, also not through symbolic links. Hidden files and folders (such as `.env`, `.git`, `.ssh`) and key or credential files are never listed or read.
+- **Too broad folders are refused**: the whole disk, your home folder, `~/Library` and system folders. A folder with more than 5,000 files asks first. Adding a folder that contains an already shared one merges them.
+- **Moved folders** are found again by a macOS bookmark; if not, the list shows **Locate…**. Files kept only in iCloud must be downloaded in Finder before they can be read.
+- Each list shows who read it last. AI Face logs which AI read which file and when (never the content) in `folder-access.jsonl` in its data folder.
+
+Tools are `folders_list`, `folder_files`, `folder_search` and `folder_read`. File text sent to an AI becomes part of that conversation and is treated as data, not instructions.
 
 ### Optional board and firmware
 

@@ -27,6 +27,9 @@ import SwiftUI
                             CalendarChange(n: 2, text: "Moved “Dentist” to Nov 2 15:00", undone: true)]
         store.mailAccess = "allowed"
         store.mailAccounts = [MailAccount(name: "iCloud", shown: true), MailAccount(name: "Gmail", shown: false)]
+        store.folders = [SharedFolder(id: "f1", name: "Papers", path: NSHomeDirectory() + "/Documents/Papers", last: "Read by Claude · 5 min ago"),
+                         SharedFolder(id: "f2", name: "Lab data", path: NSHomeDirectory() + "/Documents/Lab data", on: false),
+                         SharedFolder(id: "f3", name: "Old notes", path: "/Volumes/Backup/Old notes", missing: true)]
         store.serverPath = "/Users/me/Library/Application Support/AI Face/ai_face_mcp.py"
         store.connected = true; store.port = "/dev/cu.usbmodem14101"; store.ports = ["/dev/cu.usbmodem14101"]
         store.photos = [1, 2, 3]; store.currentPhoto = 2
@@ -56,7 +59,7 @@ import SwiftUI
         }
         let views: [(String, () -> AnyView)] = [
             ("1general", { AnyView(GeneralTab(store: store)) }), ("2ai", { AnyView(AITab(store: store)) }),
-            ("2ai-calendars", { AnyView(CalendarList(store: store).background(Color(nsColor: .windowBackgroundColor))) }), ("2ai-changes", { AnyView(CalendarChanges(store: store).background(Color(nsColor: .windowBackgroundColor))) }),
+            ("2ai-folders", { AnyView(FolderList(store: store).background(Color(nsColor: .windowBackgroundColor))) }), ("2ai-calendars", { AnyView(CalendarList(store: store).background(Color(nsColor: .windowBackgroundColor))) }), ("2ai-changes", { AnyView(CalendarChanges(store: store).background(Color(nsColor: .windowBackgroundColor))) }),
             ("2ai-mail", { AnyView(MailAccountList(store: store).background(Color(nsColor: .windowBackgroundColor))) }),
             ("3board", { AnyView(BoardTab(store: store)) }),
             ("4history-day", { history("day") }), ("4history-week", { history("week") }),

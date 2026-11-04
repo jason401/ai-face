@@ -13,6 +13,7 @@
 - Manual expression picker, timer, clock, photo/slideshow and campfire screen savers.
 - Local expression history and statistics; conversation text is not saved in that history.
 - Optional, separately controlled Calendar access and read-only Mail access for connected AIs.
+- Optional read-only shared folders: pick folders once, then any connected chat on this Mac can list, search and read them (PDF, Word, PowerPoint and text).
 - Optional timed keep-awake support, with time, temperature, battery and app-exit safeguards.
 - Optional Seeed XIAO ESP32S3 + GC9A01 240×240 round LCD; firmware source included.
 - English and Korean interface, following your Mac's language.
@@ -47,8 +48,8 @@ Use Seeed XIAO ESP32S3 and a GC9A01 round SPI LCD. Pins are documented in `firmw
 ## Privacy
 
 - Settings, photos and expression history are stored locally in `~/Library/Application Support/AI Face/`, outside this source repository.
-- Calendar and Mail access are optional and controlled per AI. Tool results sent to an AI become part of that provider's conversation; local app storage does not mean the AI provider processes everything locally.
-- The app listens on `127.0.0.1`, not a public network interface. Mutations and Calendar/Mail reads require a runtime token. Some local read routes, including photo and expression-history reads, are not token-protected: other programs on the same Mac may read them. Do not expose this server through a public tunnel.
+- Calendar, Mail and shared-folder access are optional and controlled per AI. Tool results sent to an AI become part of that provider's conversation; local app storage does not mean the AI provider processes everything locally.
+- The app listens on `127.0.0.1`, not a public network interface. Mutations and Calendar/Mail/shared-folder reads require a runtime token. Some local read routes, including photo and expression-history reads, are not token-protected: other programs on the same Mac may read them. Do not expose this server through a public tunnel.
 - GitHub updates/downloads require network access. Connecting an AI adds its MCP registration; it does not publish local account credentials or user data.
 
 ## Development

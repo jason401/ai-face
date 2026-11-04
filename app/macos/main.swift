@@ -137,6 +137,10 @@ if let i = CommandLine.arguments.firstIndex(of: "--calendar") {
 if let i = CommandLine.arguments.firstIndex(of: "--mail") {
     exit(MailCLI.run(Array(CommandLine.arguments[(i + 1)...])))
 }
+// `AIFace --pdf FILE FIRST LAST`: a PDF's page text for the shared folders (Folders.swift).
+if let i = CommandLine.arguments.firstIndex(of: "--pdf") {
+    exit(FolderCLI.run(Array(CommandLine.arguments[(i + 1)...])))
+}
 
 if !NSRunningApplication.runningApplications(withBundleIdentifier: "local.aiface")
     .filter({ $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }).isEmpty {

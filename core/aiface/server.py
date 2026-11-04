@@ -16,6 +16,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from . import VERSION
 from . import awake
 from . import calendar_access
+from . import folder_access
 from . import history
 from . import i18n
 from .i18n import T
@@ -286,6 +287,31 @@ def main():
                 except ValueError as exc:
                     return self.reply(400, {'message': str(exc)})
                 return self.reply(404, {})
+            if self.path.startswith('/folders/'):   # shared folders: token needed (personal files)
+                if self.headers.get('X-ESP-Token') != token:
+                    return self.reply(403, {'message': 'Invalid token'})
+                query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                arg = lambda k: (query.get(k) or [None])[0]
+                route = urllib.parse.urlparse(self.path).path
+                try:
+                    if route == '/folders/status':
+                        return self.reply(200, folder_access.status())
+                    if route == '/folders/list':
+                        return self.reply(200, {'text': folder_access.folders_text(arg('agent'))})
+                    if route == '/folders/files':
+                        return self.reply(200, {'text': folder_access.files(
+                            arg('agent'), arg('folder'), arg('path'), arg('recursive') == '1')})
+                    if route == '/folders/search':
+                        return self.reply(200, {'text': folder_access.search(
+                            arg('agent'), arg('q'), arg('folder'), arg('content') != '0')})
+                    if route == '/folders/read':
+                        return self.reply(200, {'text': folder_access.read(
+                            arg('agent'), arg('folder'), arg('path'), arg('offset'), arg('first'), arg('last'))})
+                except PermissionError as exc:
+                    return self.reply(403, {'message': str(exc)})
+                except (ValueError, OSError) as exc:
+                    return self.reply(400, {'message': str(exc)})
+                return self.reply(404, {})
             if self.path == '/awake':   # keep awake, for the helper and the MCP server
                 return self.reply(200, {'text': awake.describe(), 'status': awake.status()})
             if self.path == '/mcp':
@@ -338,6 +364,18 @@ def main():
                     return self.reply(403, {'message': str(exc)})
                 except (ValueError, OSError) as exc:
                     return self.reply(400, {'message': str(exc)})
+            if self.path == '/folders':
+                # The settings window or the menu adds / removes / pauses a shared folder.
+                try:
+                    length = int(self.headers.get('Content-Length', 0))
+                    if not 0 < length <= 65536:
+                        raise ValueError(T('잘못된 요청입니다.', 'Bad request.'))
+                    data = json.loads(self.rfile.read(length))
+                    if not isinstance(data, dict):
+                        raise ValueError(T('잘못된 요청입니다.', 'Bad request.'))
+                    return self.reply(200, folder_access.handle(data))
+                except (ValueError, OSError) as exc:
+                    return self.reply(400, {'message': str(exc), 'status': folder_access.status()})
             if self.path != '/api':
                 return self.reply(404, {})
             with device.lock:

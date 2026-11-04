@@ -152,12 +152,20 @@ final class SettingsStore: NSObject, ObservableObject {
     @Published var mailGPT = false
     @Published var mailHideLinks = true
     @Published var mailAsking = false
+    // Shared folders (read only): which folders, which AIs may read them
+    @Published var folders: [SharedFolder] = []
+    @Published var folderClaude = true
+    @Published var folderGPT = false
+    @Published var folderDropping = false
+    @Published var folderNotice = ""
+    var foldersChanged: ((String) -> Void)?   // the menu refreshes its list (and shows errors)
     @Published var hooks = "off"
     @Published var aiNotice = ""
     // Popovers in the AI tab (no @State in views: see BoardTab)
     @Published var showCalendars = false
     @Published var showCalChanges = false
     @Published var showMailAccounts = false
+    @Published var showFolders = false
     // General
     @Published var loginItem = false
     @Published var mono = false
@@ -681,6 +689,99 @@ final class SettingsStore: NSObject, ObservableObject {
         case "notRunning": return L("Open Mail to check")
         default: return L("Unavailable")
         }
+    }
+
+    // MARK: Shared folders
+
+    func applyFolders(_ s: [String: Any]) {
+        let apps = (s["apps"] as? [String: Any]) ?? [:]
+        folderClaude = (apps["claude"] as? Bool) ?? true
+        folderGPT = (apps["gpt"] as? Bool) ?? false
+        folders = ((s["folders"] as? [[String: Any]]) ?? []).compactMap(SharedFolder.init)
+    }
+
+    func loadFolders() {
+        API.shared.getJSON("folders/status") { [weak self] json in
+            guard let self = self, let s = json as? [String: Any] else { return }
+            self.applyFolders(s)
+            FolderBookmarks.relocateMoved(self.folders) { [weak self] in self?.loadFolders() }
+        }
+    }
+
+    private func postFolders(_ body: [String: Any], done: (([String: Any]) -> Void)? = nil) {
+        API.shared.post("folders", body) { [weak self] ok, reply in
+            guard let self = self else { return }
+            if let s = reply["status"] as? [String: Any] { self.applyFolders(s) }
+            self.folderNotice = ok ? "" : ((reply["message"] as? String) ?? L("That didn't work."))
+            if ok { done?(reply) }
+            self.foldersChanged?(self.folderNotice)
+        }
+    }
+
+    func chooseFolders() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.prompt = L("Share")
+        panel.message = L("Choose folders the AIs may read.")
+        NSApp.activate(ignoringOtherApps: true)
+        if panel.runModal() == .OK { addFolders(panel.urls) }
+    }
+
+    /// One at a time, so a big folder can ask before the next one is added.
+    func addFolders(_ urls: [URL], force: Bool = false) {
+        guard let url = urls.first else { return }
+        var dir: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &dir), dir.boolValue else {
+            folderNotice = L("Only folders can be shared.")
+            addFolders(Array(urls.dropFirst()))
+            return
+        }
+        var body: [String: Any] = ["op": "add", "path": url.path, "force": force]
+        if let bookmark = FolderBookmarks.make(url) { body["bookmark"] = bookmark }
+        postFolders(body) { [weak self] reply in
+            guard let self = self else { return }
+            if let n = (reply["confirm"] as? NSNumber)?.intValue {
+                let alert = NSAlert()
+                alert.messageText = String(format: L("“%@” has more than %ld files"), url.lastPathComponent, n - 1)
+                alert.informativeText = L("The AIs can list and search all of them. A smaller folder inside it is usually better.")
+                alert.addButton(withTitle: L("Share anyway"))
+                alert.addButton(withTitle: L("Cancel"))
+                NSApp.activate(ignoringOtherApps: true)
+                if alert.runModal() == .alertFirstButtonReturn {
+                    self.addFolders([url] + urls.dropFirst(), force: true)
+                } else {
+                    self.addFolders(Array(urls.dropFirst()))
+                }
+                return
+            }
+            if let merged = reply["merged"] as? [String], !merged.isEmpty {
+                self.folderNotice = String(format: L("Now included in “%@”: %@"), (reply["added"] as? String) ?? "", merged.joined(separator: ", "))
+            }
+            self.addFolders(Array(urls.dropFirst()))
+        }
+    }
+
+    func setFolderOn(_ folder: SharedFolder, _ on: Bool) { postFolders(["op": "on", "id": folder.id, "on": on]) }
+    func removeFolder(_ folder: SharedFolder) { postFolders(["op": "remove", "id": folder.id]) }
+    func setFolderApps(_ ai: String, _ on: Bool) {
+        postFolders(["op": "apps", "apps": [ai: on]]) { [weak self] _ in
+            self?.aiNotice = L("Saved. Quit that AI app (⌘Q) and open it again for the change to apply.")
+        }
+    }
+
+    func locateFolder(_ folder: SharedFolder) {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.prompt = L("Choose")
+        panel.message = String(format: L("Where is “%@” now?"), folder.name)
+        NSApp.activate(ignoringOtherApps: true)
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        var body: [String: Any] = ["op": "relocate", "id": folder.id, "path": url.path]
+        if let bookmark = FolderBookmarks.make(url) { body["bookmark"] = bookmark }
+        postFolders(body)
     }
 
     func refreshAI() {

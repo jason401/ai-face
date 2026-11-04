@@ -262,3 +262,26 @@
 "New version" = "새 버전";
 "Update now" = "지금 업데이트";
 "AI Face looks for a new stable version on GitHub at startup and every 3 hours, but installs it only when you click Update now (here or in the menu). It then tests and builds it in its own source folder and restarts. Your development folder is never changed. Existing Python and Command Line Tools are required." = "앱을 켤 때와 3시간마다 GitHub에서 새 stable 버전을 찾지만, 설치는 여기나 메뉴에서 '지금 업데이트'를 눌러야 해요. 누르면 앱 전용 소스 폴더에서 테스트·빌드하고 다시 켜요. 개발 폴더는 수정하지 않아요. 기존 Python과 Command Line Tools가 필요해요.";
+
+/* Shared folders */
+"Folder list" = "폴더 목록";
+"Shared folders" = "공유 폴더";
+"Add folders…" = "폴더 추가…";
+"Add folder…" = "폴더 추가…";
+"Manage folders…" = "폴더 관리…";
+"Share" = "공유";
+"Share anyway" = "그래도 공유";
+"Choose" = "선택";
+"Locate…" = "다시 찾기…";
+"Choose folders the AIs may read." = "AI가 읽어도 되는 폴더를 고르세요.";
+"Where is “%@” now?" = "“%@” 폴더는 지금 어디에 있나요?";
+"“%@” has more than %ld files" = "“%@” 폴더에 파일이 %ld개가 넘어요";
+"The AIs can list and search all of them. A smaller folder inside it is usually better." = "AI가 이 파일을 모두 보고 찾을 수 있어요. 보통은 그 안의 더 작은 폴더가 좋아요.";
+"Now included in “%@”: %@" = "이제 “%@” 폴더에 포함돼요: %@";
+"Only folders can be shared." = "폴더만 공유할 수 있어요.";
+"No folders yet. Add one, or drop folders here." = "아직 폴더가 없어요. 추가하거나 여기로 끌어다 놓으세요.";
+"Not found: moved or deleted?" = "찾을 수 없음: 옮겼거나 지웠나요?";
+"Off: paused, the AIs cannot read it until you turn it on again" = "끄면 잠시 멈춰요. 다시 켤 때까지 AI가 읽을 수 없어요";
+"Stop sharing (the folder itself is not touched)" = "공유 중지 (폴더 자체는 건드리지 않아요)";
+"Read only. Drop folders here. Hidden and secret files are never shown." = "읽기 전용. 폴더를 여기로 끌어다 놓아도 돼요. 숨김·비밀 파일은 보이지 않아요.";
+"Folders you share here can be listed, searched and read from Claude desktop, Claude Code and Codex on this Mac, by the AIs you allow. Nothing is changed or deleted. Hidden files, keys and .env files are never shown, and paths cannot leave the folder. File text sent to an AI becomes part of that conversation." = "여기서 공유한 폴더는 이 Mac의 Claude 데스크톱, Claude Code, Codex에서 허용한 AI가 목록을 보고, 찾고, 읽을 수 있어요. 아무것도 바꾸거나 지우지 않아요. 숨김 파일, 키, .env 파일은 보이지 않고 폴더 밖으로는 나갈 수 없어요. AI에게 보낸 파일 내용은 그 대화의 일부가 돼요.";

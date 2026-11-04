@@ -66,6 +66,9 @@ final class StatusController: NSObject, NSMenuDelegate {
     var awakeLeases: [[String: Any]] = []   // who asks for it: label, left (s), job
     var awakePaused = 0                     // s left of the user's pause of automatic requests
     var updateAvailable = false             // a new stable version waits for "Install new version"
+    var folders: [SharedFolder] = []        // shared folders, for the menu (refreshed every 15 s)
+    private var folderPolls = 0
+    private let folderAdder = SettingsStore()
     private var heatSent = false
     private var confirming = false           // a calendar confirmation window is open
     private var answered: Set<String> = []
@@ -141,6 +144,8 @@ final class StatusController: NSObject, NSMenuDelegate {
                 self.applyEmotion(self.pendingEmotion)
             }
         }
+        if folderPolls % 15 == 0 { loadFolders() }
+        folderPolls += 1
         API.shared.getJSON("view") { [weak self] json in
             guard let self = self else { return }
             self.polling = false
@@ -149,6 +154,14 @@ final class StatusController: NSObject, NSMenuDelegate {
     }
 
     private var pendingEmotion = ""
+
+    private func loadFolders() {
+        API.shared.getJSON("folders/status") { [weak self] json in
+            guard let self = self, let s = json as? [String: Any] else { return }
+            self.folders = ((s["folders"] as? [[String: Any]]) ?? []).compactMap(SharedFolder.init)
+            FolderBookmarks.relocateMoved(self.folders) { [weak self] in self?.loadFolders() }
+        }
+    }
 
     /// An AI wants to add / change / delete an event: the user allows or declines it here.
     private func confirmCalendar(_ ask: [String: Any]) {
@@ -408,6 +421,20 @@ final class StatusController: NSObject, NSMenuDelegate {
             item.submenu = sub
         }
 
+        let shared = add(menu, L("Shared folders"), nil)
+        let sharedMenu = NSMenu()
+        sharedMenu.autoenablesItems = false
+        for folder in folders {
+            let it = add(sharedMenu, folder.name, folder.missing ? nil : #selector(toggleFolder(_:)), object: folder.id)
+            it.state = folder.on && !folder.missing ? .on : .off
+            it.isEnabled = !folder.missing
+            it.toolTip = folder.missing ? L("Not found: moved or deleted?") : folder.shortPath
+        }
+        if !folders.isEmpty { sharedMenu.addItem(.separator()) }
+        _ = add(sharedMenu, L("Add folder…"), #selector(addFolder))
+        _ = add(sharedMenu, L("Manage folders…"), #selector(settings))
+        shared.submenu = sharedMenu
+
         menu.addItem(.separator())
         if updateAvailable {   // like AI Illuminati: found by itself, installed only from here or Settings
             _ = add(menu, L("Install new version"), #selector(installUpdate))
@@ -521,6 +548,37 @@ final class StatusController: NSObject, NSMenuDelegate {
     @objc func installUpdate() {
         updateAvailable = false
         API.shared.call("update_install")
+    }
+
+    @objc func toggleFolder(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String, let folder = folders.first(where: { $0.id == id }) else { return }
+        API.shared.post("folders", ["op": "on", "id": id, "on": !folder.on]) { [weak self] _, _ in self?.loadFolders() }
+    }
+
+    @objc func addFolder() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.prompt = L("Share")
+        panel.message = L("Choose folders the AIs may read.")
+        NSApp.activate(ignoringOtherApps: true)
+        guard panel.runModal() == .OK else { return }
+        // The same steps as the settings window (it asks before a big folder).
+        folderAdder.foldersChanged = { [weak self] notice in
+            self?.loadFolders()
+            if !notice.isEmpty { self?.showNotice(notice) }
+        }
+        folderAdder.addFolders(panel.urls)
+    }
+
+    private func showNotice(_ text: String) {
+        let alert = NSAlert()
+        alert.messageText = L("Shared folders")
+        alert.informativeText = text
+        alert.addButton(withTitle: L("OK"))
+        NSApp.activate(ignoringOtherApps: true)
+        alert.runModal()
     }
 
     @objc func settings() {
