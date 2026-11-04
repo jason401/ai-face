@@ -69,6 +69,15 @@ final class StatusController: NSObject, NSMenuDelegate {
     var folders: [SharedFolder] = []        // shared folders, for the menu (refreshed every 15 s)
     private var folderPolls = 0
     private let folderAdder = SettingsStore()
+    private lazy var shelf: FolderShelf = {
+        let shelf = FolderShelf(store: folderAdder)
+        shelf.openSettings = { [weak self] in self?.openSettings?() }
+        folderAdder.foldersChanged = { [weak self] notice in   // the menu's list, and errors the panel does not show
+            self?.loadFolders()
+            if !notice.isEmpty && !shelf.visible { self?.showNotice(notice) }
+        }
+        return shelf
+    }()
     private var heatSent = false
     private var confirming = false           // a calendar confirmation window is open
     private var answered: Set<String> = []
@@ -322,6 +331,9 @@ final class StatusController: NSObject, NSMenuDelegate {
         item.button?.image = renderFace(side: side, inset: 2, view: view, pose: animator.pose, fire: fire, now: now,
                                         offset: bounce(now))
         if menuOpen { updateHeader(now) }
+        if let face = item.button?.window?.frame, API.shared.ready {
+            shelf.tick(face: face, menuOpen: menuOpen, now: now)
+        }
     }
 
     func timerText(_ now: Double) -> String? {
@@ -565,11 +577,7 @@ final class StatusController: NSObject, NSMenuDelegate {
         NSApp.activate(ignoringOtherApps: true)
         guard panel.runModal() == .OK else { return }
         // The same steps as the settings window (it asks before a big folder).
-        folderAdder.foldersChanged = { [weak self] notice in
-            self?.loadFolders()
-            if !notice.isEmpty { self?.showNotice(notice) }
-        }
-        folderAdder.addFolders(panel.urls)
+        shelf.store.addFolders(panel.urls)
     }
 
     private func showNotice(_ text: String) {

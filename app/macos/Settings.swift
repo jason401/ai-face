@@ -159,6 +159,9 @@ final class SettingsStore: NSObject, ObservableObject {
     @Published var folderDropping = false
     @Published var folderNotice = ""
     var foldersChanged: ((String) -> Void)?   // the menu refreshes its list (and shows errors)
+    @Published var folderShelfHover = FolderShelf.showOnHover {
+        didSet { UserDefaults.standard.set(folderShelfHover, forKey: FolderShelf.hoverKey) }
+    }
     @Published var hooks = "off"
     @Published var aiNotice = ""
     // Popovers in the AI tab (no @State in views: see BoardTab)

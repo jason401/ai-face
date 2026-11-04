@@ -59,7 +59,7 @@ import SwiftUI
         }
         let views: [(String, () -> AnyView)] = [
             ("1general", { AnyView(GeneralTab(store: store)) }), ("2ai", { AnyView(AITab(store: store)) }),
-            ("2ai-folders", { AnyView(FolderList(store: store).background(Color(nsColor: .windowBackgroundColor))) }), ("2ai-calendars", { AnyView(CalendarList(store: store).background(Color(nsColor: .windowBackgroundColor))) }), ("2ai-changes", { AnyView(CalendarChanges(store: store).background(Color(nsColor: .windowBackgroundColor))) }),
+            ("2ai-shelf", { AnyView(FolderShelfView(store: store, shelf: FolderShelf(store: store)).background(Color(nsColor: .windowBackgroundColor))) }), ("2ai-folders", { AnyView(FolderList(store: store).background(Color(nsColor: .windowBackgroundColor))) }), ("2ai-calendars", { AnyView(CalendarList(store: store).background(Color(nsColor: .windowBackgroundColor))) }), ("2ai-changes", { AnyView(CalendarChanges(store: store).background(Color(nsColor: .windowBackgroundColor))) }),
             ("2ai-mail", { AnyView(MailAccountList(store: store).background(Color(nsColor: .windowBackgroundColor))) }),
             ("3board", { AnyView(BoardTab(store: store)) }),
             ("4history-day", { history("day") }), ("4history-week", { history("week") }),

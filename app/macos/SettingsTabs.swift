@@ -196,6 +196,11 @@ struct AITab: View {
                     }
                     .popover(isPresented: $store.showFolders, arrowEdge: .bottom) { FolderList(store: store) }
                 }
+                Divider()
+                SettingsRow(title: L("Quick panel")) {
+                    Toggle(L("Show on hover over the face"), isOn: $store.folderShelfHover).toggleStyle(.checkbox)
+                        .help(L("A panel under the menu bar face lists the shared folders. It also appears by itself while you drag a folder: drop it there to share it."))
+                }
                 SettingsNote(text: store.folderNotice.isEmpty ? L("Read only. Drop folders here. Hidden and secret files are never shown.") : store.folderNotice, lines: 2)
                     .help(L("Folders you share here can be listed, searched and read from Claude desktop, Claude Code and Codex on this Mac, by the AIs you allow. Nothing is changed or deleted. Hidden files, keys and .env files are never shown, and paths cannot leave the folder. File text sent to an AI becomes part of that conversation."))
             }
