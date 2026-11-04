@@ -305,6 +305,12 @@ struct BoardTab: View {
     // resolves @State to a macro. View state lives in the store instead.
     @ObservedObject var store: SettingsStore
 
+    var hours: [(String, Int)] { (0..<24).map { (String(format: L("%d:00"), $0), $0) } }
+
+    func lightBind<T>(_ path: ReferenceWritableKeyPath<SettingsStore, T>) -> Binding<T> {
+        Binding(get: { store[keyPath: path] }, set: { store[keyPath: path] = $0; store.saveLight() })
+    }
+
     var statusText: String {
         store.connected ? L("Connected") : (store.ports.isEmpty ? L("Not connected") : L("Connecting or error"))
     }
@@ -333,6 +339,32 @@ struct BoardTab: View {
                 if !store.message.isEmpty {
                     SettingsNote(text: store.message, lines: 3).textSelection(.enabled)
                 }
+            }
+
+            SettingsCard(title: L("Screen light")) {
+                SettingsRow(title: L("Brightness")) {
+                    SettingsMenu(options: stride(from: 10, through: 100, by: 10).map { ("\($0)%", $0) },
+                                 selection: lightBind(\.lightBright))
+                }
+                Divider()
+                SettingsRow(title: L("Off when asleep")) {
+                    SettingsSwitch(title: L("Off when asleep"), isOn: lightBind(\.lightOffSleeping))
+                        .help(L("The screen goes dark while the sleeping face shows (screen saver)."))
+                }
+                Divider()
+                SettingsRow(title: L("Off at night")) {
+                    SettingsSwitch(title: L("Off at night"), isOn: lightBind(\.lightNight))
+                }
+                if store.lightNight {
+                    Divider()
+                    SettingsRow(title: L("Night")) {
+                        SettingsMenu(options: hours, selection: lightBind(\.lightFrom))
+                        Text("–").foregroundStyle(.secondary)
+                        SettingsMenu(options: hours, selection: lightBind(\.lightTo))
+                    }
+                }
+                SettingsNote(text: L("A touch lights a dark screen for 30 s; a timer alarm lights it too."), lines: 2)
+                    .help(L("Needs the BLK wire on D0. The night hours use the board's clock, set by the Mac."))
             }
 
             SettingsCard(title: L("Photos on the board") + "  \(store.photos.count)/10") {

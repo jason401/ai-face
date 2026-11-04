@@ -34,6 +34,9 @@ extern FakeSerial Serial;
 #define LOW 0
 #define HIGH 1
 inline void pinMode(int,int){}
+inline int lastDuty=-1;   // backlight level the firmware asked for
+inline bool ledcAttach(int,uint32_t,int){return true;}
+inline void ledcWrite(int,uint32_t d){lastDuty=(int)d;}
 inline void digitalWrite(int,int){}
 // A CST816-style touch chip: id at 0xA7, finger count at 0x02, then X and Y (12 bits each).
 // id 0 = no chip (every transfer fails).

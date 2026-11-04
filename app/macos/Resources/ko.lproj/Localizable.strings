@@ -307,3 +307,12 @@
 "Radar" = "레이더";
 "Hangul words" = "한글 단어";
 "How the clock looks on the board (clock screen and clock screen saver). The menu bar keeps the simple clock." = "보드에 나오는 시계 모양이에요(시계 화면과 시계 대기 화면). 메뉴바 얼굴은 단순한 시계 그대로예요.";
+"Screen light" = "화면 밝기";
+"Brightness" = "밝기";
+"Off when asleep" = "잠들면 끄기";
+"Off at night" = "밤에 끄기";
+"Night" = "밤 시간";
+"%d:00" = "%d시";
+"The screen goes dark while the sleeping face shows (screen saver)." = "대기 화면이 잠든 얼굴일 때 화면을 꺼요.";
+"A touch lights a dark screen for 30 s; a timer alarm lights it too." = "꺼져 있어도 터치하면 30초 켜지고, 타이머 알람이 울리면 켜져요.";
+"Needs the BLK wire on D0. The night hours use the board's clock, set by the Mac." = "BLK 선이 D0에 연결돼 있어야 해요. 밤 시간은 맥이 맞춰 준 보드 시계를 따라요.";

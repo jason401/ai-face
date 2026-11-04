@@ -156,7 +156,7 @@ class EngineTests(unittest.TestCase):
 
     def test_settings_round_trip(self):
         with tempfile.TemporaryDirectory() as tmp, patch.object(face_modes,'SETTINGS',Path(tmp)/'s'/'settings.json'):
-            self.assertEqual(face_modes.load_settings(),dict(saver=face_modes.SAVER_DEFAULT,timer=None,mono=False,clock_style=0))
+            self.assertEqual(face_modes.load_settings(),dict(saver=face_modes.SAVER_DEFAULT,timer=None,mono=False,clock_style=0,light=face_modes.LIGHT_DEFAULT))
             # FACE5/6 idle settings carry over their first delay
             face_modes.SETTINGS.parent.mkdir(parents=True)
             face_modes.SETTINGS.write_text('{"idle": {"sleepy": 3, "sleeping": 6, "clock": 9}}')
@@ -201,6 +201,7 @@ class EngineTests(unittest.TestCase):
         self.assertIn('SAVER:600:0:0:60',seen)
         self.assertIn('PHOTO:LIST',seen)
         self.assertIn('CLOCKSTYLE:0',seen)                  # the chosen clock design
+        self.assertIn('LIGHT:100:0:0:0:7',seen)             # backlight settings
         self.assertTrue(any(x.startswith('DATE:') for x in seen))
         timer=[x for x in seen if x.startswith('TIMER')]
         self.assertEqual(len(timer),1)
@@ -217,6 +218,18 @@ class EngineTests(unittest.TestCase):
             self.assertEqual(face_modes.load_settings()['clock_style'],4)
             face_modes.save_settings(clock_style=99)
             self.assertEqual(face_modes.load_settings()['clock_style'],0)
+
+    def test_light_setting(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.object(face_modes,'SETTINGS',Path(tmp)/'settings.json'):
+            self.assertEqual(face_modes.load_settings()['light'],face_modes.LIGHT_DEFAULT)
+            light=dict(bright=40,off_sleeping=True,night=True,night_from=23,night_to=6)
+            self.assertEqual(face_modes.light_command(light),('LIGHT:40:1:1:23:6','OK LIGHT'))
+            for bad in (dict(bright=5),dict(bright=50.0),dict(night='yes'),dict(night_from=24),None):
+                with self.assertRaises(ValueError): face_modes.light_command(bad)
+            Device().set_light(dict(bright=60))   # no board: saved, missing keys filled in
+            self.assertEqual(face_modes.load_settings()['light'],dict(face_modes.LIGHT_DEFAULT,bright=60))
+            face_modes.save_settings(light=dict(bright=7))
+            self.assertEqual(face_modes.load_settings()['light'],face_modes.LIGHT_DEFAULT)
 
     def test_expired_timer_is_forgotten(self):
         with tempfile.TemporaryDirectory() as tmp, patch.object(face_modes,'SETTINGS',Path(tmp)/'settings.json'):

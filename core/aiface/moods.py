@@ -584,9 +584,14 @@ def load_settings():
             and timer.get('color') in TIMER_COLORS):
         timer=None
     mono=data.get('mono') is True   # monochrome style: gray face, owner shown by ring pattern
+    try:
+        light=validate_light(data.get('light',LIGHT_DEFAULT))
+    except ValueError:
+        light=dict(LIGHT_DEFAULT)
     style=data.get('clock_style')
     out=dict(saver=saver,timer=timer,mono=mono,
-             clock_style=style if type(style) is int and 0<=style<CLOCK_STYLES else 0)   # board clock design
+             clock_style=style if type(style) is int and 0<=style<CLOCK_STYLES else 0,   # board clock design
+             light=light)   # board backlight
     if isinstance(data.get('language'),str):
         out['language']=data['language']   # written by the app's server for the MCP server
     if isinstance(data.get('calendar'),dict):
@@ -616,6 +621,25 @@ def clock_style_command(style):
     if type(style) is not int or not 0<=style<CLOCK_STYLES:
         raise ValueError(T('시계 디자인 번호가 올바르지 않습니다.','Invalid clock design.'))
     return f'CLOCKSTYLE:{style}','OK CLOCKSTYLE'
+
+
+# Board backlight: brightness, off while the sleeping face shows, off from..to o'clock at night.
+LIGHT_DEFAULT=dict(bright=100,off_sleeping=False,night=False,night_from=0,night_to=7)
+
+
+def validate_light(light):
+    if not isinstance(light,dict): raise ValueError(T('화면 밝기 설정이 올바르지 않습니다.','Invalid screen light settings.'))
+    out=dict(LIGHT_DEFAULT); out.update({k:v for k,v in light.items() if k in LIGHT_DEFAULT})
+    if type(out['bright']) is not int or not 10<=out['bright']<=100 \
+            or any(type(out[k]) is not bool for k in ('off_sleeping','night')) \
+            or any(type(out[k]) is not int or not 0<=out[k]<=23 for k in ('night_from','night_to')):
+        raise ValueError(T('화면 밝기 설정이 올바르지 않습니다.','Invalid screen light settings.'))
+    return out
+
+
+def light_command(light):
+    v=validate_light(light)
+    return f"LIGHT:{v['bright']}:{int(v['off_sleeping'])}:{int(v['night'])}:{v['night_from']}:{v['night_to']}",'OK LIGHT'
 
 
 def style_command(mono):

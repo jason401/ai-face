@@ -199,6 +199,7 @@ class Device:
         try:
             self.touch = int(self.exchange('TOUCH', 'OK TOUCH:').split(':')[1])
             self.exchange(*face_modes.clock_style_command(face_modes.load_settings()['clock_style']))
+            self.exchange(*face_modes.light_command(face_modes.load_settings()['light']))
         except ValueError:
             self.touch = 0   # older firmware: no touch support, one clock design
         for mood in face_modes.idle_moods():
@@ -304,6 +305,17 @@ class Device:
             self.exchange(*face_modes.saver_command(saver))
         face_modes.save_settings(saver=saver)
         self.message = T('대기 화면 설정을 저장했습니다.', 'Screen saver saved.')
+
+    def set_light(self, light):
+        light = face_modes.validate_light(light)
+        face_modes.save_settings(light=light)
+        if self.fd is not None:
+            try:
+                self.exchange(*face_modes.light_command(light))
+            except ValueError:
+                raise ValueError(T('보드 펌웨어가 이전 버전이라 화면 밝기를 바꿀 수 없어요. 설정 → 보드에서 펌웨어를 업데이트해 주세요.',
+                                   'The board firmware is too old for screen light settings. Update it in Settings → Board.'))
+        self.message = T('화면 밝기 설정을 바꿨습니다.', 'Screen light changed.')
 
     def set_clock_style(self, style):
         command = face_modes.clock_style_command(style)   # validate first
@@ -443,7 +455,7 @@ class Device:
             self.lock.release()
         return dict(ports=available, connected=self.fd is not None and self.port in available,
                     port=self.port, message=self.message, busy=busy, flashing=self.flashing,
-                    paused=self.paused, touch=self.touch if self.fd is not None else 0, clock_style=settings['clock_style'], saver=settings['saver'], mono=settings['mono'], photos=list(self.photos),
+                    paused=self.paused, touch=self.touch if self.fd is not None else 0, clock_style=settings['clock_style'], light=settings['light'], saver=settings['saver'], mono=settings['mono'], photos=list(self.photos),
                     current_photo=self.current_photo, owner=self.owner or 'user',
                     timer=dict(left=left, total=timer['total'], color=timer['color']) if left else None)
 

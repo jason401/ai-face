@@ -31,6 +31,7 @@ import SwiftUI
                          SharedFolder(id: "f2", name: "Lab data", path: NSHomeDirectory() + "/Documents/Lab data", on: false),
                          SharedFolder(id: "f3", name: "Old notes", path: "/Volumes/Backup/Old notes", missing: true)]
         store.serverPath = "/Users/me/Library/Application Support/AI Face/ai_face_mcp.py"
+        store.lightNight = true; store.lightOffSleeping = true; store.lightBright = 70; store.lightFrom = 23; store.lightTo = 7
         store.connected = true; store.port = "/dev/cu.usbmodem14101"; store.ports = ["/dev/cu.usbmodem14101"]
         store.photos = [1, 2, 3]; store.currentPhoto = 2
         store.library = (1...7).map { LibraryItem(name: "photo\($0).jpg", mtime: $0) }

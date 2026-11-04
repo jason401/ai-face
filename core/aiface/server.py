@@ -501,6 +501,8 @@ def main():
                         device.set_style(data.get('mono'))
                     elif action == 'clock_style':
                         device.set_clock_style(data.get('style'))
+                    elif action == 'light':
+                        device.set_light(data.get('light'))
                     elif action == 'mcp_install':
                         integrations.install(data.get('target'))
                         device.message = T('연결했습니다. 그 앱을 완전히 종료(Cmd+Q)한 뒤 다시 실행하세요.', 'Connected. Quit that app completely (Cmd+Q) and open it again.')

@@ -13,7 +13,7 @@
 //   display  BLK CS DC RES SDA SCL  ->  XIAO D0 D1 D2 D3 D4 D5   (VIN -> 3V3, GND -> GND)
 //   touch    TP_SCL TP_SDA TP_RST TP_INT  ->  XIAO D10 D9 D8 D7
 // D6 (TX) stays free: the boot messages come out on it.
-#define TFT_BL 1     // D0 backlight (on)
+#define TFT_BL 1     // D0 backlight (PWM brightness)
 #define TFT_CS 2     // D1
 #define TFT_DC 3     // D2
 #define TFT_RST 4    // D3
@@ -978,6 +978,30 @@ void updateSlide(uint32_t now) {
   if(done || now-lastSlideDraw>=16) { lastSlideDraw=now; drawSlide(now); }
   if(done) endSlide(slideAnimTo!=0);
 }
+// ----- backlight (BLK on D0): brightness, off while asleep or at night; a touch or an alarm
+// lights it again. LIGHT:<percent 10-100>:<off while sleeping 0/1>:<off at night 0/1>:<from h>:<to h>
+uint8_t lightPct=100, lightFrom=0, lightTo=7;
+bool lightOffSleeping=false, lightNight=false, wakeTouch=false;
+float lightNow=-1;                // current level 0-255 (it fades), -1 before the first update
+uint32_t wakeUntil=0, lastLight=0;
+const uint32_t TOUCH_WAKE_MS=30000;
+bool nightNow() {
+  if(!lightNight || !clockSynced || lightFrom==lightTo) return false;
+  int h,m,s; clockNow(h,m,s);
+  return lightFrom<lightTo ? h>=lightFrom && h<lightTo : h>=lightFrom || h<lightTo;
+}
+bool screenDark(uint32_t now) {
+  if(cdState==T_ALARM || (int32_t)(wakeUntil-now)>0) return false;
+  return (lightOffSleeping && active==SLEEPING_SLOT) || nightNow();
+}
+void updateLight(uint32_t now) {
+  if(lightNow>=0 && now-lastLight<15) return;
+  lastLight=now;
+  float target=screenDark(now) ? 0 : lightPct*255/100.0f;
+  if(lightNow<0) lightNow=target;
+  else lightNow+=constrain(target-lightNow,-13.0f,13.0f);   // about 0.3 s from off to full
+  ledcWrite(TFT_BL,(int)lroundf(lightNow));
+}
 void updateTouch(uint32_t now) {
   if(!touchChip || now-lastTouchPoll<20) return;
   lastTouchPoll=now;
@@ -985,8 +1009,13 @@ void updateTouch(uint32_t now) {
   if(!tpRead(0x02,b,5)) return;
   int x=((b[1]&0x0F)<<8)|b[2], y=((b[3]&0x0F)<<8)|b[4];
   if(b[0]&0x0F) {
-    if(!touching) { touching=true; slideTried=false; touchX0=x; touchY0=y; touchStart=now; }
+    if(!touching) {
+      touching=true; slideTried=false; touchX0=x; touchY0=y; touchStart=now;
+      wakeTouch=screenDark(now);       // a touch on a dark screen only lights it
+    }
+    wakeUntil=now+TOUCH_WAKE_MS;
     touchX1=x; touchY1=y;
+    if(wakeTouch) return;
     int dx=touchX1-touchX0, dy=touchY1-touchY0;
     if(!sliding && !slideTried && abs(dx)>12 && abs(dx)>abs(dy) && active!=PHOTO_SCREEN) {
       slideTried=true; startSlide(dx<0 ? 1 : -1);
@@ -994,6 +1023,7 @@ void updateTouch(uint32_t now) {
     if(sliding && slideTouch) slideOffset=slideDir>0 ? constrain((float)dx,-240.0f,0.0f) : constrain((float)dx,0.0f,240.0f);
   } else if(touching) {
     touching=false;
+    if(wakeTouch) { wakeTouch=false; return; }
     int dx=touchX1-touchX0, dy=touchY1-touchY0;
     bool flick=abs(dx)>=SWIPE_MIN && abs(dx)*2>abs(dy)*3 && now-touchStart<1500;
     if(sliding && slideTouch) {
@@ -1016,6 +1046,14 @@ void command(char *line) {
   used=0;
   if(sscanf(line,"DATE:%d%n",&days,&used)==1 && !line[used] && days>0) {
     clockDays=days; Serial.println("OK DATE"); return;
+  }
+  int lp=0, lsl=0, lni=0, lf=0, lt=0; used=0;
+  if(sscanf(line,"LIGHT:%d:%d:%d:%d:%d%n",&lp,&lsl,&lni,&lf,&lt,&used)==5 && !line[used] && lp>=10 && lp<=100
+     && lsl>=0 && lsl<=1 && lni>=0 && lni<=1 && lf>=0 && lf<24 && lt>=0 && lt<24) {
+    uint8_t v[5]={(uint8_t)lp,(uint8_t)lsl,(uint8_t)lni,(uint8_t)lf,(uint8_t)lt}, old[5]={lightPct,lightOffSleeping,lightNight,lightFrom,lightTo};
+    lightPct=lp; lightOffSleeping=lsl; lightNight=lni; lightFrom=lf; lightTo=lt;
+    if(memcmp(v,old,5)) prefs.putBytes("light",v,5);
+    Serial.println("OK LIGHT"); return;
   }
   if(!strcmp(line,"PERF")) {   // diagnostics: drawing time per frame (us): face, fire, clock, slide
     Serial.printf("OK PERF:%lu:%lu:%lu:%lu\r\n",(unsigned long)perfFace,(unsigned long)perfFire,(unsigned long)perfClock,(unsigned long)perfSlide); return;
@@ -1114,9 +1152,15 @@ void setup() {
   // hold a whole photo chunk plus its header line while a face frame is being drawn.
   Serial.setRxBufferSize(16384);
   Serial.begin(115200);SPI.begin(TFT_SCK,-1,TFT_MOSI,TFT_CS);
-  pinMode(TFT_BL,OUTPUT); digitalWrite(TFT_BL,HIGH);   // backlight on
-  tft.begin(80000000);tft.setRotation(0);   // 80 MHz SPI (library default 40): faster frames and slidestft.fillScreen(GC9A01A_BLACK);
+  ledcAttach(TFT_BL,5000,8);   // backlight PWM (updateLight sets the level)
+  tft.begin(80000000);tft.setRotation(0);tft.fillScreen(GC9A01A_BLACK);   // 80 MHz SPI (library default 40)
   prefs.begin("face-engine",false);
+  if(prefs.getBytesLength("light")==5) {
+    uint8_t v[5]; prefs.getBytes("light",v,5);
+    if(v[0]>=10 && v[0]<=100 && v[1]<=1 && v[2]<=1 && v[3]<24 && v[4]<24) {
+      lightPct=v[0]; lightOffSleeping=v[1]; lightNight=v[2]; lightFrom=v[3]; lightTo=v[4];
+    }
+  }
   // Uses the "spiffs" data partition of the default partition scheme (formatted on first use).
   fsReady=LittleFS.begin(true);
   touchInit();
@@ -1162,6 +1206,7 @@ void loop() {
   }
   uint32_t now=millis();
   updateTouch(now);
+  updateLight(now);
   if(sliding) { updateSlide(now); return; }
   updateCountdown(now);
   updateIdle(now);

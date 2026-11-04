@@ -126,6 +126,12 @@ final class SettingsStore: NSObject, ObservableObject {
     @Published var saverClock = false
     @Published var saverSlide = 60
     @Published var clockStyle = 0   // board clock design (firmware clock_faces.h)
+    // Board backlight (BLK): brightness %, off while the sleeping face shows, off at night from..to
+    @Published var lightBright = 100
+    @Published var lightOffSleeping = false
+    @Published var lightNight = false
+    @Published var lightFrom = 0
+    @Published var lightTo = 7
     // Photo library
     @Published var library: [LibraryItem] = []
     @Published var thumbs: [String: NSImage] = [:]
@@ -268,6 +274,13 @@ final class SettingsStore: NSObject, ObservableObject {
                 self.saverClock = (saver["clock"] as? Bool) ?? false
                 self.saverSlide = (saver["slide"] as? NSNumber)?.intValue ?? 60
                 self.clockStyle = (s["clock_style"] as? NSNumber)?.intValue ?? 0
+                if let l = s["light"] as? [String: Any] {
+                    self.lightBright = (l["bright"] as? NSNumber)?.intValue ?? 100
+                    self.lightOffSleeping = (l["off_sleeping"] as? Bool) ?? false
+                    self.lightNight = (l["night"] as? Bool) ?? false
+                    self.lightFrom = (l["night_from"] as? NSNumber)?.intValue ?? 0
+                    self.lightTo = (l["night_to"] as? NSNumber)?.intValue ?? 7
+                }
             }
             self.loadBoardThumbs()
         }
@@ -902,6 +915,14 @@ final class SettingsStore: NSObject, ObservableObject {
         updateAvailable = false
         updateText = L("Updating to the new version…")
         API.shared.call("update_install")
+    }
+
+    func saveLight() {
+        let light: [String: Any] = ["bright": lightBright, "off_sleeping": lightOffSleeping, "night": lightNight,
+                                    "night_from": lightFrom, "night_to": lightTo]
+        API.shared.call("light", ["light": light]) { [weak self] ok, reply in
+            if !ok { self?.notice = (reply["message"] as? String) ?? "" }
+        }
     }
 
     func setClockStyle(_ style: Int) {
