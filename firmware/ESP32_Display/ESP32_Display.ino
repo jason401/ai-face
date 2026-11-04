@@ -1156,10 +1156,11 @@ void drawClockFace() {
 }
 
 
-// Hands (and the ticks the canvas covers) are drawn into the face canvas and sent in one
+// Hands (and the circle and ticks the canvas covers) are drawn into the face canvas and sent in one
 // piece. Erasing and redrawing them on the screen itself made them flicker every update.
 // g's (0,0) is screen (ox,oy).
 void composeClock(Adafruit_GFX &g,int ox,int oy) {
+  g.drawCircle(CX-ox,CY-oy,110,GC9A01A_WHITE);   // the outer circle crosses the canvas corners
   for(int i=0;i<60;i++) {
     float a=i*2.0f*PI/60.0f-PI/2.0f;
     int r=i%5==0 ? 94 : 102;
