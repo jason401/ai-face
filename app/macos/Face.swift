@@ -498,7 +498,8 @@ func renderFace(side: CGFloat, inset: CGFloat, view v: FaceView, pose p: Pose, f
         }
         NSGraphicsContext.restoreGraphicsState()
         if !isClock && !isFire && !isPhoto { drawExtraEffects(p, now) }
-        // Border ring: who chose the face, or the timer.
+        // Border ring: the timer, or who chose the face (faces only: the campfire, clock and
+        // photos are not anyone's answer, as on the board).
         let RW = 12.0   // thin, so the face itself stays the main thing
         let circle = NSBezierPath(ovalIn: NSRect(x: RW / 2, y: RW / 2, width: 240 - RW, height: 240 - RW))
         circle.lineWidth = CGFloat(RW)
@@ -516,6 +517,8 @@ func renderFace(side: CGFloat, inset: CGFloat, view v: FaceView, pose p: Pose, f
                 rgb(c[0], c[1], c[2]).setStroke()
                 arc.stroke()
             }
+        } else if isClock || isFire || isPhoto {
+            // no owner ring
         } else if v.mono {
             NSColor.white.setStroke()
             if let dash = ownerDash(v.owner) { circle.setLineDash(dash, count: dash.count, phase: 0) }
