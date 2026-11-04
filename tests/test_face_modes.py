@@ -156,7 +156,7 @@ class EngineTests(unittest.TestCase):
 
     def test_settings_round_trip(self):
         with tempfile.TemporaryDirectory() as tmp, patch.object(face_modes,'SETTINGS',Path(tmp)/'s'/'settings.json'):
-            self.assertEqual(face_modes.load_settings(),dict(saver=face_modes.SAVER_DEFAULT,timer=None,mono=False))
+            self.assertEqual(face_modes.load_settings(),dict(saver=face_modes.SAVER_DEFAULT,timer=None,mono=False,clock_style=0))
             # FACE5/6 idle settings carry over their first delay
             face_modes.SETTINGS.parent.mkdir(parents=True)
             face_modes.SETTINGS.write_text('{"idle": {"sleepy": 3, "sleeping": 6, "clock": 9}}')
@@ -200,10 +200,23 @@ class EngineTests(unittest.TestCase):
         self.assertFalse(any(x.startswith('PLAY') for x in seen))   # stored only, not shown
         self.assertIn('SAVER:600:0:0:60',seen)
         self.assertIn('PHOTO:LIST',seen)
+        self.assertIn('CLOCKSTYLE:0',seen)                  # the chosen clock design
+        self.assertTrue(any(x.startswith('DATE:') for x in seen))
         timer=[x for x in seen if x.startswith('TIMER')]
         self.assertEqual(len(timer),1)
         left=int(timer[0].split(':')[1]);self.assertTrue(85<=left<=90,timer)
         self.assertTrue(timer[0].endswith(':120:4'))
+
+    def test_clock_style_setting(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.object(face_modes,'SETTINGS',Path(tmp)/'settings.json'):
+            self.assertEqual(face_modes.load_settings()['clock_style'],0)
+            self.assertEqual(face_modes.clock_style_command(9),('CLOCKSTYLE:9','OK CLOCKSTYLE'))
+            for bad in (10,-1,'2',True,None):
+                with self.assertRaises(ValueError): face_modes.clock_style_command(bad)
+            Device().set_clock_style(4)   # no board: saved for the next connection
+            self.assertEqual(face_modes.load_settings()['clock_style'],4)
+            face_modes.save_settings(clock_style=99)
+            self.assertEqual(face_modes.load_settings()['clock_style'],0)
 
     def test_expired_timer_is_forgotten(self):
         with tempfile.TemporaryDirectory() as tmp, patch.object(face_modes,'SETTINGS',Path(tmp)/'settings.json'):

@@ -295,3 +295,15 @@
 "Swipe left or right" = "좌우로 밀어 화면 바꾸기";
 "No touch panel" = "터치 화면 없음";
 "Swipe on the board to go face → campfire → clock → face (the other way swiping right)." = "보드 화면을 왼쪽으로 밀면 얼굴 → 모닥불 → 시계 → 얼굴 순서로 바뀌고, 오른쪽으로 밀면 반대 순서예요.";
+"Clock design" = "시계 디자인";
+"Classic" = "클래식";
+"Minimal" = "미니멀";
+"Railway" = "기차역";
+"Roman numerals" = "로마 숫자";
+"Numbers" = "숫자";
+"Chronograph" = "크로노그래프";
+"Rings" = "링";
+"Digital" = "디지털";
+"Radar" = "레이더";
+"Hangul words" = "한글 단어";
+"How the clock looks on the board (clock screen and clock screen saver). The menu bar keeps the simple clock." = "보드에 나오는 시계 모양이에요(시계 화면과 시계 대기 화면). 메뉴바 얼굴은 단순한 시계 그대로예요.";

@@ -10,4 +10,5 @@ for i,l in enumerate(src):
 txt='\n'.join(src[:first]+protos+src[first:])
 txt=re.sub(r'^#include <Adafruit_GFX.h>','#include "stub.h"',txt,flags=re.M)
 txt=re.sub(r'^#include <(Adafruit_GC9A01A|SPI|Preferences|math|LittleFS|Wire|esp_heap_caps)\.h>\n','',txt,flags=re.M)
+txt=txt.replace('#include "clock_faces.h"','#include "clock_faces_stub.h"')
 open(sys.argv[2],'w').write(txt)

@@ -183,8 +183,13 @@ class Device:
         self.message = report
         return report
 
-    def sync_time(self):
-        self.exchange(datetime.datetime.now().strftime('TIME:%H:%M:%S'), 'OK TIME')
+    def sync_time(self, dt=None):
+        dt = dt or datetime.datetime.now()
+        self.exchange(dt.strftime('TIME:%H:%M:%S'), 'OK TIME')
+        try:   # the date, for clock designs that show it (older firmware: no date)
+            self.exchange(f'DATE:{(dt.date() - datetime.date(1970, 1, 1)).days}', 'OK DATE')
+        except ValueError:
+            pass
 
     def prepare(self):
         """Run on every connect: clock time (the screen saver may show the clock), the
@@ -193,8 +198,9 @@ class Device:
         self.sync_time()
         try:
             self.touch = int(self.exchange('TOUCH', 'OK TOUCH:').split(':')[1])
+            self.exchange(*face_modes.clock_style_command(face_modes.load_settings()['clock_style']))
         except ValueError:
-            self.touch = 0   # older firmware: no touch support
+            self.touch = 0   # older firmware: no touch support, one clock design
         for mood in face_modes.idle_moods():
             reply = self.exchange(f"SUM:{mood['slot']}", 'OK SUM:')
             if reply != f'OK SUM:{face_modes.checksum(mood)}':
@@ -299,6 +305,17 @@ class Device:
         face_modes.save_settings(saver=saver)
         self.message = T('대기 화면 설정을 저장했습니다.', 'Screen saver saved.')
 
+    def set_clock_style(self, style):
+        command = face_modes.clock_style_command(style)   # validate first
+        face_modes.save_settings(clock_style=style)
+        if self.fd is not None:
+            try:
+                self.exchange(*command)
+            except ValueError:
+                raise ValueError(T('보드 펌웨어가 이전 버전이라 시계 디자인을 바꿀 수 없어요. 설정 → 보드에서 펌웨어를 업데이트해 주세요.',
+                                   'The board firmware is too old for clock designs. Update it in Settings → Board.'))
+        self.message = T('시계 디자인을 바꿨습니다.', 'Clock design changed.')
+
     def set_style(self, mono):
         face_modes.style_command(mono)   # validate
         # Monochrome is for the menu bar face only: the board always stays in color.
@@ -319,7 +336,7 @@ class Device:
         except (ValueError, TypeError):
             raise ValueError(T('시간은 00:00:00 ~ 23:59:59로 입력해 주세요.', 'Enter a time from 00:00:00 to 23:59:59.'))
         if self.fd is not None:
-            self.exchange(dt.strftime('TIME:%H:%M:%S'), 'OK TIME')
+            self.sync_time(dt)
             self.exchange('CLOCK', 'OK CLOCK')
         self.mode = 'CLOCK'
         self.emotion = ''
@@ -426,7 +443,7 @@ class Device:
             self.lock.release()
         return dict(ports=available, connected=self.fd is not None and self.port in available,
                     port=self.port, message=self.message, busy=busy, flashing=self.flashing,
-                    paused=self.paused, touch=self.touch if self.fd is not None else 0, saver=settings['saver'], mono=settings['mono'], photos=list(self.photos),
+                    paused=self.paused, touch=self.touch if self.fd is not None else 0, clock_style=settings['clock_style'], saver=settings['saver'], mono=settings['mono'], photos=list(self.photos),
                     current_photo=self.current_photo, owner=self.owner or 'user',
                     timer=dict(left=left, total=timer['total'], color=timer['color']) if left else None)
 

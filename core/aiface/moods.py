@@ -584,7 +584,9 @@ def load_settings():
             and timer.get('color') in TIMER_COLORS):
         timer=None
     mono=data.get('mono') is True   # monochrome style: gray face, owner shown by ring pattern
-    out=dict(saver=saver,timer=timer,mono=mono)
+    style=data.get('clock_style')
+    out=dict(saver=saver,timer=timer,mono=mono,
+             clock_style=style if type(style) is int and 0<=style<CLOCK_STYLES else 0)   # board clock design
     if isinstance(data.get('language'),str):
         out['language']=data['language']   # written by the app's server for the MCP server
     if isinstance(data.get('calendar'),dict):
@@ -605,6 +607,15 @@ def save_settings(**changes):
     temp.write_text(json.dumps(data,ensure_ascii=False,indent=2))
     temp.replace(SETTINGS)
     return data
+
+
+CLOCK_STYLES=10   # designs in firmware/ESP32_Display/clock_faces.h
+
+
+def clock_style_command(style):
+    if type(style) is not int or not 0<=style<CLOCK_STYLES:
+        raise ValueError(T('시계 디자인 번호가 올바르지 않습니다.','Invalid clock design.'))
+    return f'CLOCKSTYLE:{style}','OK CLOCKSTYLE'
 
 
 def style_command(mono):

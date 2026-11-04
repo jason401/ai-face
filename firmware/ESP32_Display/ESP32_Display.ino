@@ -6,6 +6,7 @@
 #include <LittleFS.h>
 #include <Wire.h>
 #include <esp_heap_caps.h>
+#include "clock_faces.h"
 
 #define TFT_CS 2
 #define TFT_RST 3
@@ -37,6 +38,8 @@ uint32_t perfFace=0, perfFire=0, perfClock=0, perfSlide=0;
 Preferences prefs;
 const int CX=120, CY=120;
 int clockHour=12, clockMinute=0, clockSecond=0;
+int clockStyle=0;          // design from clock_faces.h, chosen in the app (CLOCKSTYLE:n)
+int32_t clockDays=-1;      // DATE:<days since 1970> for the day TIME was set; -1 = unknown
 uint32_t clockStartMillis=0, lastClockUpdate=0;
 
 // ===== FACE8 = FACE3 frames + owner ring + countdown timer ring + photos + screen saver
@@ -279,7 +282,8 @@ void activate(int slot) {
 void enterClock() {
   active=CLOCK_SCREEN; sliding=false;
   if(!keepScreen) tft.fillScreen(GC9A01A_BLACK);
-  drawClockFace();
+  if(!psramFound()) drawClockFace();   // the canvas-only clock draws its outer ticks once
+  drawClock();
   cdDirty=true;
 }
 
@@ -890,7 +894,9 @@ void swipe(int dir) {
 // Both screens are drawn whole (rings, ticks and all) into two full-screen frames in the
 // board's PSRAM and sent side by side, shifted by the finger. Without PSRAM a swipe still
 // switches, just without the slide.
-GFXcanvas16 *slideFrame[2]={nullptr,nullptr};   // 240 x 240 each, allocated on the first slide
+// Frames 0 and 1 hold the two screens; frame 2 is what is sent: both, side by side, as one
+// picture in one transfer (two transfers showed a seam where the second one was still drawing).
+GFXcanvas16 *slideFrame[3]={nullptr,nullptr,nullptr};   // 240 x 240 each, allocated on the first slide
 bool slideTouch=false, slideTried=false;
 int slideDir=0, slideFrom=0, slideTo=0;
 float slideOffset=0, slideAnimFrom=0, slideAnimTo=0;
@@ -924,19 +930,23 @@ void composeFull(int s,Adafruit_GFX &g,uint32_t now) {
 void drawSlide(uint32_t now) {
   uint32_t t=micros();
   int off=(int)lroundf(slideOffset);
+  uint16_t *out=slideFrame[2]->getBuffer();
   for(int k=0;k<2;k++) {
     int x0=off+(k ? (slideDir>0 ? 240 : -240) : 0);
     if(x0>=240 || x0<=-240) continue;
     composeFull(k ? slideTo : slideFrom,*slideFrame[k],now);
-    tft.drawRGBBitmap(x0,0,slideFrame[k]->getBuffer(),240,240);
+    int a=max(0,-x0), b=min(240,240-x0);
+    uint16_t *src=slideFrame[k]->getBuffer();
+    for(int y=0;y<240;y++) memcpy(out+y*240+x0+a,src+y*240+a,(b-a)*2);
   }
+  tft.drawRGBBitmap(0,0,out,240,240);
   perfNote(perfSlide,t);
 }
 bool startSlide(int dir) {
   int from=screenIndex(), to=-1;
   for(int k=1;k<3 && to<0;k++) if(screenAvailable((from+dir*k+3)%3)) to=(from+dir*k+3)%3;
   if(to<0 || !canvas.getBuffer() || !psramFound()) return false;
-  for(int k=0;k<2;k++) {
+  for(int k=0;k<3;k++) {
     if(!slideFrame[k]) slideFrame[k]=new GFXcanvas16(240,240);
     if(!slideFrame[k]->getBuffer()) return false;
   }
@@ -991,6 +1001,16 @@ void updateTouch(uint32_t now) {
 void command(char *line) {
   if(!strcmp(line,"HELLO")) { Serial.println("OK FACE8"); return; }
   if(!strcmp(line,"TOUCH")) { Serial.printf("OK TOUCH:%d\r\n",touchChip); return; }
+  int style=0, days=0, used=0;
+  if(sscanf(line,"CLOCKSTYLE:%d%n",&style,&used)==1 && !line[used] && style>=0 && style<CLOCK_STYLES) {
+    if(style!=clockStyle) { clockStyle=style; prefs.putInt("clockstyle",style); }
+    if(active==CLOCK_SCREEN) drawClock();
+    Serial.println("OK CLOCKSTYLE"); return;
+  }
+  used=0;
+  if(sscanf(line,"DATE:%d%n",&days,&used)==1 && !line[used] && days>0) {
+    clockDays=days; Serial.println("OK DATE"); return;
+  }
   if(!strcmp(line,"PERF")) {   // diagnostics: drawing time per frame (us): face, fire, clock, slide
     Serial.printf("OK PERF:%lu:%lu:%lu:%lu\r\n",(unsigned long)perfFace,(unsigned long)perfFire,(unsigned long)perfClock,(unsigned long)perfSlide); return;
   }
@@ -1097,6 +1117,7 @@ void setup() {
   initRing(TIMER_RING,104,110);
   owner=constrain(prefs.getInt("owner",0),0,2); ringFrom=owner;
   mono=prefs.getBool("mono",false);
+  clockStyle=constrain(prefs.getInt("clockstyle",0),0,CLOCK_STYLES-1);
   if(prefs.getBytesLength("saver")==sizeof(saver)) {
     int32_t v[4]; prefs.getBytes("saver",v,sizeof(v));
     if(v[0]>=0 && v[0]<=86400 && v[1]>=0 && v[1]<SV_COUNT && v[2]>=0 && v[2]<=1 && v[3]>=5 && v[3]<=86400) memcpy(saver,v,sizeof(v));
@@ -1204,7 +1225,24 @@ void drawClockFace() {
 // Hands (and the circle and ticks the canvas covers) are drawn into the face canvas and sent in one
 // piece. Erasing and redrawing them on the screen itself made them flicker every update.
 // g's (0,0) is screen (ox,oy).
+// Now, for the designs: time from TIME, the date from DATE (it rolls over at midnight).
+ClockTime clockTime() {
+  ClockTime t; clockNow(t.h,t.m,t.s);
+  unsigned long ms=millis()-clockStartMillis;
+  t.frac=(ms%1000UL)/1000.0f;
+  t.date=clockDays>=0;
+  if(t.date) {
+    long z=clockDays+(long)((clockHour*3600UL+clockMinute*60UL+clockSecond+ms/1000UL)/86400UL);
+    t.wday=(int)((z+4)%7);                       // 1970-01-01 was a Thursday
+    z+=719468; long era=z/146097, doe=z-era*146097, yoe=(doe-doe/1460+doe/36524-doe/146096)/365;
+    long doy=doe-(365*yoe+yoe/4-yoe/100), mp=(5*doy+2)/153;
+    t.day=(int)(doy-(153*mp+2)/5+1); t.month=(int)(mp<10 ? mp+3 : mp-9);
+  } else { t.day=1; t.month=1; t.wday=0; }
+  return t;
+}
 void composeClock(Adafruit_GFX &g,int ox,int oy) {
+  if(!ox && !oy) { drawClockStyle(g,clockStyle,clockTime()); return; }   // whole screen
+  // Without PSRAM: the classic design only, in the face canvas.
   g.drawCircle(CX-ox,CY-oy,110,GC9A01A_WHITE);   // the outer circle crosses the canvas corners
   for(int i=0;i<60;i++) {
     float a=i*2.0f*PI/60.0f-PI/2.0f;
@@ -1221,9 +1259,19 @@ void composeClock(Adafruit_GFX &g,int ox,int oy) {
   g.drawLine(CX-ox,CY-oy,CX+cosf(sa)*90-ox,CY+sinf(sa)*90-oy,GC9A01A_RED);
   g.fillCircle(CX-ox,CY-oy,4,GC9A01A_RED);
 }
+GFXcanvas16 *clockFrame=nullptr;   // whole screen, in PSRAM
 void drawClock() {
-  if(!canvas.getBuffer()) return;
   uint32_t t=micros();
+  if(psramFound()) {
+    if(!clockFrame) clockFrame=new GFXcanvas16(240,240);
+    if(clockFrame->getBuffer()) {
+      composeFull(2,*clockFrame,millis());
+      tft.drawRGBBitmap(0,0,clockFrame->getBuffer(),240,240);
+      perfNote(perfClock,t);
+      return;
+    }
+  }
+  if(!canvas.getBuffer()) return;
   canvas.fillScreen(C_BLACK);
   composeClock(canvas,OX,OY);
   tft.drawRGBBitmap(OX,OY,canvas.getBuffer(),CW,CH);

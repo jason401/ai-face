@@ -29,6 +29,12 @@ struct GeneralTab: View {
                     SettingsMenu(options: store.afterChoices.map { (minutesText($0), $0) }, selection: bind(\.saverAfter))
                         .disabled(store.saverType == "off")
                 }
+                Divider()
+                SettingsRow(title: L("Clock design")) {
+                    SettingsMenu(options: CLOCK_DESIGNS.enumerated().map { ($0.element, $0.offset) },
+                                 selection: Binding(get: { store.clockStyle }, set: { store.setClockStyle($0) }))
+                        .help(L("How the clock looks on the board (clock screen and clock screen saver). The menu bar keeps the simple clock."))
+                }
                 if store.saverType == "photo" || store.saverType == "slideshow" {
                     Divider()
                     SettingsRow(title: L("Photos")) {

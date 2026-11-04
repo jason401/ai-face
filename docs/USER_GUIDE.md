@@ -57,6 +57,10 @@ This optional feature holds a MacBook awake for a limited time, including with t
 
 After the configured idle interval, choose sleepy → sleeping, analog clock, the selected board photo, photo slideshow, pixel-art campfire, or no screen saver. The default becomes sleepy after N minutes and sleeping after 2N minutes.
 
+**Clock design** (Settings → General → Face) picks how the board draws the clock screen and the clock screen saver: Classic, Minimal, Railway, Roman numerals, Numbers, Chronograph, Rings, Digital, Radar or Hangul words (a Korean word clock). Digital and Chronograph also show the date. The menu bar keeps the simple clock. Needs the board's PSRAM (Update firmware switches it on); without it the board shows Classic.
+
+![The ten clock designs](images/clock-designs.png)
+
 A new expression or timer completion restores the face. Photo modes can overlay clock hands. The menu bar uses local copies of board photos and falls back to a sleeping face if none exist. Settings are also stored on the board, which can continue independently while powered.
 
 ### Photos (Board tab)

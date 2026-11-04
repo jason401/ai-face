@@ -18,6 +18,9 @@ let SAVER_TYPES: [Choice<String>] = [
     Choice(value: "fire", label: L("Pixel campfire")),
     Choice(value: "off", label: L("Off")),
 ]
+// The board's clock designs, in the order of firmware/ESP32_Display/clock_faces.h.
+let CLOCK_DESIGNS: [String] = [L("Classic"), L("Minimal"), L("Railway"), L("Roman numerals"), L("Numbers"),
+                               L("Chronograph"), L("Rings"), L("Digital"), L("Radar"), L("Hangul words")]
 let SLIDE_CHOICES: [Choice<Int>] = [
     Choice(value: 10, label: secondsText(10)), Choice(value: 30, label: secondsText(30)), Choice(value: 60, label: minutesText(1)),
     Choice(value: 300, label: minutesText(5)), Choice(value: 900, label: minutesText(15)),
@@ -122,6 +125,7 @@ final class SettingsStore: NSObject, ObservableObject {
     @Published var saverType = "sleep"
     @Published var saverClock = false
     @Published var saverSlide = 60
+    @Published var clockStyle = 0   // board clock design (firmware clock_faces.h)
     // Photo library
     @Published var library: [LibraryItem] = []
     @Published var thumbs: [String: NSImage] = [:]
@@ -263,6 +267,7 @@ final class SettingsStore: NSObject, ObservableObject {
                 self.saverType = (saver["type"] as? String) ?? "sleep"
                 self.saverClock = (saver["clock"] as? Bool) ?? false
                 self.saverSlide = (saver["slide"] as? NSNumber)?.intValue ?? 60
+                self.clockStyle = (s["clock_style"] as? NSNumber)?.intValue ?? 0
             }
             self.loadBoardThumbs()
         }
@@ -897,6 +902,14 @@ final class SettingsStore: NSObject, ObservableObject {
         updateAvailable = false
         updateText = L("Updating to the new version…")
         API.shared.call("update_install")
+    }
+
+    func setClockStyle(_ style: Int) {
+        let old = clockStyle
+        clockStyle = style
+        API.shared.call("clock_style", ["style": style]) { [weak self] ok, reply in
+            if !ok { self?.clockStyle = old; self?.notice = (reply["message"] as? String) ?? "" }
+        }
     }
 
     func setMono(_ on: Bool) {
