@@ -8,17 +8,23 @@
 #include <esp_heap_caps.h>
 #include "clock_faces.h"
 
-#define TFT_CS 2
-#define TFT_RST 3
-#define TFT_DC 4
-#define TFT_SCK 7
-#define TFT_MOSI 9
+// Wiring follows the module's connectors in order (no crossed wires). ESP32-S3 routes SPI and
+// I2C to any pin, so the XIAO's printed SDA/SCL/MOSI/SCK names do not matter here.
+//   display  BLK CS DC RES SDA SCL  ->  XIAO D0 D1 D2 D3 D4 D5   (VIN -> 3V3, GND -> GND)
+//   touch    TP_SCL TP_SDA TP_RST TP_INT  ->  XIAO D10 D9 D8 D7
+// D6 (TX) stays free: the boot messages come out on it.
+#define TFT_BL 1     // D0 backlight (on)
+#define TFT_CS 2     // D1
+#define TFT_DC 3     // D2
+#define TFT_RST 4    // D3
+#define TFT_MOSI 5   // D4 (module "SDA")
+#define TFT_SCK 6    // D5 (module "SCL")
 Adafruit_GC9A01A tft(TFT_CS, TFT_DC, TFT_RST);
-// Optional touch panel (CST816S/T/D on I2C, e.g. the 1.28" round touch module): XIAO D4/D5
-// for SDA/SCL, D0 interrupt (unused: polled), D9 reset. Without one, nothing changes.
-#define TP_SDA 5
-#define TP_SCL 6
-#define TP_RST 8
+// Optional touch panel (CST816S/T/D on I2C, e.g. the 1.28" round touch module). Its interrupt
+// (D7) is not needed: the chip is polled. Without one, nothing changes.
+#define TP_SCL 9     // D10
+#define TP_SDA 8     // D9
+#define TP_RST 7     // D8
 const uint8_t TP_ADDR=0x15;
 
 // Face area: canvas 200x180 copied to screen (20,30). All drawing below
@@ -1108,6 +1114,7 @@ void setup() {
   // hold a whole photo chunk plus its header line while a face frame is being drawn.
   Serial.setRxBufferSize(16384);
   Serial.begin(115200);SPI.begin(TFT_SCK,-1,TFT_MOSI,TFT_CS);
+  pinMode(TFT_BL,OUTPUT); digitalWrite(TFT_BL,HIGH);   // backlight on
   tft.begin(80000000);tft.setRotation(0);   // 80 MHz SPI (library default 40): faster frames and slidestft.fillScreen(GC9A01A_BLACK);
   prefs.begin("face-engine",false);
   // Uses the "spiffs" data partition of the default partition scheme (formatted on first use).
