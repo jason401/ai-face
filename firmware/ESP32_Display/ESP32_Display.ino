@@ -5,6 +5,7 @@
 #include <math.h>
 #include <LittleFS.h>
 #include <Wire.h>
+#include <esp_heap_caps.h>
 
 #define TFT_CS 2
 #define TFT_RST 3
@@ -22,7 +23,17 @@ const uint8_t TP_ADDR=0x15;
 // Face area: canvas 200x180 copied to screen (20,30). All drawing below
 // uses screen coordinates; the S() helpers subtract the canvas offset.
 const int OX=20, OY=30, CW=200, CH=180;
-GFXcanvas16 canvas(CW, CH);
+// The face canvas is drawn ~25 times a second: keep it in fast internal RAM. With PSRAM on,
+// large allocations would otherwise go to the slower PSRAM (measured ~10% slower frames).
+// (A lambda, not a function: Arduino puts function prototypes above the first function.)
+GFXcanvas16 &canvas=*[]() {
+  heap_caps_malloc_extmem_enable(CW*CH*2+1024);   // allocations this big still stay internal
+  GFXcanvas16 *c=new GFXcanvas16(CW,CH);
+  heap_caps_malloc_extmem_enable(4096);           // back to the default
+  return c;
+}();
+// Drawing time per frame in microseconds (smoothed), for the PERF diagnostics command.
+uint32_t perfFace=0, perfFire=0, perfClock=0, perfSlide=0;
 Preferences prefs;
 const int CX=120, CY=120;
 int clockHour=12, clockMinute=0, clockSecond=0;
@@ -64,6 +75,7 @@ int active=CLOCK_SCREEN, savedActive=-99, uploadSlot=-1, received=0, target=0;
 const int CONT[11]={F_LEFT,F_RIGHT,F_X,F_Y,F_WIDTH,F_SMILE,F_OPEN,F_BROW,F_LIFT,F_TILT,F_SHAKE};
 enum { P_LEFT, P_RIGHT, P_X, P_Y, P_WIDTH, P_SMILE, P_OPEN, P_BROW, P_LIFT, P_TILT, P_SHAKE };
 struct Pose { float v[11]; float rgb[3]; int eyes; int fx; };
+struct Star { uint8_t x,y; uint16_t age,life; };   // campfire sky (types stay above the first function)
 Pose fromPose, pose;
 uint32_t frameStart=0, lastDraw=0;
 
@@ -84,6 +96,7 @@ struct RingGeo { int16_t ix[RING_SEGS+1], iy[RING_SEGS+1], ox[RING_SEGS+1], oy[R
 RingGeo OWNER_RING;   // r 113-119: owner color (faces); the timer uses it on the clock screen
 RingGeo TIMER_RING;   // r 104-110: countdown timer just inside the owner ring (faces)
 typedef uint16_t (*RingColorFn)(float);
+void perfNote(uint32_t &avg,uint32_t start) { uint32_t d=micros()-start; avg=avg ? (avg*7+d)/8 : d; }
 int owner=0, ringFrom=0;
 // Monochrome style (STYLE:1): the face is drawn in grays and the owner ring shows who chose
 // the face by its pattern instead of its color: app = solid, Claude = short dashes,
@@ -435,6 +448,8 @@ uint8_t fireLog[FG*FG];         // 0 none, 1 bark edge, 2 bark, 3 cut end, 4 end
 int8_t fireSpan[FG][2];         // first/last cell inside the circle on each grid row
 struct Spark { float x,y; uint8_t life,hot; };
 Spark sparks[10];
+// Stars fade in and out, each at a new random place in the sky every time.
+Star stars[12];
 uint32_t fireRng=0x9E3779B9u, lastFire=0;
 bool fireReady=false;
 // Dark red -> red -> orange -> yellow -> pale yellow -> white.
@@ -468,8 +483,7 @@ void fireInit() {
       fireGlowW[cy*FG+cx]= cy>=41 && g>0 ? (uint8_t)(min(1.0f,g*1.4f)*150) : 0;
     }
   }
-  const uint8_t stars[][2]={{9,9},{16,4},{30,6},{40,11},{45,18},{7,20},{22,12},{36,3},{12,28},{43,27}};
-  for(auto &st:stars) fireBack[st[1]*FG+st[0]]=rgb(150,160,200);
+  for(auto &st:stars) { placeStar(st); st.age=fireRand()%st.life; }   // already twinkling at different points
   fireLogLine(14,46,34,38); fireLogLine(18,38,38,46);
   for(auto &sp:sparks) sp.life=0;
   fireReady=true;
@@ -501,10 +515,25 @@ void fireStep() {
     if(sp.life) { sp.y-=0.55f; sp.x+=((int)(fireRand()%3)-1)*0.4f; sp.life--; continue; }
     if(fireRand()%24==0) { sp.x=19+fireRand()%14; sp.y=24+fireRand()%8; sp.life=12+fireRand()%18; sp.hot=fireRand()&1; }
   }
-  if(fireRand()%6==0) {   // a star twinkles
-    const uint8_t stars[][2]={{9,9},{16,4},{30,6},{40,11},{45,18},{7,20},{22,12},{36,3},{12,28},{43,27}};
-    int k=fireRand()%10; fireBack[stars[k][1]*FG+stars[k][0]]= fireRand()&1 ? rgb(150,160,200) : rgb(70,80,120);
+  for(auto &st:stars) if(++st.age>=st.life) placeStar(st);
+}
+// A new place in the sky: inside the circle, above the flames (clear of their middle), not on
+// another star; it then lives 3-10 s (at ~14 fire frames a second).
+void placeStar(Star &st) {
+  for(int tries=0;tries<20;tries++) {
+    int y=1+fireRand()%30, x=fireSpan[y][0]+1+fireRand()%max(1,fireSpan[y][1]-fireSpan[y][0]-1);
+    if(y>10 && abs(x*2-51)<26) continue;   // where the flame tips reach
+    bool taken=false;
+    for(auto &o:stars) if(&o!=&st && abs(o.x-x)<=2 && abs(o.y-y)<=2) taken=true;
+    if(taken) continue;
+    st.x=x; st.y=y; break;
   }
+  st.age=0; st.life=40+fireRand()%100;
+}
+// Brightness 0-255: fades in, holds, fades out.
+int starLight(const Star &st) {
+  int a=st.age, l=st.life, edge=l/4;
+  return a<edge ? a*255/edge : a>l-edge ? (l-a)*255/edge : 255;
 }
 uint16_t fireCell(int cx,int cy,int flick) {
   uint8_t lg=fireLog[cy*FG+cx];
@@ -523,6 +552,10 @@ uint16_t fireCell(int cx,int cy,int flick) {
   }
   for(auto &sp:sparks) if(sp.life && (int)sp.x==cx && (int)sp.y==cy) return sp.hot&&sp.life>8 ? rgb(255,220,120) : rgb(240,120,40);
   uint16_t b=fireBack[cy*FG+cx]; uint8_t w=fireGlowW[cy*FG+cx];
+  if(cy<32) for(auto &st:stars) if(st.x==cx && st.y==cy) {
+    int r=(b>>11)<<3, g=((b>>5)&63)<<2, bl=(b&31)<<3;
+    return mix565(r,g,bl,190,200,240,starLight(st));
+  }
   if(!w) return b;
   int r=(b>>11)<<3, g=((b>>5)&63)<<2, bl=(b&31)<<3;
   return mix565(r,g,bl,150,70,24,(w*flick)>>8);
@@ -550,7 +583,7 @@ void enterFire() {
   lastFire=0; cdDirty=true;
 }
 void updateFire(uint32_t now) {
-  if(now-lastFire>=FIRE_MS) { lastFire=now; fireStep(); drawFire(); }
+  if(now-lastFire>=FIRE_MS) { lastFire=now; uint32_t t=micros(); fireStep(); drawFire(); perfNote(perfFire,t); }
   flushCountdown(OWNER_RING);         // the fire stays inside r 101, the timer uses the edge
 }
 
@@ -783,6 +816,7 @@ void drawFace() {
   uint32_t now=millis();
   if(now-lastDraw<40 || !canvas.getBuffer()) return;
   lastDraw=now;
+  uint32_t perfStart=micros();
   Frame &f=modes[active].frames[target];
   uint32_t elapsed=now-frameStart;
   float t=constrain(elapsed/(float)f.v[F_MOVE],0.0f,1.0f); t=t*t*(3-2*t);
@@ -806,6 +840,7 @@ void drawFace() {
   else if(noticeSeg>=0) ringArc(canvas,OX,OY,CW,CH,0,360,TIMER_RING,noticeColor);
   if(mono) toGray(canvas.getBuffer(),CW*CH);
   tft.drawRGBBitmap(OX,OY,canvas.getBuffer(),CW,CH);
+  perfNote(perfFace,perfStart);
 }
 
 // ----- touch: swipe left/right to go face -> campfire -> clock -> face -----
@@ -887,6 +922,7 @@ void composeFull(int s,Adafruit_GFX &g,uint32_t now) {
   if(cdState!=T_OFF) ringArc(g,0,0,240,240,0,360,OWNER_RING,cdColor);   // the timer on the fire and clock
 }
 void drawSlide(uint32_t now) {
+  uint32_t t=micros();
   int off=(int)lroundf(slideOffset);
   for(int k=0;k<2;k++) {
     int x0=off+(k ? (slideDir>0 ? 240 : -240) : 0);
@@ -894,6 +930,7 @@ void drawSlide(uint32_t now) {
     composeFull(k ? slideTo : slideFrom,*slideFrame[k],now);
     tft.drawRGBBitmap(x0,0,slideFrame[k]->getBuffer(),240,240);
   }
+  perfNote(perfSlide,t);
 }
 bool startSlide(int dir) {
   int from=screenIndex(), to=-1;
@@ -954,6 +991,9 @@ void updateTouch(uint32_t now) {
 void command(char *line) {
   if(!strcmp(line,"HELLO")) { Serial.println("OK FACE8"); return; }
   if(!strcmp(line,"TOUCH")) { Serial.printf("OK TOUCH:%d\r\n",touchChip); return; }
+  if(!strcmp(line,"PERF")) {   // diagnostics: drawing time per frame (us): face, fire, clock, slide
+    Serial.printf("OK PERF:%lu:%lu:%lu:%lu\r\n",(unsigned long)perfFace,(unsigned long)perfFire,(unsigned long)perfClock,(unsigned long)perfSlide); return;
+  }
   if(!strcmp(line,"MEM")) {   // diagnostics: extra memory (PSRAM) size, free internal heap
     Serial.printf("OK MEM:%lu:%lu\r\n",(unsigned long)ESP.getPsramSize(),(unsigned long)ESP.getFreeHeap()); return;
   }
@@ -1048,7 +1088,7 @@ void setup() {
   // hold a whole photo chunk plus its header line while a face frame is being drawn.
   Serial.setRxBufferSize(16384);
   Serial.begin(115200);SPI.begin(TFT_SCK,-1,TFT_MOSI,TFT_CS);
-  tft.begin();tft.setRotation(0);tft.fillScreen(GC9A01A_BLACK);
+  tft.begin(80000000);tft.setRotation(0);   // 80 MHz SPI (library default 40): faster frames and slidestft.fillScreen(GC9A01A_BLACK);
   prefs.begin("face-engine",false);
   // Uses the "spiffs" data partition of the default partition scheme (formatted on first use).
   fsReady=LittleFS.begin(true);
@@ -1183,7 +1223,9 @@ void composeClock(Adafruit_GFX &g,int ox,int oy) {
 }
 void drawClock() {
   if(!canvas.getBuffer()) return;
+  uint32_t t=micros();
   canvas.fillScreen(C_BLACK);
   composeClock(canvas,OX,OY);
   tft.drawRGBBitmap(OX,OY,canvas.getBuffer(),CW,CH);
+  perfNote(perfClock,t);
 }

@@ -16,6 +16,7 @@ using std::min; using std::max;
 template<class T,class L,class H> T constrain(T x,L lo,H hi){return x<lo?lo:(x>hi?hi:x);}
 extern uint32_t fakeMillis;
 inline uint32_t millis(){return fakeMillis;}
+inline uint32_t micros(){return fakeMillis*1000u;}
 inline void delay(uint32_t ms){fakeMillis+=ms;}
 struct FakeSerial {
   std::string in, out;
@@ -52,6 +53,7 @@ extern FakeWire Wire;
 struct FakeESP { uint32_t getPsramSize(){return 8u<<20;} uint32_t getFreeHeap(){return 200000;} };
 static FakeESP ESP;
 inline bool psramFound(){return true;}
+inline void heap_caps_malloc_extmem_enable(size_t){}
 struct FakeSPI { void begin(int,int,int,int){} };
 extern FakeSPI SPI;
 struct Adafruit_GFX {
@@ -83,7 +85,7 @@ struct GFXcanvas16 : Adafruit_GFX { std::vector<uint16_t> buf; GFXcanvas16(int w
   void px(int x,int y,uint16_t c) override { if(x>=0&&y>=0&&x<W&&y<H) buf[y*W+x]=c; } };
 struct Adafruit_GC9A01A : Adafruit_GFX {
   Adafruit_GC9A01A(int,int,int){}
-  void begin(){} void setRotation(int){}
+  void begin(uint32_t=0){} void setRotation(int){}
   uint16_t *fb=nullptr;   // when set, what the LCD shows (clipped like the real driver)
   void drawRGBBitmap(int x,int y,uint16_t*b,int w,int h) override {pixels++; if(fb) for(int j=0;j<h;j++) for(int i=0;i<w;i++)
     if(x+i>=0&&x+i<240&&y+j>=0&&y+j<240) fb[(y+j)*240+x+i]=b[j*w+i];}

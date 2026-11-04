@@ -13,4 +13,12 @@ int main(){ setup();
   CHECK(cmd("FIRE")=="OK FIRE"); CHECK(active==FIRE_SCREEN && !idleArmed && savedActive==FIRE_SCREEN);
   setup(); CHECK(active==FIRE_SCREEN);                            // stays after a reboot
   CHECK(cmd("PLAY:0")=="OK PLAY"); CHECK(active==0);
+  // Stars: in the sky inside the circle, clear of the flames, fading, and moving to new places
+  fireInit(); int moved=0, seen=0; uint8_t first[12][2];
+  for(int i=0;i<12;i++){first[i][0]=stars[i].x;first[i][1]=stars[i].y;}
+  for(int f=0;f<300;f++){ fireStep();
+    for(auto &st:stars){ CHECK(st.y>=1&&st.y<=30&&st.x>=fireSpan[st.y][0]&&st.x<=fireSpan[st.y][1]);
+      CHECK(!(st.y>10&&abs(st.x*2-51)<26)); CHECK(starLight(st)>=0&&starLight(st)<=255); seen+=starLight(st)<64; } }
+  for(int i=0;i<12;i++) moved+=stars[i].x!=first[i][0]||stars[i].y!=first[i][1];
+  CHECK(moved>=8); CHECK(seen>0);
   printf(fails?"%d FAILED\n":"FIRE OK\n",fails); return fails;}
