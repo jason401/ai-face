@@ -13,7 +13,7 @@ void upload(int slot){
 std::string drag(int x0,int x1,int y0=120,int y1=120){
   Serial.out.clear();
   Wire.down=true; for(int i=0;i<=10;i++){Wire.x=x0+(x1-x0)*i/10; Wire.y=y0+(y1-y0)*i/10; run(20);}
-  Wire.down=false; run(60);
+  Wire.down=false; run(400);   // the slide finishes (or springs back)
   std::string r=Serial.out; while(!r.empty()&&(r.back()=='\n'||r.back()=='\r'))r.pop_back(); return r;
 }
 int main(){
@@ -38,6 +38,21 @@ int main(){
   CHECK(drag(40,200)=="EVT SCREEN:face");
   // Taps, short moves and vertical drags change nothing
   CHECK(drag(120,125)==""); CHECK(drag(120,150)==""); CHECK(drag(120,140,40,200)==""); CHECK(active==0);
+  // The screens move with the finger, and a short slow drag springs back
+  Serial.out.clear(); Wire.down=true; Wire.x=200; Wire.y=120; run(20);
+  for(int i=1;i<=8;i++){Wire.x=200-i*5; run(80);}          // 40 px over 640 ms
+  CHECK(sliding && lroundf(slideOffset)==-40 && slideTo==1);
+  Wire.down=false; run(400);
+  CHECK(!sliding && active==0 && Serial.out=="");
+  // Far enough (but slow) finishes; the face shown by the slide continues as the face
+  CHECK(drag(200,40)=="EVT SCREEN:fire");
+  Wire.down=true; Wire.x=40; Wire.y=120; run(20);
+  for(int i=1;i<=8;i++){Wire.x=40+i*12; run(80);}         // 96 px slowly to the right
+  Wire.down=false; run(400); CHECK(!sliding && active==0);
+  // Anything chosen from the Mac during a slide cancels it
+  Wire.down=true; Wire.x=200; run(20); Wire.x=170; run(20); CHECK(sliding);
+  CHECK(cmd("PLAY:0")=="OK PLAY"); CHECK(!sliding && active==0);
+  Wire.down=false; run(400); CHECK(!sliding && active==0);
   // A face reached by swiping restarts the saver countdown
   CHECK(cmd("SAVER:60:0:0:60")=="OK SAVER");
   drag(200,40); drag(40,200); CHECK(active==0 && idleArmed);

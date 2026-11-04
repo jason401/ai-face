@@ -27,7 +27,6 @@ Preferences prefs;
 const int CX=120, CY=120;
 int clockHour=12, clockMinute=0, clockSecond=0;
 uint32_t clockStartMillis=0, lastClockUpdate=0;
-int oldHX=CX, oldHY=CY, oldMX=CX, oldMY=CY, oldSX=CX, oldSY=CY;
 
 // ===== FACE8 = FACE3 frames + owner ring + countdown timer ring + photos + screen saver
 // + monochrome style (FACE8) + wave / light bulb / praying hands / salute / facepalm effects (FACE8).
@@ -238,9 +237,21 @@ void saveActive(int slot) {
   if(savedActive!=slot) { prefs.putInt("active",slot); savedActive=slot; }
 }
 int lastFace=-1;   // the last face slot shown, for swiping back from the fire or clock
+// A swipe slide ends with the new screen already drawn: entering it then must not clear the
+// screen first (that would flash black). Any other change of screen cancels a slide.
+bool keepScreen=false, sliding=false;
+// A face's first frame, as a still pose (the slide shows the face before it is entered).
+Pose previewPose(int slot) {
+  Pose p; const Frame &f=modes[slot].frames[0];
+  for(int i=0;i<11;i++) p.v[i]=f.v[CONT[i]];
+  for(int i=0;i<3;i++) p.rgb[i]=PALETTE[f.v[F_COLOR]][i];
+  p.eyes=f.v[F_EYES]; p.fx=f.v[F_FX];
+  return p;
+}
 void activate(int slot) {
   if(slot>=0) lastFace=slot;
-  if(active<0) {
+  if(active<0 && keepScreen && slot>=0) pose=previewPose(slot);   // continue from the slide
+  else if(active<0) {
     const float initial[11]={100,100,0,0,65,0,0,0,0,0,0};
     memcpy(pose.v,initial,sizeof(pose.v));
     for(int i=0;i<3;i++) pose.rgb[i]=255;
@@ -248,12 +259,14 @@ void activate(int slot) {
   }
   fromPose=pose;
   active=slot; target=0; frameStart=millis();
-  tft.fillScreen(GC9A01A_BLACK);
+  sliding=false;
+  if(!keepScreen) tft.fillScreen(GC9A01A_BLACK);
   ringDirty=true; cdDirty=true; noticeSeg=noticeDrawn=-1;
 }
 void enterClock() {
-  active=CLOCK_SCREEN; tft.fillScreen(GC9A01A_BLACK);
-  oldHX=oldMX=oldSX=CX; oldHY=oldMY=oldSY=CY; drawClockFace();
+  active=CLOCK_SCREEN; sliding=false;
+  if(!keepScreen) tft.fillScreen(GC9A01A_BLACK);
+  drawClockFace();
   cdDirty=true;
 }
 
@@ -320,7 +333,7 @@ bool drawPhoto(int id) {
 }
 bool showPhotoScreen(int id,bool overlay,bool slides) {
   if(!hasPhoto(id)) return false;
-  active=PHOTO_SCREEN; shownPhoto=id; photoOverlay=overlay; slideshow=slides; lastSlide=millis();
+  active=PHOTO_SCREEN; sliding=false; shownPhoto=id; photoOverlay=overlay; slideshow=slides; lastSlide=millis();
   if(!drawPhoto(id)) { enterClock(); return false; }
   if(cdState!=T_OFF) cdDirty=true;
   return true;
@@ -531,7 +544,8 @@ void drawFire() {
 }
 void enterFire() {
   if(!fireReady) fireInit();
-  active=FIRE_SCREEN; tft.fillScreen(GC9A01A_BLACK);
+  active=FIRE_SCREEN; sliding=false;
+  if(!keepScreen) tft.fillScreen(GC9A01A_BLACK);
   for(int i=0;i<30;i++) fireStep();   // start with flames already up
   lastFire=0; cdDirty=true;
 }
@@ -836,6 +850,79 @@ bool showScreen(int s) {
 void swipe(int dir) {
   for(int k=1;k<3;k++) if(showScreen((screenIndex()+dir*k+3)%3)) return;
 }
+
+// ----- swipe slide: the current and the next screen move with the finger, like a phone -----
+// Both screens are drawn in turn into the face canvas and copied into one 240 px wide strip
+// (the canvas rows), which is sent in one piece. Above and below the strip stays black while
+// sliding; the screen that stays redraws its rings and ticks at the end.
+uint16_t *slideBand=nullptr;      // 240 x CH pixels, allocated on the first slide
+bool slideTouch=false, slideTried=false;
+int slideDir=0, slideFrom=0, slideTo=0;
+float slideOffset=0, slideAnimFrom=0, slideAnimTo=0;
+uint32_t slideAnimStart=0, lastSlideDraw=0;
+const uint32_t SLIDE_MS=220;      // finishing (or springing back) after the finger lifts
+int swipeFace() {
+  int slot=chosenSlot>=0 && validMode(modes[chosenSlot]) ? chosenSlot : lastFace;
+  return slot>=0 && validMode(modes[slot]) ? slot : -1;
+}
+bool screenAvailable(int s) { return s==1 || (s==2 && clockSynced) || (s==0 && swipeFace()>=0); }
+// Screen s as it looks now, into the face canvas.
+void composeScreen(int s,uint32_t now) {
+  canvas.fillScreen(C_BLACK);
+  if(s==1) {
+    for(int cy=0;cy<FG;cy++) for(int cx=fireSpan[cy][0];cx<=fireSpan[cy][1];cx++)
+      canvas.fillRect(FOX+cx*FCELL-OX,FOY+cy*FCELL-OY,FCELL,FCELL,fireCell(cx,cy,200));
+  } else if(s==2) {
+    composeClock(canvas,OX,OY);
+  } else {
+    renderFace(active>=0 ? pose : previewPose(swipeFace()),now);
+    if(mono) toGray(canvas.getBuffer(),CW*CH);
+  }
+}
+void drawSlide(uint32_t now) {
+  int off=(int)lroundf(slideOffset);
+  memset(slideBand,0,240*CH*2);
+  for(int k=0;k<2;k++) {
+    int x0=OX+off+(k ? (slideDir>0 ? 240 : -240) : 0);
+    if(x0>=240 || x0+CW<=0) continue;
+    composeScreen(k ? slideTo : slideFrom,now);
+    int a=max(0,-x0), b=min(CW,240-x0);
+    uint16_t *src=canvas.getBuffer();
+    for(int y=0;y<CH;y++) memcpy(slideBand+y*240+x0+a,src+y*CW+a,(b-a)*2);
+  }
+  tft.drawRGBBitmap(0,OY,slideBand,240,CH);
+}
+bool startSlide(int dir) {
+  int from=screenIndex(), to=-1;
+  for(int k=1;k<3 && to<0;k++) if(screenAvailable((from+dir*k+3)%3)) to=(from+dir*k+3)%3;
+  if(to<0 || !canvas.getBuffer()) return false;
+  if(!slideBand) slideBand=(uint16_t*)malloc(240*CH*2);
+  if(!slideBand) return false;     // no memory: the swipe still switches, just without the slide
+  if(to==1 && !fireReady) { fireInit(); for(int i=0;i<30;i++) fireStep(); }
+  sliding=true; slideTouch=true; slideDir=dir; slideFrom=from; slideTo=to; slideOffset=0; lastSlideDraw=0;
+  tft.fillRect(0,0,240,OY,C_BLACK); tft.fillRect(0,OY+CH,240,240-OY-CH,C_BLACK);
+  return true;
+}
+void endSlide(bool commit) {
+  sliding=false;
+  keepScreen=true;
+  if(commit) showScreen(slideTo);
+  else if(active>=0) { ringDirty=true; cdDirty=true; noticeDrawn=-1; }   // stayed: rings back
+  else if(active==CLOCK_SCREEN) { drawClockFace(); cdDirty=true; }
+  else cdDirty=true;
+  keepScreen=false;
+}
+void updateSlide(uint32_t now) {
+  bool done=false;
+  if(!slideTouch) {
+    float t=constrain((now-slideAnimStart)/(float)SLIDE_MS,0.0f,1.0f), e=1.0f-(1.0f-t)*(1.0f-t)*(1.0f-t);
+    slideOffset=slideAnimFrom+(slideAnimTo-slideAnimFrom)*e;
+    done=t>=1.0f;
+  }
+  if((slideFrom==1 || slideTo==1) && now-lastFire>=FIRE_MS) { lastFire=now; fireStep(); }
+  if(done || now-lastSlideDraw>=16) { lastSlideDraw=now; drawSlide(now); }
+  if(done) endSlide(slideAnimTo!=0);
+}
 void updateTouch(uint32_t now) {
   if(!touchChip || now-lastTouchPoll<20) return;
   lastTouchPoll=now;
@@ -843,12 +930,22 @@ void updateTouch(uint32_t now) {
   if(!tpRead(0x02,b,5)) return;
   int x=((b[1]&0x0F)<<8)|b[2], y=((b[3]&0x0F)<<8)|b[4];
   if(b[0]&0x0F) {
-    if(!touching) { touching=true; touchX0=x; touchY0=y; touchStart=now; }
+    if(!touching) { touching=true; slideTried=false; touchX0=x; touchY0=y; touchStart=now; }
     touchX1=x; touchY1=y;
+    int dx=touchX1-touchX0, dy=touchY1-touchY0;
+    if(!sliding && !slideTried && abs(dx)>12 && abs(dx)>abs(dy) && active!=PHOTO_SCREEN) {
+      slideTried=true; startSlide(dx<0 ? 1 : -1);
+    }
+    if(sliding && slideTouch) slideOffset=slideDir>0 ? constrain((float)dx,-240.0f,0.0f) : constrain((float)dx,0.0f,240.0f);
   } else if(touching) {
     touching=false;
     int dx=touchX1-touchX0, dy=touchY1-touchY0;
-    if(abs(dx)>=SWIPE_MIN && abs(dx)*2>abs(dy)*3 && now-touchStart<1500) swipe(dx<0 ? 1 : -1);
+    bool flick=abs(dx)>=SWIPE_MIN && abs(dx)*2>abs(dy)*3 && now-touchStart<1500;
+    if(sliding && slideTouch) {
+      // Far enough, or a quick flick: finish. Otherwise spring back.
+      bool go=fabsf(slideOffset)>=70 || (flick && now-touchStart<400);
+      slideTouch=false; slideAnimFrom=slideOffset; slideAnimTo=go ? (slideDir>0 ? -240.0f : 240.0f) : 0.0f; slideAnimStart=now;
+    } else if(!sliding && flick) swipe(dx<0 ? 1 : -1);   // photo screen or no memory: no slide
   }
 }
 
@@ -935,7 +1032,7 @@ void command(char *line) {
   }
   n=0;
   if(sscanf(line,"PLAY:%d%n",&slot,&n)==1 && !line[n] && slot>=0 && slot<SLOTS && validMode(modes[slot])) {
-    if(active!=slot) activate(slot);
+    if(active!=slot || sliding) activate(slot);   // a slide in progress is cancelled
     armIdle(slot,millis());
     saveActive(slot);Serial.println("OK PLAY");return;
   }
@@ -992,6 +1089,7 @@ void loop() {
   }
   uint32_t now=millis();
   updateTouch(now);
+  if(sliding) { updateSlide(now); return; }
   updateCountdown(now);
   updateIdle(now);
   updateNotice(now);
@@ -1058,180 +1156,28 @@ void drawClockFace() {
 }
 
 
-// ==============================
-// Restore clock background
-// ==============================
-
-void restoreClockBackground() {
-
-  // Erase old hands
-  tft.drawLine(
-    CX, CY,
-    oldHX, oldHY,
-    GC9A01A_BLACK
-  );
-
-  tft.drawLine(
-    CX, CY,
-    oldMX, oldMY,
-    GC9A01A_BLACK
-  );
-
-  tft.drawLine(
-    CX, CY,
-    oldSX, oldSY,
-    GC9A01A_BLACK
-  );
-
-
-  // Restore tick marks in case a hand crossed them
-  drawClockFace();
+// Hands (and the ticks the canvas covers) are drawn into the face canvas and sent in one
+// piece. Erasing and redrawing them on the screen itself made them flicker every update.
+// g's (0,0) is screen (ox,oy).
+void composeClock(Adafruit_GFX &g,int ox,int oy) {
+  for(int i=0;i<60;i++) {
+    float a=i*2.0f*PI/60.0f-PI/2.0f;
+    int r=i%5==0 ? 94 : 102;
+    g.drawLine(CX+cosf(a)*r-ox,CY+sinf(a)*r-oy,CX+cosf(a)*108-ox,CY+sinf(a)*108-oy,GC9A01A_WHITE);
+  }
+  int h,m,s; clockNow(h,m,s);
+  float frac=((millis()-clockStartMillis)%1000UL)/1000.0f;   // smooth second hand
+  float ha=((h%12)+m/60.0f+s/3600.0f)*2.0f*PI/12.0f-PI/2.0f;
+  float ma=(m+s/60.0f)*2.0f*PI/60.0f-PI/2.0f;
+  float sa=(s+frac)*2.0f*PI/60.0f-PI/2.0f;
+  g.drawLine(CX-ox,CY-oy,CX+cosf(ha)*50-ox,CY+sinf(ha)*50-oy,GC9A01A_WHITE);
+  g.drawLine(CX-ox,CY-oy,CX+cosf(ma)*72-ox,CY+sinf(ma)*72-oy,GC9A01A_WHITE);
+  g.drawLine(CX-ox,CY-oy,CX+cosf(sa)*90-ox,CY+sinf(sa)*90-oy,GC9A01A_RED);
+  g.fillCircle(CX-ox,CY-oy,4,GC9A01A_RED);
 }
-
-
-// ==============================
-// Draw clock
-// ==============================
-
 void drawClock() {
-
-  unsigned long elapsedMS =
-    millis() - clockStartMillis;
-
-
-  unsigned long startSeconds =
-      (unsigned long)clockHour * 3600UL
-    + (unsigned long)clockMinute * 60UL
-    + (unsigned long)clockSecond;
-
-
-  unsigned long totalSeconds =
-    (
-      startSeconds +
-      elapsedMS / 1000UL
-    ) % 86400UL;
-
-
-  int h =
-    totalSeconds / 3600UL;
-
-  int m =
-    (totalSeconds % 3600UL) / 60UL;
-
-  int s =
-    totalSeconds % 60UL;
-
-
-  // Fractional seconds for smooth second hand
-  float fraction =
-    (elapsedMS % 1000UL) / 1000.0;
-
-
-  restoreClockBackground();
-
-
-  // ==========================
-  // Hour hand
-  // ==========================
-
-  float hourAngle =
-    (
-      (h % 12)
-      + m / 60.0
-      + s / 3600.0
-    )
-    * 2.0 * PI / 12.0
-    - PI / 2.0;
-
-
-  int hx =
-    CX + cos(hourAngle) * 50;
-
-  int hy =
-    CY + sin(hourAngle) * 50;
-
-
-  // ==========================
-  // Minute hand
-  // ==========================
-
-  float minuteAngle =
-    (
-      m
-      + s / 60.0
-    )
-    * 2.0 * PI / 60.0
-    - PI / 2.0;
-
-
-  int mx =
-    CX + cos(minuteAngle) * 72;
-
-  int my =
-    CY + sin(minuteAngle) * 72;
-
-
-  // ==========================
-  // Second hand
-  // ==========================
-
-  float secondAngle =
-    (
-      s + fraction
-    )
-    * 2.0 * PI / 60.0
-    - PI / 2.0;
-
-
-  int sx =
-    CX + cos(secondAngle) * 90;
-
-  int sy =
-    CY + sin(secondAngle) * 90;
-
-
-  // ==========================
-  // Draw hands
-  // ==========================
-
-  tft.drawLine(
-    CX, CY,
-    hx, hy,
-    GC9A01A_WHITE
-  );
-
-
-  tft.drawLine(
-    CX, CY,
-    mx, my,
-    GC9A01A_WHITE
-  );
-
-
-  tft.drawLine(
-    CX, CY,
-    sx, sy,
-    GC9A01A_RED
-  );
-
-
-  tft.fillCircle(
-    CX,
-    CY,
-    4,
-    GC9A01A_RED
-  );
-
-
-  // Save positions
-  oldHX = hx;
-  oldHY = hy;
-
-  oldMX = mx;
-  oldMY = my;
-
-  oldSX = sx;
-  oldSY = sy;
+  if(!canvas.getBuffer()) return;
+  canvas.fillScreen(C_BLACK);
+  composeClock(canvas,OX,OY);
+  tft.drawRGBBitmap(OX,OY,canvas.getBuffer(),CW,CH);
 }
-
-
