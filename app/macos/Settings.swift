@@ -108,6 +108,7 @@ final class SettingsStore: NSObject, ObservableObject {
     // Board
     @Published var connected = false
     @Published var port = ""
+    @Published var touch = 0   // touch chip id the board reported (0: none)
     @Published var ports: [String] = []
     @Published var message = ""
     @Published var flashing = false
@@ -236,6 +237,7 @@ final class SettingsStore: NSObject, ObservableObject {
             guard let self = self, let s = json as? [String: Any] else { return }
             self.connected = (s["connected"] as? Bool) ?? false
             self.port = (s["port"] as? String) ?? ""
+            self.touch = (s["touch"] as? NSNumber)?.intValue ?? 0
             self.ports = (s["ports"] as? [String]) ?? []
             self.message = (s["message"] as? String) ?? ""
             self.flashing = (s["flashing"] as? Bool) ?? false

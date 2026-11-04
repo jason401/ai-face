@@ -291,3 +291,7 @@
 "Read only" = "읽기 전용";
 "Drop folders here to share them with the AIs" = "여기에 폴더를 놓으면 AI와 공유돼요";
 "Click to open in Finder" = "누르면 Finder에서 열려요";
+"Touch" = "터치";
+"Swipe left or right" = "좌우로 밀어 화면 바꾸기";
+"No touch panel" = "터치 화면 없음";
+"Swipe on the board to go face → campfire → clock → face (the other way swiping right)." = "보드 화면을 왼쪽으로 밀면 얼굴 → 모닥불 → 시계 → 얼굴 순서로 바뀌고, 오른쪽으로 밀면 반대 순서예요.";

@@ -1,7 +1,7 @@
 // Renders one face per mood with the real firmware drawing code (see tools/make_preview.py).
 // stdin: per mood one FRAME line (16 numbers); stdout file: 200x180 RGB565 canvases in order.
 #include "fw.cpp"
-uint32_t fakeMillis=0; FakeSerial Serial; FakeSPI SPI; FakeFS LittleFS;
+uint32_t fakeMillis=0; FakeSerial Serial; FakeSPI SPI; FakeFS LittleFS; FakeWire Wire;
 std::string cmd(const std::string&c){Serial.out.clear();Serial.in=c+"\n";while(Serial.available())loop();return Serial.out;}
 void run(uint32_t ms){for(uint32_t t=0;t<ms;t+=20){fakeMillis+=20;loop();}}
 int main(int argc,char**argv){

@@ -45,6 +45,7 @@ class Device:
         self.buffer = b''
         self.paused = False   # 'disconnect' until 'connect': no automatic reconnect
         self.flashing = False
+        self.touch = 0        # touch chip id reported by the board (0: no touch panel)
 
     def close(self):
         if self.fd is not None:
@@ -72,6 +73,9 @@ class Device:
             while b'\n' in self.buffer:
                 line, self.buffer = self.buffer.split(b'\n', 1)
                 reply = line.strip().decode('utf-8', 'replace')
+                if reply.startswith('EVT '):
+                    self.event(reply)
+                    continue
                 if reply == 'ERR FS':
                     raise ValueError(T('보드 저장공간(LittleFS)을 쓸 수 없습니다. Arduino IDE의 Tools → Partition Scheme을 '
                                        '기본값(8MB with spiffs)으로 두고 펌웨어를 다시 업로드해 주세요.',
@@ -98,6 +102,29 @@ class Device:
                 self.buffer = (self.buffer + chunk)[-8192:]
         raise TimeoutError(T(f'얼굴 엔진({face_modes.PROTOCOL}) 응답이 없습니다. 펌웨어를 업데이트하고 Serial Monitor를 닫아 주세요.',
                              f'No answer from the face engine ({face_modes.PROTOCOL}). Update the firmware and close the Serial Monitor.'))
+
+    def event(self, line):
+        """A line the board sends by itself: 'EVT SCREEN:<face|fire|clock>' after a swipe."""
+        screen = line[len('EVT SCREEN:'):] if line.startswith('EVT SCREEN:') else ''
+        if screen == 'face':
+            self.mode, self.screen, self.changed = '', 'face', time.time()   # saver countdown restarts
+        elif screen in ('fire', 'clock'):
+            self.mode, self.screen = screen.upper(), screen
+
+    def poll_events(self):
+        """Read what the board sent between commands (swipes), without waiting."""
+        if self.fd is None:
+            return
+        while select.select([self.fd], [], [], 0)[0]:
+            chunk = os.read(self.fd, 4096)
+            if not chunk:
+                raise OSError(T('USB 연결이 끊어졌습니다.', 'The USB connection was lost.'))
+            self.buffer = (self.buffer + chunk)[-8192:]
+        while b'\n' in self.buffer:
+            line, self.buffer = self.buffer.split(b'\n', 1)
+            reply = line.strip().decode('utf-8', 'replace')
+            if reply.startswith('EVT '):
+                self.event(reply)
 
     def connect(self, port):
         if port not in ports():
@@ -164,6 +191,10 @@ class Device:
         sleepy/sleeping faces and saver settings, the photo list, and a running timer
         (the board may have restarted when the port opened)."""
         self.sync_time()
+        try:
+            self.touch = int(self.exchange('TOUCH', 'OK TOUCH:').split(':')[1])
+        except ValueError:
+            self.touch = 0   # older firmware: no touch support
         for mood in face_modes.idle_moods():
             reply = self.exchange(f"SUM:{mood['slot']}", 'OK SUM:')
             if reply != f'OK SUM:{face_modes.checksum(mood)}':
@@ -395,7 +426,7 @@ class Device:
             self.lock.release()
         return dict(ports=available, connected=self.fd is not None and self.port in available,
                     port=self.port, message=self.message, busy=busy, flashing=self.flashing,
-                    paused=self.paused, saver=settings['saver'], mono=settings['mono'], photos=list(self.photos),
+                    paused=self.paused, touch=self.touch if self.fd is not None else 0, saver=settings['saver'], mono=settings['mono'], photos=list(self.photos),
                     current_photo=self.current_photo, owner=self.owner or 'user',
                     timer=dict(left=left, total=timer['total'], color=timer['color']) if left else None)
 

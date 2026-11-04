@@ -43,7 +43,7 @@ The current in-app updater checks the `stable` source branch at startup and ever
 
 ### Optional LCD
 
-Use Seeed XIAO ESP32S3 and a GC9A01 round SPI LCD. Pins are documented in `firmware/ESP32_Display/ESP32_Display.ino`. Firmware compilation needs the ESP32 Arduino core, Adafruit GFX and Adafruit GC9A01A libraries. **Settings → Board → Update firmware** compiles and uploads only when requested. No precompiled firmware is included in the desktop download.
+Use Seeed XIAO ESP32S3 and a GC9A01 round SPI LCD (optionally with a CST816 touch chip for swiping between face, campfire and clock). Pins are documented in `firmware/ESP32_Display/ESP32_Display.ino`. Firmware compilation needs the ESP32 Arduino core, Adafruit GFX and Adafruit GC9A01A libraries. **Settings → Board → Update firmware** compiles and uploads only when requested. No precompiled firmware is included in the desktop download.
 
 ## Privacy
 

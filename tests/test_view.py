@@ -29,6 +29,24 @@ class ViewTests(unittest.TestCase):
         self.assertEqual(v['name'], '행복')
         self.assertIn('메뉴바', self.d.message)
 
+    def test_board_swipes_move_the_menu_bar_face(self):
+        import os
+        self.d.show_emotion(self.happy, 'claude')
+        read, write = os.pipe()
+        self.addCleanup(os.close, write)
+        self.d.fd = read
+        self.addCleanup(lambda: setattr(self.d, 'fd', None) or os.close(read))
+        os.write(write, b'EVT SCREEN:fire\r\n')
+        self.d.poll_events()
+        self.assertEqual(self.d.view()['kind'], 'fire')
+        os.write(write, b'stray\r\nEVT SCREEN:clock\r\nEVT SCREEN:fa')   # a line may arrive in pieces
+        self.d.poll_events()
+        self.assertEqual(self.d.view()['kind'], 'clock')
+        os.write(write, b'ce\r\n')
+        self.d.poll_events()
+        v = self.d.view()
+        self.assertEqual((v['kind'], v['emotion']), ('face', 'happy'))   # back to the last face
+
     def test_working_mood_left_on_returns_to_calm(self):
         from aiface import history
         by = {m['id']: m for m in face_modes.emotions()}

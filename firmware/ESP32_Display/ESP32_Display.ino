@@ -4,6 +4,7 @@
 #include <Preferences.h>
 #include <math.h>
 #include <LittleFS.h>
+#include <Wire.h>
 
 #define TFT_CS 2
 #define TFT_RST 3
@@ -11,6 +12,12 @@
 #define TFT_SCK 7
 #define TFT_MOSI 9
 Adafruit_GC9A01A tft(TFT_CS, TFT_DC, TFT_RST);
+// Optional touch panel (CST816S/T/D on I2C, e.g. the 1.28" round touch module): XIAO D4/D5
+// for SDA/SCL, D0 interrupt (unused: polled), D9 reset. Without one, nothing changes.
+#define TP_SDA 5
+#define TP_SCL 6
+#define TP_RST 8
+const uint8_t TP_ADDR=0x15;
 
 // Face area: canvas 200x180 copied to screen (20,30). All drawing below
 // uses screen coordinates; the S() helpers subtract the canvas offset.
@@ -230,7 +237,9 @@ void saveActive(int slot) {
   // Avoid needless flash writes when the same mode is chosen again.
   if(savedActive!=slot) { prefs.putInt("active",slot); savedActive=slot; }
 }
+int lastFace=-1;   // the last face slot shown, for swiping back from the fire or clock
 void activate(int slot) {
+  if(slot>=0) lastFace=slot;
   if(active<0) {
     const float initial[11]={100,100,0,0,65,0,0,0,0,0,0};
     memcpy(pose.v,initial,sizeof(pose.v));
@@ -785,8 +794,67 @@ void drawFace() {
   tft.drawRGBBitmap(OX,OY,canvas.getBuffer(),CW,CH);
 }
 
+// ----- touch: swipe left/right to go face -> campfire -> clock -> face -----
+// The board switches by itself and tells the Mac ("EVT SCREEN:<face|fire|clock>") so the
+// menu bar face can follow; the app ignores lines it does not expect.
+uint8_t touchChip=0;              // chip id (0xB4 CST816S, 0xB5 T, 0xB6 D); 0 = no touch panel
+bool touching=false;
+int touchX0=0, touchY0=0, touchX1=0, touchY1=0;
+uint32_t touchStart=0, lastTouchPoll=0;
+const int SWIPE_MIN=50;           // px across the 240 px screen
+bool tpRead(uint8_t reg,uint8_t *buf,int n) {
+  Wire.beginTransmission(TP_ADDR); Wire.write(reg);
+  if(Wire.endTransmission(false)!=0) return false;
+  if(Wire.requestFrom((int)TP_ADDR,n)!=n) return false;
+  for(int i=0;i<n;i++) buf[i]=Wire.read();
+  return true;
+}
+void touchInit() {
+  pinMode(TP_RST,OUTPUT); digitalWrite(TP_RST,LOW); delay(10); digitalWrite(TP_RST,HIGH); delay(60);
+  Wire.begin(TP_SDA,TP_SCL,400000);
+  uint8_t id=0;
+  if(!tpRead(0xA7,&id,1) || !id) { touchChip=0; return; }
+  touchChip=id;
+  Wire.beginTransmission(TP_ADDR); Wire.write(0xFE); Wire.write(1); Wire.endTransmission();   // no auto sleep
+}
+void screenEvent(const char *name) {
+  if(Serial) Serial.printf("EVT SCREEN:%s\r\n",name);
+}
+// 0 face (or a photo), 1 campfire, 2 clock.
+int screenIndex() { return active==FIRE_SCREEN ? 1 : active==CLOCK_SCREEN ? 2 : 0; }
+bool showScreen(int s) {
+  if(s==1) { enterFire(); saveActive(FIRE_SCREEN); idleArmed=false; screenEvent("fire"); return true; }
+  if(s==2) {
+    if(!clockSynced) return false;   // never show an unset clock
+    enterClock(); saveActive(-1); idleArmed=false; screenEvent("clock"); return true;
+  }
+  int slot=chosenSlot>=0 && validMode(modes[chosenSlot]) ? chosenSlot : lastFace;
+  if(slot<0 || !validMode(modes[slot])) return false;
+  activate(slot); armIdle(slot,millis()); saveActive(slot); screenEvent("face");
+  return true;
+}
+void swipe(int dir) {
+  for(int k=1;k<3;k++) if(showScreen((screenIndex()+dir*k+3)%3)) return;
+}
+void updateTouch(uint32_t now) {
+  if(!touchChip || now-lastTouchPoll<20) return;
+  lastTouchPoll=now;
+  uint8_t b[5];
+  if(!tpRead(0x02,b,5)) return;
+  int x=((b[1]&0x0F)<<8)|b[2], y=((b[3]&0x0F)<<8)|b[4];
+  if(b[0]&0x0F) {
+    if(!touching) { touching=true; touchX0=x; touchY0=y; touchStart=now; }
+    touchX1=x; touchY1=y;
+  } else if(touching) {
+    touching=false;
+    int dx=touchX1-touchX0, dy=touchY1-touchY0;
+    if(abs(dx)>=SWIPE_MIN && abs(dx)*2>abs(dy)*3 && now-touchStart<1500) swipe(dx<0 ? 1 : -1);
+  }
+}
+
 void command(char *line) {
   if(!strcmp(line,"HELLO")) { Serial.println("OK FACE8"); return; }
+  if(!strcmp(line,"TOUCH")) { Serial.printf("OK TOUCH:%d\r\n",touchChip); return; }
   if(!strncmp(line,"PHOTO:",6)) { photoCommand(line); return; }
   if(!strcmp(line,"FIRE")) {
     // Chosen on purpose, like the clock: no saver until the next face arrives.
@@ -882,6 +950,7 @@ void setup() {
   prefs.begin("face-engine",false);
   // Uses the "spiffs" data partition of the default partition scheme (formatted on first use).
   fsReady=LittleFS.begin(true);
+  touchInit();
   initRing(OWNER_RING,RING_IN,RING_OUT);
   initRing(TIMER_RING,104,110);
   owner=constrain(prefs.getInt("owner",0),0,2); ringFrom=owner;
@@ -922,6 +991,7 @@ void loop() {
     }
   }
   uint32_t now=millis();
+  updateTouch(now);
   updateCountdown(now);
   updateIdle(now);
   updateNotice(now);

@@ -9,5 +9,5 @@ for i,l in enumerate(src):
         protos.append(m.group(1)+';')
 txt='\n'.join(src[:first]+protos+src[first:])
 txt=re.sub(r'^#include <Adafruit_GFX.h>','#include "stub.h"',txt,flags=re.M)
-txt=re.sub(r'^#include <(Adafruit_GC9A01A|SPI|Preferences|math|LittleFS)\.h>\n','',txt,flags=re.M)
+txt=re.sub(r'^#include <(Adafruit_GC9A01A|SPI|Preferences|math|LittleFS|Wire)\.h>\n','',txt,flags=re.M)
 open(sys.argv[2],'w').write(txt)

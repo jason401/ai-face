@@ -26,8 +26,29 @@ struct FakeSerial {
   void println(const char*s){out+=s; out+="\r\n";}
   size_t readBytes(char*b,size_t n){size_t k=min(n,in.size());memcpy(b,in.data(),k);in.erase(0,k);return k;}
   int printf(const char*f,...){char b[256];va_list a;va_start(a,f);int n=vsnprintf(b,sizeof b,f,a);va_end(a);out+=b;return n;}
+  explicit operator bool() const {return true;}
 };
 extern FakeSerial Serial;
+#define OUTPUT 1
+#define LOW 0
+#define HIGH 1
+inline void pinMode(int,int){}
+inline void digitalWrite(int,int){}
+// A CST816-style touch chip: id at 0xA7, finger count at 0x02, then X and Y (12 bits each).
+// id 0 = no chip (every transfer fails).
+struct FakeWire {
+  uint8_t id=0, reg=0; bool down=false; int x=0, y=0;
+  std::vector<uint8_t> tx, rx; size_t pos=0;
+  void begin(int,int,uint32_t){}
+  void beginTransmission(uint8_t){tx.clear();}
+  void write(uint8_t b){tx.push_back(b);}
+  uint8_t endTransmission(bool=true){if(!id) return 2; if(!tx.empty()) reg=tx[0]; return 0;}
+  uint8_t value(int r){ if(r==0xA7) return id; if(r==2) return down?1:0; if(r==3) return (x>>8)&15;
+    if(r==4) return x&255; if(r==5) return (y>>8)&15; if(r==6) return y&255; return 0; }
+  int requestFrom(int,int n){if(!id) return 0; rx.clear(); pos=0; for(int i=0;i<n;i++) rx.push_back(value(reg+i)); return n;}
+  int read(){return rx[pos++];}
+};
+extern FakeWire Wire;
 struct FakeSPI { void begin(int,int,int,int){} };
 extern FakeSPI SPI;
 struct Adafruit_GFX {

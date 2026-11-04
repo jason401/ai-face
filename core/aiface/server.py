@@ -114,6 +114,19 @@ def auto_connect(device, stop, interval=3, retry=30):
             device.lock.release()
 
 
+def watch_board(device, stop, interval=0.25):
+    """Follow screens the board changed by itself (touch swipes)."""
+    while not stop.wait(interval):
+        if device.fd is None or not device.lock.acquire(blocking=False):
+            continue
+        try:
+            device.poll_events()
+        except OSError:
+            device.close()   # unplugged: auto_connect takes over
+        finally:
+            device.lock.release()
+
+
 def watch_awake(device, stop, interval=5):
     """Keep awake: end it at its deadline or on low battery (see awake.check)."""
     while not stop.wait(interval):
@@ -515,6 +528,7 @@ def main():
     threading.Thread(target=auto_connect, args=(device, stop), daemon=True).start()
     threading.Thread(target=expire_working, args=(device, stop), daemon=True).start()
     threading.Thread(target=watch_awake, args=(device, stop), daemon=True).start()
+    threading.Thread(target=watch_board, args=(device, stop), daemon=True).start()
     threading.Thread(target=updater.watch, args=(device, stop), daemon=True).start()
     # The app stops the server with SIGTERM: run the cleanup below (keep awake off) then too.
     def terminated(*_):

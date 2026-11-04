@@ -1,5 +1,5 @@
 #include "fw.cpp"
-uint32_t fakeMillis=0; FakeSerial Serial; FakeSPI SPI; FakeFS LittleFS;
+uint32_t fakeMillis=0; FakeSerial Serial; FakeSPI SPI; FakeFS LittleFS; FakeWire Wire;
 int main(){ static uint16_t fb[240*240]; tft.fb=fb; setup();
   Serial.in="FIRE\n"; while(Serial.available()) loop();
   FILE*o=fopen("fire.raw","wb");

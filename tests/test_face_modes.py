@@ -181,7 +181,7 @@ class EngineTests(unittest.TestCase):
                 while b'\n' in buf:
                     line,buf=buf.split(b'\n',1);text=line.decode();seen.append(text)
                     key=text.split(':')[0]
-                    reply='OK SUM:%d'%sums.get(int(text[4:]),0) if key=='SUM' else 'OK LIST:0:-1' if text=='PHOTO:LIST' else {'HELLO':'OK FACE8'}.get(key,'OK '+key)
+                    reply='OK SUM:%d'%sums.get(int(text[4:]),0) if key=='SUM' else 'OK LIST:0:-1' if text=='PHOTO:LIST' else {'HELLO':'OK FACE8','TOUCH':'OK TOUCH:0'}.get(key,'OK '+key)
                     os.write(master,(reply+'\r\n').encode())
         worker=threading.Thread(target=run,daemon=True);worker.start();return worker
 

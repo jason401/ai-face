@@ -318,6 +318,11 @@ struct BoardTab: View {
                         Text(store.port).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                             .textSelection(.enabled)
                     }
+                    Divider()
+                    SettingsRow(title: L("Touch")) {
+                        SettingsStatus(text: store.touch > 0 ? L("Swipe left or right") : L("No touch panel"), ok: store.touch > 0)
+                            .help(L("Swipe on the board to go face → campfire → clock → face (the other way swiping right)."))
+                    }
                 }
                 if !store.message.isEmpty {
                     SettingsNote(text: store.message, lines: 3).textSelection(.enabled)

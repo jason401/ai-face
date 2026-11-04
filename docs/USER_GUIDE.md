@@ -107,7 +107,9 @@ Tools are `folders_list`, `folder_files`, `folder_search` and `folder_read`. Fil
 
 ### Optional board and firmware
 
-Use Seeed XIAO ESP32S3 with a GC9A01 240×240 round LCD. The app connects automatically over USB. **Settings → Board → Update firmware** compiles and uploads only when requested.
+Use Seeed XIAO ESP32S3 with a GC9A01 240×240 round LCD. The app connects automatically over USB.
+
+A round GC9A01 module with a CST816 touch chip (S/T/D) adds swipes: swipe left on the board to go face → campfire → clock → face, swipe right for the other way. The menu bar face follows. The clock is skipped until the board knows the time. Wiring (XIAO pin ← module pin): 3V3 ← VCC, GND ← GND, D8 ← SCL/SCK, D10 ← SDA/MOSI, D1 ← CS, D3 ← DC, D2 ← RST, 3V3 ← BL; touch: D4 ← TP_SDA, D5 ← TP_SCL, D0 ← TP_INT, D9 ← TP_RST. Settings → Board shows whether a touch panel was found. **Settings → Board → Update firmware** compiles and uploads only when requested.
 
 Compilation requires Arduino IDE 2 or `arduino-cli`, the ESP32 board package and Adafruit GFX / GC9A01A libraries. Desktop downloads do not include these external tools or precompiled firmware. Close AI Face before uploading directly through Arduino IDE to release its serial connection.
 
