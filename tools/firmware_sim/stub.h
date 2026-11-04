@@ -49,6 +49,9 @@ struct FakeWire {
   int read(){return rx[pos++];}
 };
 extern FakeWire Wire;
+struct FakeESP { uint32_t getPsramSize(){return 8u<<20;} uint32_t getFreeHeap(){return 200000;} };
+static FakeESP ESP;
+inline bool psramFound(){return true;}
 struct FakeSPI { void begin(int,int,int,int){} };
 extern FakeSPI SPI;
 struct Adafruit_GFX {
@@ -74,13 +77,16 @@ struct Adafruit_GFX {
   void drawCircle(int,int,int,uint16_t){pixels++;}
   void fillScreen(uint16_t c){pixels++; if(raster) for(int j=0;j<H;j++) for(int i=0;i<W;i++) px(i,j,c);}
   void setTextSize(int){} void setTextColor(uint16_t){} void setCursor(int,int){} void print(char){}
+  virtual void drawRGBBitmap(int x,int y,uint16_t*b,int w,int h){pixels++; if(raster) for(int j=0;j<h;j++) for(int i=0;i<w;i++) px(x+i,y+j,b[j*w+i]);}
 };
 struct GFXcanvas16 : Adafruit_GFX { std::vector<uint16_t> buf; GFXcanvas16(int w,int h):buf(w*h){raster=true;W=w;H=h;} uint16_t*getBuffer(){return buf.data();}
   void px(int x,int y,uint16_t c) override { if(x>=0&&y>=0&&x<W&&y<H) buf[y*W+x]=c; } };
 struct Adafruit_GC9A01A : Adafruit_GFX {
   Adafruit_GC9A01A(int,int,int){}
   void begin(){} void setRotation(int){}
-  uint16_t *fb=nullptr; void drawRGBBitmap(int x,int y,uint16_t*b,int w,int h){pixels++; if(fb) for(int j=0;j<h;j++) for(int i=0;i<w;i++) fb[(y+j)*240+x+i]=b[j*w+i];}
+  uint16_t *fb=nullptr;   // when set, what the LCD shows (clipped like the real driver)
+  void drawRGBBitmap(int x,int y,uint16_t*b,int w,int h) override {pixels++; if(fb) for(int j=0;j<h;j++) for(int i=0;i<w;i++)
+    if(x+i>=0&&x+i<240&&y+j>=0&&y+j<240) fb[(y+j)*240+x+i]=b[j*w+i];}
 };
 #define GC9A01A_BLACK 0
 #define GC9A01A_WHITE 0xFFFF

@@ -13,8 +13,9 @@ from pathlib import Path
 from .i18n import T
 
 # Board: Seeed XIAO ESP32S3 with the default options (USB CDC, default partition scheme
-# with a "spiffs" data partition for the photos). Override with ESP32_FQBN if needed.
-FQBN = os.environ.get('ESP32_FQBN', 'esp32:esp32:XIAO_ESP32S3')
+# with a "spiffs" data partition for the photos) plus its 8 MB PSRAM switched on (full-screen
+# frames for the swipe slide). Override with ESP32_FQBN if needed.
+FQBN = os.environ.get('ESP32_FQBN', 'esp32:esp32:XIAO_ESP32S3:PSRAM=opi')
 from . import paths
 
 RUNTIME = paths.DATA

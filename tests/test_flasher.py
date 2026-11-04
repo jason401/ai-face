@@ -37,9 +37,9 @@ esac
         report = flasher.flash('/dev/cu.usbmodem1101')
         self.assertIn('업로드 완료', report); self.assertIn('Sketch uses', report)
         calls = self.log.read_text().splitlines()
-        self.assertTrue(calls[0].startswith('--no-color compile --fqbn esp32:esp32:XIAO_ESP32S3 --build-path'))
+        self.assertTrue(calls[0].startswith('--no-color compile --fqbn esp32:esp32:XIAO_ESP32S3:PSRAM=opi --build-path'))
         self.assertTrue(calls[0].endswith('ESP32_Display'))
-        self.assertIn('--no-color upload -p /dev/cu.usbmodem1101 --fqbn esp32:esp32:XIAO_ESP32S3 --input-dir', calls[1])
+        self.assertIn('--no-color upload -p /dev/cu.usbmodem1101 --fqbn esp32:esp32:XIAO_ESP32S3:PSRAM=opi --input-dir', calls[1])
 
     def test_compile_error_is_returned(self):
         self.fake(compile_code=1, compile_out="ESP32_Display.ino:88:10: error: x was not declared")

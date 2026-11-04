@@ -852,10 +852,10 @@ void swipe(int dir) {
 }
 
 // ----- swipe slide: the current and the next screen move with the finger, like a phone -----
-// Both screens are drawn in turn into the face canvas and copied into one 240 px wide strip
-// (the canvas rows), which is sent in one piece. Above and below the strip stays black while
-// sliding; the screen that stays redraws its rings and ticks at the end.
-uint16_t *slideBand=nullptr;      // 240 x CH pixels, allocated on the first slide
+// Both screens are drawn whole (rings, ticks and all) into two full-screen frames in the
+// board's PSRAM and sent side by side, shifted by the finger. Without PSRAM a swipe still
+// switches, just without the slide.
+GFXcanvas16 *slideFrame[2]={nullptr,nullptr};   // 240 x 240 each, allocated on the first slide
 bool slideTouch=false, slideTried=false;
 int slideDir=0, slideFrom=0, slideTo=0;
 float slideOffset=0, slideAnimFrom=0, slideAnimTo=0;
@@ -866,50 +866,52 @@ int swipeFace() {
   return slot>=0 && validMode(modes[slot]) ? slot : -1;
 }
 bool screenAvailable(int s) { return s==1 || (s==2 && clockSynced) || (s==0 && swipeFace()>=0); }
-// Screen s as it looks now, into the face canvas.
-void composeScreen(int s,uint32_t now) {
-  canvas.fillScreen(C_BLACK);
+// Screen s exactly as it looks now (or, for a face not shown yet, its first frame), into g.
+void composeFull(int s,Adafruit_GFX &g,uint32_t now) {
+  g.fillScreen(C_BLACK);
   if(s==1) {
     for(int cy=0;cy<FG;cy++) for(int cx=fireSpan[cy][0];cx<=fireSpan[cy][1];cx++)
-      canvas.fillRect(FOX+cx*FCELL-OX,FOY+cy*FCELL-OY,FCELL,FCELL,fireCell(cx,cy,200));
+      g.fillRect(FOX+cx*FCELL,FOY+cy*FCELL,FCELL,FCELL,fireCell(cx,cy,200));
   } else if(s==2) {
-    composeClock(canvas,OX,OY);
+    composeClock(g,0,0);
   } else {
+    canvas.fillScreen(C_BLACK);
     renderFace(active>=0 ? pose : previewPose(swipeFace()),now);
     if(mono) toGray(canvas.getBuffer(),CW*CH);
+    g.drawRGBBitmap(OX,OY,canvas.getBuffer(),CW,CH);
+    ringArc(g,0,0,240,240,0,360,OWNER_RING,ringColor);
+    if(cdState!=T_OFF) ringArc(g,0,0,240,240,0,360,TIMER_RING,cdColor);
+    else if(noticeSeg>=0) ringArc(g,0,0,240,240,0,360,TIMER_RING,noticeColor);
+    return;
   }
+  if(cdState!=T_OFF) ringArc(g,0,0,240,240,0,360,OWNER_RING,cdColor);   // the timer on the fire and clock
 }
 void drawSlide(uint32_t now) {
   int off=(int)lroundf(slideOffset);
-  memset(slideBand,0,240*CH*2);
   for(int k=0;k<2;k++) {
-    int x0=OX+off+(k ? (slideDir>0 ? 240 : -240) : 0);
-    if(x0>=240 || x0+CW<=0) continue;
-    composeScreen(k ? slideTo : slideFrom,now);
-    int a=max(0,-x0), b=min(CW,240-x0);
-    uint16_t *src=canvas.getBuffer();
-    for(int y=0;y<CH;y++) memcpy(slideBand+y*240+x0+a,src+y*CW+a,(b-a)*2);
+    int x0=off+(k ? (slideDir>0 ? 240 : -240) : 0);
+    if(x0>=240 || x0<=-240) continue;
+    composeFull(k ? slideTo : slideFrom,*slideFrame[k],now);
+    tft.drawRGBBitmap(x0,0,slideFrame[k]->getBuffer(),240,240);
   }
-  tft.drawRGBBitmap(0,OY,slideBand,240,CH);
 }
 bool startSlide(int dir) {
   int from=screenIndex(), to=-1;
   for(int k=1;k<3 && to<0;k++) if(screenAvailable((from+dir*k+3)%3)) to=(from+dir*k+3)%3;
-  if(to<0 || !canvas.getBuffer()) return false;
-  if(!slideBand) slideBand=(uint16_t*)malloc(240*CH*2);
-  if(!slideBand) return false;     // no memory: the swipe still switches, just without the slide
+  if(to<0 || !canvas.getBuffer() || !psramFound()) return false;
+  for(int k=0;k<2;k++) {
+    if(!slideFrame[k]) slideFrame[k]=new GFXcanvas16(240,240);
+    if(!slideFrame[k]->getBuffer()) return false;
+  }
   if(to==1 && !fireReady) { fireInit(); for(int i=0;i<30;i++) fireStep(); }
   sliding=true; slideTouch=true; slideDir=dir; slideFrom=from; slideTo=to; slideOffset=0; lastSlideDraw=0;
-  tft.fillRect(0,0,240,OY,C_BLACK); tft.fillRect(0,OY+CH,240,240-OY-CH,C_BLACK);
   return true;
 }
 void endSlide(bool commit) {
   sliding=false;
+  if(!commit) return;              // the screen that stayed is already back, whole
   keepScreen=true;
-  if(commit) showScreen(slideTo);
-  else if(active>=0) { ringDirty=true; cdDirty=true; noticeDrawn=-1; }   // stayed: rings back
-  else if(active==CLOCK_SCREEN) { drawClockFace(); cdDirty=true; }
-  else cdDirty=true;
+  showScreen(slideTo);             // already on screen: entering it draws nothing new
   keepScreen=false;
 }
 void updateSlide(uint32_t now) {
@@ -952,6 +954,9 @@ void updateTouch(uint32_t now) {
 void command(char *line) {
   if(!strcmp(line,"HELLO")) { Serial.println("OK FACE8"); return; }
   if(!strcmp(line,"TOUCH")) { Serial.printf("OK TOUCH:%d\r\n",touchChip); return; }
+  if(!strcmp(line,"MEM")) {   // diagnostics: extra memory (PSRAM) size, free internal heap
+    Serial.printf("OK MEM:%lu:%lu\r\n",(unsigned long)ESP.getPsramSize(),(unsigned long)ESP.getFreeHeap()); return;
+  }
   if(!strncmp(line,"PHOTO:",6)) { photoCommand(line); return; }
   if(!strcmp(line,"FIRE")) {
     // Chosen on purpose, like the clock: no saver until the next face arrives.
