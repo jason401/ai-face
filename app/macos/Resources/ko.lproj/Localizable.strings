@@ -358,4 +358,4 @@
 "Screen light, photos on the board, the photo library and firmware" = "화면 조명, 보드 사진, 사진 보관함, 펌웨어";
 "Screen light, photos and firmware are in Details." = "화면 조명, 사진, 펌웨어는 '자세히…'에 있어요.";
 "Plug in the board to change its settings." = "보드를 연결하면 설정을 바꿀 수 있어요.";
-"AI Illuminati shows its plain-chat replies here as its own AI (gold ring), whichever model answers. No restart needed." = "AI Illuminati의 일반 채팅 답을 하나의 AI로 보여줘요(금색 테두리). 안에서 어떤 모델이 답하든 같아요. 다시 실행할 필요 없어요.";
+"AI Illuminati shows its plain-chat replies here as its own AI (gold ring), whichever model answers. No restart needed: it applies within 30 seconds." = "AI Illuminati의 일반 채팅 답을 하나의 AI로 보여줘요(금색 테두리). 안에서 어떤 모델이 답하든 같아요. 다시 실행할 필요 없이 30초 안에 적용돼요.";

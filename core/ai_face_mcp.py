@@ -51,9 +51,12 @@ def agent():
         return configured
     if configured in GPT_ALIASES:
         return 'gpt'
-    # Claude desktop / Claude Code report names with "claude"; anything else is taken as GPT
-    # (Codex reports "codex-mcp-client").
-    return 'claude' if 'claude' in CLIENT_NAME.lower() else 'gpt'
+    # AI Illuminati introduces itself as "AI Illuminati"; Claude desktop / Claude Code report names
+    # with "claude"; anything else is taken as GPT (Codex reports "codex-mcp-client").
+    name = CLIENT_NAME.lower()
+    if 'illuminati' in name:
+        return 'illuminati'
+    return 'claude' if 'claude' in name else 'gpt'
 
 
 def _calendar_setting(key, default):

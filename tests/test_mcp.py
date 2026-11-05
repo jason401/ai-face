@@ -227,6 +227,7 @@ class AgentTests(unittest.TestCase):
     def test_client_name_fallback(self):
         self.assertEqual(self.agent({}, 'claude-ai'), 'claude')
         self.assertEqual(self.agent({}, 'codex-mcp-client'), 'gpt')
+        self.assertEqual(self.agent({}, 'AI Illuminati'), 'illuminati')
 
 
 class ExpressionTextTests(unittest.TestCase):

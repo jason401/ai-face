@@ -6,7 +6,7 @@ AI Face shows an animated face in the macOS menu bar. Connected AIs choose expre
 
 Follow the [release installation guide](INSTALL_RELEASE.md) for downloads, prerequisites, macOS security prompts and uninstalling. Downloaded apps do not require the maintainer's signing key. Source builds are a separate developer workflow that requires an existing local signing identity.
 
-Open **Settings → AI**, connect the desired AI app, then completely quit and reopen it. Start a new Claude Code session after registering Claude Code. **AI Illuminati** (shown only when it is installed) needs no restart: its plain chat picks up the connection from the next answer and shows up as its own AI, whichever model answers inside it. It may only change the face; it gets no calendar, mail or folder tools. The conversation must support the local MCP connection; registering Codex does not connect every ChatGPT mode, web chat or mobile app.
+Open **Settings → AI**, connect the desired AI app, then completely quit and reopen it. Start a new Claude Code session after registering Claude Code. **AI Illuminati** (shown only when it is installed) needs no restart: it picks up Connect or Disconnect within 30 seconds, and its plain chat shows up as its own AI, whichever model answers inside it. It may only change the face; it gets no calendar, mail or folder tools. The conversation must support the local MCP connection; registering Codex does not connect every ChatGPT mode, web chat or mobile app.
 
 AI Face must be running for expressions to change. The tool returns `ok` when displayed, `app_not_running` when closed, or `error: ...` on failure. A powered LCD can continue its last animation after the app closes.
 

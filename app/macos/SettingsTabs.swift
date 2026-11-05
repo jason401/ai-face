@@ -237,7 +237,7 @@ struct AITab: View {
                 if store.illuminatiAvailable {
                     Divider()
                     appRow("AI Illuminati", store.illuminati, "illuminati")
-                        .help(L("AI Illuminati shows its plain-chat replies here as its own AI (gold ring), whichever model answers. No restart needed."))
+                        .help(L("AI Illuminati shows its plain-chat replies here as its own AI (gold ring), whichever model answers. No restart needed: it applies within 30 seconds."))
                 }
                 if store.awakeSupported {
                     Divider()
