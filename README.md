@@ -43,7 +43,7 @@ The current in-app updater checks the `stable` source branch at startup and ever
 
 ### Optional LCD
 
-Use Seeed XIAO ESP32S3 and a GC9A01 round SPI LCD (optionally with a CST816 touch chip for swiping between face, campfire and clock). Pins are documented in `firmware/ESP32_Display/ESP32_Display.ino`. Firmware compilation needs the ESP32 Arduino core, Adafruit GFX and Adafruit GC9A01A libraries. **Settings → Display → Board → Details… → Update firmware** compiles and uploads only when requested. No precompiled firmware is included in the desktop download.
+Use Seeed XIAO ESP32S3 and a GC9A01 round SPI LCD (optionally with a CST816 touch chip for swiping between face, campfire and clock). Pins are documented in `firmware/ESP32_Display/ESP32_Display.ino`. Firmware compilation needs the ESP32 Arduino core, Adafruit GFX and Adafruit GC9A01A libraries. **Settings → Appearance → Board → Details… → Update firmware** compiles and uploads only when requested. No precompiled firmware is included in the desktop download.
 
 ## Privacy
 
@@ -75,7 +75,7 @@ Copyright © 2026 jason401. Project-owned material is available under the [MIT L
 
 ## Weather-aware campfire
 
-The campfire can reflect local clear/partly cloudy/overcast/rain/snow/fog conditions, daylight and wind while keeping its original pixel-art fire. Display → Campfire weather lets you choose a city, use automatic current weather, or preview a selected date and city-local hour. Future dates are limited to the available forecast horizon (up to 15 days ahead); older dates use historical reanalysis. The Apply button opens the campfire. Return to Automatic for current conditions.
+The campfire can reflect local clear/partly cloudy/overcast/rain/snow/fog conditions, daylight and wind while keeping its original pixel-art fire. Appearance → Campfire weather lets you choose a city, use automatic current weather, or preview a selected date and city-local hour. Future dates are limited to the available forecast horizon (up to 15 days ahead); older dates use historical reanalysis. The Apply button opens the campfire. Return to Automatic for current conditions.
 
 The Mac retrieves weather every 15 minutes and sends compact parameters to the board. Current conditions are model estimates, not direct local observations. A matching board firmware update is needed; older firmware remains usable with the original fire. Network/data failure retains the last valid selection for up to two hours, then restores the original scene. City selection is stored locally; the coordinates are sent to the weather service. No precise location permission, API key, microphone or camera is needed.
 

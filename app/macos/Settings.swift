@@ -1063,7 +1063,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             let tabs = SettingsTabs()
             tabs.tabStyle = .toolbar
             tabs.addTabViewItem(tab(GeneralTab(store: store), L("General"), "gearshape"))
-            tabs.addTabViewItem(tab(DisplayTab(store: store), L("Display"), "display"))
+            tabs.addTabViewItem(tab(AppearanceTab(store: store), L("Appearance"), "paintbrush"))
             tabs.addTabViewItem(tab(AITab(store: store), L("AI"), "sparkles"))
             tabs.addTabViewItem(tab(HistoryTab(store: store), L("History"), "chart.bar"))
             let w = NSWindow(contentViewController: tabs)

@@ -214,7 +214,8 @@
 "App" = "앱";
 "Settings, photos, history, the update copy and backups" = "설정, 사진, 기록, 업데이트용 사본과 백업";
 "Menu bar" = "메뉴바";
-"Appearance" = "표시 효과";
+"Appearance" = "모양";
+"Colors" = "색상";
 "Updates & storage" = "업데이트와 저장 위치";
 "Auto update" = "자동 업데이트";
 "Folders" = "저장 폴더";
@@ -349,8 +350,7 @@
 "Weather effects off." = "날씨 반영이 꺼져 있어요.";
 "Change place" = "장소 바꾸기";
 
-/* Settings: Display tab and board details window */
-"Display" = "화면";
+/* Settings: Appearance tab and board details window */
 "Connection" = "연결";
 "More" = "더 보기";
 "Details…" = "자세히…";

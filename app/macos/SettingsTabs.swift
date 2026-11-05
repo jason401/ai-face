@@ -1,4 +1,4 @@
-// The four settings tabs (General · Display · AI · History) and the board details window, built from the cards in SettingsKit.swift.
+// The four settings tabs (General · Appearance · AI · History) and the board details window, built from the cards in SettingsKit.swift.
 import Cocoa
 import SwiftUI
 import UniformTypeIdentifiers
@@ -72,9 +72,9 @@ struct GeneralTab: View {
     }
 }
 
-// MARK: - Display: the face, the campfire weather and the board (details in their own window)
+// MARK: - Appearance: the face, the campfire weather and the board (details in their own window)
 
-struct DisplayTab: View {
+struct AppearanceTab: View {
     @ObservedObject var store: SettingsStore
 
     func bind<T>(_ path: ReferenceWritableKeyPath<SettingsStore, T>) -> Binding<T> {
@@ -84,7 +84,7 @@ struct DisplayTab: View {
     var body: some View {
         SettingsPage {
             SettingsCard(title: L("Face")) {
-                SettingsRow(title: L("Appearance")) {
+                SettingsRow(title: L("Colors")) {
                     Toggle(L("Monochrome"), isOn: Binding(get: { store.mono }, set: { store.setMono($0) }))
                         .toggleStyle(.checkbox)
                         .help(L("Draws the menu bar face in grays and shows who chose it by the ring pattern: you = solid, Claude = short dashes, GPT = six long arcs. The board always stays in color."))
