@@ -34,6 +34,14 @@ int main(){ static uint16_t fb[240*240]; tft.fb=fb; setup();
   CHECK(on>100 && on<125);                                                // Claude: dashes
   CHECK(cmd("OWNER:2")=="OK OWNER"); run(2000);
   on=0; for(int i=0;i<180;i++) on+=ringColor(i*2+1.0f)==0xFFFF; CHECK(on==150);   // GPT: six arcs
+  CHECK(cmd("OWNERS")=="OK OWNERS:4");                                   // the Mac sends gold only then
+  CHECK(cmd("OWNER:3")=="OK OWNER"); run(2000);
+  on=0; for(int i=0;i<180;i++) on+=ringColor(i*2+1.0f)==0xFFFF; CHECK(on==45);    // AI Illuminati: dots
+  CHECK(cmd("OWNER:4")=="ERR COMMAND");
+  mono=false; owner=0; setup(); CHECK(owner==3); mono=true;               // kept across restarts
+  CHECK(cmd("STYLE:0")=="OK STYLE"); run(2000);
+  CHECK(ringColor(1)==rgb(0xFF,0xD6,0x73));                               // gold in color
+  CHECK(cmd("STYLE:1")=="OK STYLE"); run(500);
   CHECK(cmd("OWNER:0")=="OK OWNER"); run(2000);
   on=0; for(int i=0;i<180;i++) on+=ringColor(i*2+1.0f)==0xFFFF; CHECK(on==180);   // app: solid
   CHECK(cmd("TIMER:60:60:4")=="OK TIMER"); run(100); CHECK(cdColor(359)==0xFFFF);   // timer white, not red

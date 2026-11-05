@@ -3,7 +3,7 @@ listed, searched and read from any connected chat. Reading only: nothing here wr
 deletes files.
 
 Rules:
-- Only the folders the user added and left on, for the AIs the user allows (GPT off by default).
+- Only the folders the user added and left on, for the AIs the user allows (GPT and AI Illuminati off by default).
 - Paths never leave those folders, also not through symbolic links.
 - Hidden and secret-looking files (.env, keys, .ssh, .git, keychains ...) are never listed or read.
 - Too broad folders (the whole disk, the home folder, ~/Library, system folders) cannot be added.
@@ -28,7 +28,7 @@ from . import moods as settings_store
 from . import paths
 from .i18n import T
 
-DEFAULTS = dict(apps=dict(claude=True, gpt=False), list=[])
+DEFAULTS = dict(apps=dict(claude=True, gpt=False, illuminati=False), list=[])
 MAX_FOLDERS = 30
 BIG = 5000                 # adding a folder with more files than this asks first
 MAX_LIST = 300             # entries per folder_files answer
@@ -284,7 +284,7 @@ def status():
         item = dict(f, missing=not Path(f['path']).is_dir(), last='')
         if f['id'] in last:
             agent, t = last[f['id']]
-            who = {'claude': 'Claude', 'gpt': 'GPT'}.get(agent, agent)
+            who = paths.AGENT_NAMES.get(agent, agent)
             item['last'] = T(f'{who} · {ago(t)} 읽음', f'Read by {who} · {ago(t)}')
         folders.append(item)
     return dict(apps=conf['apps'], folders=folders)

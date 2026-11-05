@@ -220,6 +220,9 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(self.agent({'AIFACE_AGENT': 'claude'}, 'codex-mcp-client'), 'claude')
         self.assertEqual(self.agent({'AIFACE_AGENT': 'Codex'}, 'claude-ai'), 'gpt')
         self.assertEqual(self.agent({'ESP32_AGENT': 'claude'}), 'claude')   # older registrations
+        # AI Illuminati is its own AI whichever model (Claude Code or Codex) answers inside it
+        self.assertEqual(self.agent({'AIFACE_AGENT': 'illuminati'}, 'claude-code'), 'illuminati')
+        self.assertEqual(self.agent({'AIFACE_AGENT': 'Illuminati'}, 'codex-mcp-client'), 'illuminati')
 
     def test_client_name_fallback(self):
         self.assertEqual(self.agent({}, 'claude-ai'), 'claude')
@@ -237,6 +240,10 @@ class ExpressionTextTests(unittest.TestCase):
         self.assertIn('최근 2번의 변화', text)
         self.assertIn('GPT: 생각 중 (thinking)', text)
         self.assertIn('오늘 합계 2번', text)
+        history.record('illuminati', 'happy', now - 10)
+        text = server.expression_text({'name': '기쁨', 'owner': 'illuminati', 'board': False}, 5, now)
+        self.assertIn('고른 쪽: AI Illuminati', text)
+        self.assertIn('- AI Illuminati: 1번', text)
 
 
 class EndToEndTests(unittest.TestCase):

@@ -91,9 +91,12 @@ uint32_t frameStart=0, lastDraw=0;
 
 // ===== Owner ring: thin border showing who chose the face =====
 // 0 = picked in the Mac app (white), 1 = Claude (Anthropic orange #D97757),
-// 2 = GPT (ChatGPT green #10A37F). A new owner "pours" in clockwise from
+// 2 = GPT (ChatGPT green #10A37F), 3 = AI Illuminati (gold #FFD673). "OWNERS" answers how many
+// colors this firmware knows, so the Mac sends gold only to boards that have it (older ones would
+// refuse OWNER:3). A new owner "pours" in clockwise from
 // 12 o'clock with a soft blended edge instead of switching at once.
-const uint8_t OWNER_RGB[3][3]={{255,255,255},{0xD9,0x77,0x57},{0x10,0xA3,0x7F}};
+const int OWNER_COLORS=4;
+const uint8_t OWNER_RGB[OWNER_COLORS][3]={{255,255,255},{0xD9,0x77,0x57},{0x10,0xA3,0x7F},{0xFF,0xD6,0x73}};
 const int RING_IN=113, RING_OUT=119, RING_SEGS=180;   // 2-degree segments
 const float RING_BAND=60.0f;                          // width of the blended edge (degrees)
 const uint32_t RING_MS=1200;                          // sweep duration
@@ -110,7 +113,7 @@ void perfNote(uint32_t &avg,uint32_t start) { uint32_t d=micros()-start; avg=avg
 int owner=0, ringFrom=0;
 // Monochrome style (STYLE:1): the face is drawn in grays and the owner ring shows who chose
 // the face by its pattern instead of its color: app = solid, Claude = short dashes,
-// GPT = six long arcs. Kept across restarts.
+// GPT = six long arcs, AI Illuminati = 45 dots. Kept across restarts.
 bool mono=false;
 bool sweeping=false, ringDirty=true;
 uint32_t sweepStart=0;
@@ -183,6 +186,7 @@ bool ringOn(int who,float a) {
   int i=(int)(a/2);
   if(who==1) return i%8<5;     // Claude: 22 short dashes
   if(who==2) return i%30<25;   // GPT: six long arcs
+  if(who==3) return i%4<1;     // AI Illuminati: 45 dots
   return true;                 // app: solid
 }
 uint16_t ringColor(float a) {
@@ -1134,6 +1138,7 @@ void command(char *line) {
      && wi>=0 && wi<=100 && ww>=-100 && ww<=100) {
     setFireWeather(we,wk,wd,wc,wi,ww); Serial.println("OK WEATHER"); return;
   }
+  if(!strcmp(line,"OWNERS")) { Serial.printf("OK OWNERS:%d\r\n",OWNER_COLORS); return; }
   if(!strcmp(line,"TOUCH")) { Serial.printf("OK TOUCH:%d\r\n",touchChip); return; }
   int style=0, days=0, used=0;
   if(sscanf(line,"CLOCKSTYLE:%d%n",&style,&used)==1 && !line[used] && style>=0 && style<CLOCK_STYLES) {
@@ -1234,7 +1239,7 @@ void command(char *line) {
     Serial.println("OK STYLE"); return;
   }
   n=0;
-  if(sscanf(line,"OWNER:%d%n",&slot,&n)==1 && !line[n] && slot>=0 && slot<3) {
+  if(sscanf(line,"OWNER:%d%n",&slot,&n)==1 && !line[n] && slot>=0 && slot<OWNER_COLORS) {
     setOwner(slot); Serial.println("OK OWNER"); return;
   }
   n=0;
@@ -1264,7 +1269,7 @@ void setup() {
   touchInit();
   initRing(OWNER_RING,RING_IN,RING_OUT);
   initRing(TIMER_RING,104,110);
-  owner=constrain(prefs.getInt("owner",0),0,2); ringFrom=owner;
+  owner=constrain(prefs.getInt("owner",0),0,OWNER_COLORS-1); ringFrom=owner;
   mono=prefs.getBool("mono",false);
   clockStyle=constrain(prefs.getInt("clockstyle",0),0,CLOCK_STYLES-1);
   if(prefs.getBytesLength("saver")==sizeof(saver)) {

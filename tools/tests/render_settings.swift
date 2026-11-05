@@ -20,6 +20,7 @@ import SwiftUI
         store.updateAvailable = true
         store.saverType = "slideshow"
         store.claude = "on"; store.claudeCode = "on"; store.claudeCodeAvailable = true; store.codexAvailable = true
+        store.illuminatiAvailable = true; store.illuminati = "on"
         store.hooks = "on"
         store.calAccess = "full"; store.calWriteClaude = true
         store.calendars = [CalendarItem(id: "1", title: "Home", account: "iCloud", shown: true, canWrite: true, write: true),
@@ -39,13 +40,14 @@ import SwiftUI
         store.library = (1...7).map { LibraryItem(name: "photo\($0).jpg", mtime: $0) }
         let base = Calendar.current.startOfDay(for: Date()).timeIntervalSince1970
         func tl(_ n: Int, _ day: Double) -> [[String: Any]] {
-            (0..<n).map { ["t": day + Double(30000 + $0 * 1700), "owner": $0 % 3 == 0 ? "claude" : "gpt", "name": "Happy"] }
+            (0..<n).map { ["t": day + Double(30000 + $0 * 1700), "owner": $0 % 3 == 0 ? "claude" : $0 % 3 == 1 ? "gpt" : "illuminati", "name": "Happy"] }
         }
-        func counts(_ i: Int) -> [String: Any] { ["claude": (i * 7) % 11, "gpt": (i * 5) % 9, "user": i % 4 == 0 ? 2 : 0] }
+        func counts(_ i: Int) -> [String: Any] { ["claude": (i * 7) % 11, "gpt": (i * 5) % 9, "illuminati": (i * 3) % 5, "user": i % 4 == 0 ? 2 : 0] }
         let owners: [String: Any] = [
             "claude": ["count": 14, "top": [["name": "Focused", "count": 3], ["name": "Proud", "count": 3], ["name": "Thinking", "count": 3]],
                        "groups": ["work": 8, "joy": 5, "oops": 1]],
-            "gpt": ["count": 11, "top": [["name": "Happy", "count": 3], ["name": "Talking", "count": 3]], "groups": ["joy": 6, "work": 4, "wonder": 1]]]
+            "gpt": ["count": 11, "top": [["name": "Happy", "count": 3], ["name": "Talking", "count": 3]], "groups": ["joy": 6, "work": 4, "wonder": 1]],
+            "illuminati": ["count": 6, "top": [["name": "Curious", "count": 2]], "groups": ["wonder": 4, "joy": 2]]]
         let periods: [String: [String: Any]] = [
             "day": ["kind": "day", "total": 25, "owners": owners, "timeline": tl(18, base), "rows": []],
             "week": ["kind": "week", "total": 25, "owners": owners, "timeline": [], "rows": (0..<7).map { i -> [String: Any] in

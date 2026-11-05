@@ -69,6 +69,33 @@ class IntegrationTests(unittest.TestCase):
             integrations.install('claude')
         self.assertEqual(cfg.read_text(), '{broken')
 
+    def test_illuminati_file(self):
+        cfg = integrations.illuminati_config()
+        self.assertEqual(integrations.illuminati_status(), 'off')
+        integrations.install('illuminati')             # creates the file (and its folder)
+        entry = json.loads(cfg.read_text())['mcpServers']['ai-face']
+        self.assertEqual(entry, {'command': '/usr/bin/python3', 'args': [str(integrations.server_path())],
+                                 'env': {'AIFACE_AGENT': 'illuminati'}})
+        self.assertTrue(integrations.server_path().is_file())
+        self.assertEqual(integrations.illuminati_status(), 'on')
+        self.assertTrue(integrations.illuminati_available())
+        integrations.remove('illuminati')              # nothing else in it: the file goes
+        self.assertFalse(cfg.exists())
+        self.assertEqual(integrations.illuminati_status(), 'off')
+        # other entries and keys stay; an entry pointing elsewhere is 'other' and moves on refresh
+        cfg.write_text(json.dumps({'mcpServers': {'notes': {'command': 'n'}, 'ai-face': {'command': 'x', 'args': ['/old.py']}},
+                                   'v': 1}))
+        self.assertEqual(integrations.illuminati_status(), 'other')
+        integrations.refresh()
+        self.assertEqual(integrations.illuminati_status(), 'on')
+        integrations.remove('illuminati')
+        self.assertEqual(json.loads(cfg.read_text()), {'mcpServers': {'notes': {'command': 'n'}}, 'v': 1})
+        cfg.write_text('{broken')
+        self.assertEqual(integrations.illuminati_status(), 'error')
+        with self.assertRaises(ValueError):
+            integrations.install('illuminati')
+        self.assertEqual(cfg.read_text(), '{broken')
+
     def test_codex_toml(self):
         cfg = integrations.codex_config()
         cfg.parent.mkdir(parents=True)

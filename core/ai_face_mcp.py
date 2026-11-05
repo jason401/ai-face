@@ -18,9 +18,9 @@ Tools:
   calendar_* / mail_*            the calendar and mail (read only), when the user allows that AI
   folders_list / folder_*        folders the user shared in the app (read only), when allowed
 
-The ring around the face shows which AI chose it: Claude orange, GPT green. The AI comes
-from the AIFACE_AGENT environment variable set at registration (claude / gpt; the older
-ESP32_AGENT is accepted too), or else from the client name sent in "initialize".
+The ring around the face shows which AI chose it: Claude orange, GPT green, AI Illuminati gold.
+The AI comes from the AIFACE_AGENT environment variable set at registration (claude / gpt /
+illuminati; the older ESP32_AGENT is accepted too), or else from the client name sent in "initialize".
 """
 import json
 import os
@@ -39,14 +39,16 @@ CATALOG = DATA / 'moods.json'          # the moods, written by the app when it s
 SETTINGS = DATA / 'settings.json'      # which AIs may read the calendar (set in the app)
 TIMER_COLORS = ['white', 'pink', 'blue', 'yellow', 'red', 'green', 'purple', 'orange']
 GPT_ALIASES = ('gpt', 'chatgpt', 'codex', 'openai')
+AGENT_LABEL = {'claude': 'Claude', 'gpt': 'GPT', 'illuminati': 'AI Illuminati'}
 CLIENT_NAME = ''   # the chat app's name from "initialize"
 
 
 def agent():
-    """Which AI uses this server: 'claude' or 'gpt' (ring color)."""
+    """Which AI uses this server: 'claude', 'gpt' or 'illuminati' (ring color). AI Illuminati is one
+    app to AI Face whichever model answers inside it."""
     configured = (os.environ.get('AIFACE_AGENT') or os.environ.get('ESP32_AGENT') or '').strip().lower()
-    if configured == 'claude':
-        return 'claude'
+    if configured in ('claude', 'illuminati'):
+        return configured
     if configured in GPT_ALIASES:
         return 'gpt'
     # Claude desktop / Claude Code report names with "claude"; anything else is taken as GPT
@@ -63,7 +65,7 @@ def _calendar_setting(key, default):
 
 
 def calendar_allowed():
-    """The user allows each AI separately in the app (default: Claude yes, GPT no)."""
+    """The user allows each AI separately in the app (default: Claude yes, GPT and AI Illuminati no)."""
     return _calendar_setting('apps', agent() == 'claude')
 
 
@@ -73,7 +75,7 @@ def calendar_writer():
 
 
 def mail_allowed():
-    """Reading mail, per AI (default: Claude yes, GPT no). There is no mail writing."""
+    """Reading mail, per AI (default: Claude yes, GPT and AI Illuminati no). There is no mail writing."""
     try:
         apps = json.loads(SETTINGS.read_text()).get('mail', {}).get('apps', {})
     except (OSError, ValueError, AttributeError):
@@ -82,7 +84,7 @@ def mail_allowed():
 
 
 def folders_allowed():
-    """Reading shared folders, per AI (default: Claude yes, GPT no). There is no writing."""
+    """Reading shared folders, per AI (default: Claude yes, GPT and AI Illuminati no). There is no writing."""
     try:
         apps = json.loads(SETTINGS.read_text()).get('folders', {}).get('apps', {})
     except (OSError, ValueError, AttributeError):
@@ -256,7 +258,7 @@ def face_tools():
                          'additionalProperties': False},
          'annotations': SAFE},
         {'name': 'get_expression', 'title': 'Read AI Face expressions',
-         'description': ("The face shown now and recent changes (mood, who chose it: claude, gpt or user, "
+         'description': ("The face shown now and recent changes (mood, who chose it: claude, gpt, illuminati or user, "
                          "when), plus today's counts. Use when the user asks about the face or the day's "
                          "moods, or to react to another AI's face."),
          'inputSchema': {'type': 'object', 'properties': {
@@ -393,7 +395,7 @@ def call_tool(name, args):
         if isinstance(minutes, bool) or not isinstance(minutes, int) or not 1 <= minutes <= 240:
             raise Failed('minutes must be 1 to 240')
         _api({'action': 'awake_acquire', 'id': 'mcp:' + agent(), 'minutes': minutes,
-              'label': 'Claude' if agent() == 'claude' else 'GPT'})
+              'label': AGENT_LABEL[agent()]})
         return 'ok: ' + awake_text()
     if name == 'release_awake':
         if args.get('all') is True:

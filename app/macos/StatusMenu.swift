@@ -318,6 +318,7 @@ final class StatusController: NSObject, NSMenuDelegate {
         switch owner {
         case "claude": return L("Chosen by Claude")
         case "gpt": return L("Chosen by GPT")
+        case "illuminati": return L("Chosen by AI Illuminati")
         default: return L("Chosen by you")
         }
     }

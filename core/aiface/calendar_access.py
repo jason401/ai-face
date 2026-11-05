@@ -27,8 +27,8 @@ from . import moods as settings_store
 from . import paths
 from .i18n import T
 
-DEFAULTS = dict(apps=dict(claude=True, gpt=False), hidden=[], details=False,
-                write_apps=dict(claude=False, gpt=False), writable=None, confirm=True)
+DEFAULTS = dict(apps=dict(claude=True, gpt=False, illuminati=False), hidden=[], details=False,
+                write_apps=dict(claude=False, gpt=False, illuminati=False), writable=None, confirm=True)
 LOG = paths.DATA / 'calendar_changes.json'   # recent changes, for undo
 CONFIRM_SECONDS = 45   # under the chat apps' tool time limit; a late answer changes nothing
 MAX_DAYS = 62
@@ -343,7 +343,7 @@ def decide(rid, allow):
 
 
 def _who(agent):
-    return {'claude': 'Claude', 'gpt': 'GPT'}.get(agent, agent)
+    return paths.AGENT_NAMES.get(agent, agent)
 
 
 def _write(command, data):

@@ -87,7 +87,7 @@ struct AppearanceTab: View {
                 SettingsRow(title: L("Colors")) {
                     Toggle(L("Monochrome"), isOn: Binding(get: { store.mono }, set: { store.setMono($0) }))
                         .toggleStyle(.checkbox)
-                        .help(L("Draws the menu bar face in grays and shows who chose it by the ring pattern: you = solid, Claude = short dashes, GPT = six long arcs. The board always stays in color."))
+                        .help(L("Draws the menu bar face in grays and shows who chose it by the ring pattern: you = solid, Claude = short dashes, GPT = six long arcs, AI Illuminati = dots. The board always stays in color."))
                 }
                 Divider()
                 SettingsRow(title: L("Screen saver")) {
@@ -191,12 +191,16 @@ struct AITab: View {
         }
     }
 
-    /// Two checkboxes, one per AI, for a read or write switch.
-    func perAI(_ claude: Bool, _ gpt: Bool, _ set: @escaping (String, Bool) -> Void) -> some View {
-        HStack(spacing: 14) {
-            Toggle("Claude", isOn: Binding(get: { claude }, set: { set("claude", $0) }))
-            Toggle("GPT", isOn: Binding(get: { gpt }, set: { set("gpt", $0) }))
-        }.toggleStyle(.checkbox)
+    /// One checkbox per AI for a read or write switch (AI Illuminati only when it is installed).
+    func perAI(_ claude: Bool, _ gpt: Bool, _ illuminati: Bool, _ set: @escaping (String, Bool) -> Void) -> some View {
+        HStack(spacing: store.illuminatiAvailable ? 3 : 14) {
+            Toggle("Claude", isOn: Binding(get: { claude }, set: { set("claude", $0) })).fixedSize()
+            Toggle("GPT", isOn: Binding(get: { gpt }, set: { set("gpt", $0) })).fixedSize()
+            if store.illuminatiAvailable {
+                Toggle("Illuminati", isOn: Binding(get: { illuminati }, set: { set("illuminati", $0) })).fixedSize()
+                    .help("AI Illuminati")
+            }
+        }.toggleStyle(.checkbox).font(.system(size: store.illuminatiAvailable ? 11 : 12))
     }
 
     func accessRow(_ text: String, ok: Bool, busy: Bool = false, button: String?, _ action: @escaping () -> Void) -> some View {
@@ -230,6 +234,11 @@ struct AITab: View {
                 appRow("Codex (GPT)", store.codex, "codex", available: store.codexAvailable)
                 Divider()
                 appRow("Claude Code", store.claudeCode, "claude_code", available: store.claudeCodeAvailable)
+                if store.illuminatiAvailable {
+                    Divider()
+                    appRow("AI Illuminati", store.illuminati, "illuminati")
+                        .help(L("AI Illuminati shows its plain-chat replies here as its own AI (gold ring), whichever model answers. No restart needed."))
+                }
                 if store.awakeSupported {
                     Divider()
                     SettingsRow(title: L("Keep awake")) {
@@ -240,12 +249,12 @@ struct AITab: View {
                     }
                 }
                 SettingsNote(text: store.aiNotice.isEmpty ? L("After connecting or disconnecting, quit that app (⌘Q) and open it again.") : store.aiNotice, lines: 3)
-                    .help(L("Once connected, the AI picks a face for every reply. After connecting or disconnecting, quit that app (⌘Q) and open it again. Ring colors: Claude orange, GPT green, your own picks white."))
+                    .help(L("Once connected, the AI picks a face for every reply. After connecting or disconnecting, quit that app (⌘Q) and open it again. Ring colors: Claude orange, GPT green, AI Illuminati gold, your own picks white."))
             }
 
             SettingsCard(title: L("Shared folders")) {
                 SettingsRow(title: L("Can read")) {
-                    perAI(store.folderClaude, store.folderGPT) { ai, on in store.setFolderApps(ai, on) }
+                    perAI(store.folderClaude, store.folderGPT, store.folderIlluminati) { ai, on in store.setFolderApps(ai, on) }
                 }
                 Divider()
                 SettingsRow(title: L("Folder list")) {
@@ -273,11 +282,11 @@ struct AITab: View {
                 accessRow(store.calAccessText, ok: store.calAccess == "full", button: calendarButton) { store.requestCalendarAccess() }
                 Divider()
                 SettingsRow(title: L("Can read")) {
-                    perAI(store.calClaude, store.calGPT) { ai, on in store.setCalendar(["apps": [ai: on]]) }
+                    perAI(store.calClaude, store.calGPT, store.calIlluminati) { ai, on in store.setCalendar(["apps": [ai: on]]) }
                 }
                 Divider()
                 SettingsRow(title: L("Can change")) {
-                    perAI(store.calWriteClaude, store.calWriteGPT) { ai, on in store.setCalendar(["write_apps": [ai: on]]) }
+                    perAI(store.calWriteClaude, store.calWriteGPT, store.calWriteIlluminati) { ai, on in store.setCalendar(["write_apps": [ai: on]]) }
                 }
                 Divider()
                 SettingsRow(title: L("Details")) {
@@ -315,7 +324,7 @@ struct AITab: View {
                           button: mailButton) { store.requestMailAccess() }
                 Divider()
                 SettingsRow(title: L("Can read")) {
-                    perAI(store.mailClaude, store.mailGPT) { ai, on in store.setMail(["apps": [ai: on]]) }
+                    perAI(store.mailClaude, store.mailGPT, store.mailIlluminati) { ai, on in store.setMail(["apps": [ai: on]]) }
                 }
                 Divider()
                 SettingsRow(title: L("Links")) {
@@ -762,9 +771,9 @@ struct HistoryTab: View {
                     VStack(alignment: .leading, spacing: 4) {
                         HStack(spacing: 6) {
                             Circle().fill(OWNER_COLOR[owner] ?? .gray).frame(width: 7, height: 7)
-                            Text(OWNER_LABEL[owner] ?? owner).frame(width: 46, alignment: .leading)
+                            Text(OWNER_LABEL[owner] ?? owner).frame(width: 58, alignment: .leading).lineLimit(1)
                             Text("\(s.count)").font(.system(size: 12, weight: .semibold)).monospacedDigit()
-                                .frame(width: 34, alignment: .trailing)
+                                .frame(width: 30, alignment: .trailing)
                             GroupBar(groups: s.groups, total: s.count)
                         }
                         Text(s.top.joined(separator: " · ")).font(.system(size: 10)).foregroundStyle(.secondary)

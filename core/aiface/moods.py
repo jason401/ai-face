@@ -25,8 +25,9 @@ PROTOCOL = 'FACE8'
 # Face colors (color)
 WHITE, PINK, BLUE, YELLOW, RED, GREEN, PURPLE, ORANGE = range(8)
 # Who chose the face; the board draws a matching border ring.
-# user = picked in the Mac app (white), claude = #D97757 orange, gpt = #10A37F green
-OWNERS = ('user', 'claude', 'gpt')
+# user = picked in the Mac app (white), claude = #D97757 orange, gpt = #10A37F green,
+# illuminati = AI Illuminati gold #FFD673 (boards that answer OWNERS:4 only; older ones show white)
+OWNERS = ('user', 'claude', 'gpt', 'illuminati')
 # Board slots: 0-6 dedicated moods, 7 shared by the other moods, 8 = "sleeping" (screen saver).
 SLOTS = 9
 SLEEPY_SLOT, SLEEPING_SLOT = 3, 8
@@ -649,9 +650,12 @@ def style_command(mono):
     return f'STYLE:{int(mono)}','OK STYLE'
 
 
-def owner_command(owner):
-    if owner not in OWNERS: raise ValueError(T('표정을 바꾼 주체는 user, claude, gpt 중 하나여야 합니다.','Who chose the face must be user, claude or gpt.'))
-    return f'OWNER:{OWNERS.index(owner)}','OK OWNER'
+def owner_command(owner, colors=len(OWNERS)):
+    """colors: how many owner colors the board knows (3 before AI Illuminati's gold); an owner the
+    board does not know is sent as the user's white, so an older board keeps working."""
+    if owner not in OWNERS: raise ValueError(T('표정을 바꾼 주체는 user, claude, gpt, illuminati 중 하나여야 합니다.','Who chose the face must be user, claude, gpt or illuminati.'))
+    slot = OWNERS.index(owner)
+    return f'OWNER:{slot if slot < colors else 0}','OK OWNER'
 
 
 def emotions():

@@ -6,7 +6,7 @@ AI Face shows an animated face in the macOS menu bar. Connected AIs choose expre
 
 Follow the [release installation guide](INSTALL_RELEASE.md) for downloads, prerequisites, macOS security prompts and uninstalling. Downloaded apps do not require the maintainer's signing key. Source builds are a separate developer workflow that requires an existing local signing identity.
 
-Open **Settings → AI**, connect the desired AI app, then completely quit and reopen it. Start a new Claude Code session after registering Claude Code. The conversation must support the local MCP connection; registering Codex does not connect every ChatGPT mode, web chat or mobile app.
+Open **Settings → AI**, connect the desired AI app, then completely quit and reopen it. Start a new Claude Code session after registering Claude Code. **AI Illuminati** (shown only when it is installed) needs no restart: its plain chat picks up the connection from the next answer and shows up as its own AI, whichever model answers inside it. It may only change the face; it gets no calendar, mail or folder tools. The conversation must support the local MCP connection; registering Codex does not connect every ChatGPT mode, web chat or mobile app.
 
 AI Face must be running for expressions to change. The tool returns `ok` when displayed, `app_not_running` when closed, or `error: ...` on failure. A powered LCD can continue its last animation after the app closes.
 
@@ -27,7 +27,7 @@ Click the menu bar face to open the menu.
 - **Shared folders** lists the folders shared with the AIs; click one to pause or resume it, or add a folder.
 - **Settings…** uses ⌘, and **Quit AI Face** uses ⌘Q.
 
-Ring colors identify the selecting agent: orange for Claude, green for GPT and white for manual selection. Timers use a progress ring. Expression changes can bounce or shake. Working expressions such as processing and reading return to calm after three minutes without a new expression.
+Ring colors identify the selecting agent: orange for Claude, green for GPT, gold for AI Illuminati and white for manual selection. A board with firmware older than the gold shows AI Illuminati's faces with a white ring until its firmware is updated. Timers use a progress ring. Expression changes can bounce or shake. Working expressions such as processing and reading return to calm after three minutes without a new expression.
 
 ## Settings
 
@@ -35,7 +35,7 @@ The four tabs are **General** (login, updates, folders, keep awake), **Appearanc
 
 ### Appearance
 
-**Monochrome mode** uses grayscale and owner-specific ring patterns: manual is solid, Claude uses short dashes, and GPT uses six longer segments. The LCD remains in color. The **Board** card shows whether the board is connected and its brightness; **Details…** opens a separate window with the connection, screen light, photos and firmware. While no board is connected, the board controls are dimmed; the photo library still works, and **Update firmware** works whenever a board is plugged in (also when old firmware keeps it from connecting).
+**Monochrome mode** uses grayscale and owner-specific ring patterns: manual is solid, Claude uses short dashes, GPT uses six longer segments, and AI Illuminati uses dots. The LCD remains in color. The **Board** card shows whether the board is connected and its brightness; **Details…** opens a separate window with the connection, screen light, photos and firmware. While no board is connected, the board controls are dimmed; the photo library still works, and **Update firmware** works whenever a board is plugged in (also when old firmware keeps it from connecting).
 
 ### General and updates
 
@@ -81,7 +81,7 @@ The AI's `get_expression` tool can read the current face and history. That resul
 
 Connect or disconnect **Claude desktop**, **Codex** and **Claude Code** from the AI tab, then restart the relevant app/session. Claude Code registration is user-scoped across folders and can use either the `claude` command or the copy inside Claude's Code tab.
 
-Other local stdio MCP clients can use the displayed server command. Set `AIFACE_AGENT=claude` or `gpt` to identify the ring owner. The `ai-face` bridge forwards requests to the app; its file and mood catalog refresh when AI Face starts.
+Other local stdio MCP clients can use the displayed server command. Set `AIFACE_AGENT=claude`, `gpt` or `illuminati` to identify the ring owner. The `ai-face` bridge forwards requests to the app; its file and mood catalog refresh when AI Face starts.
 
 Tools include `set_expression`, `get_expression`, `start_timer`, `cancel_timer`, `show_clock`, `show_photo` and `update_firmware`. Optional Calendar, Mail, shared-folder and keep-awake tools depend on settings.
 

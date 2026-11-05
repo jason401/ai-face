@@ -5,7 +5,7 @@ Mail is read through Apple events from the app binary in a command mode
 (`AI Face.app/Contents/MacOS/AIFace --mail ...`, see app/macos/Mail.swift); being the app itself,
 it uses the "AI Face may control Mail" permission the user gave in the settings window.
 
-The user decides in the app which AIs may read mail (claude / gpt; GPT off by default) and which
+The user decides in the app which AIs may read mail (claude / gpt / illuminati; GPT and AI Illuminati off by default) and which
 accounts they see. Links and codes are hidden by default: password-reset links and sign-in codes
 arrive by mail. Only the inboxes are read. Python standard library only.
 """
@@ -20,7 +20,7 @@ from . import paths
 from .calendar_access import SECRET, URL
 from .i18n import T
 
-DEFAULTS = dict(apps=dict(claude=True, gpt=False), hidden=[], hide_links=True)
+DEFAULTS = dict(apps=dict(claude=True, gpt=False, illuminati=False), hidden=[], hide_links=True)
 MAX_DAYS = 60
 MAX_TEXT = 8000
 # Match code labels in English and Korean, followed by a verification code.

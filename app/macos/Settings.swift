@@ -58,11 +58,15 @@ struct PeriodRow: Identifiable, Equatable {
     var start = Date()                // week only: that day's midnight
 }
 
-let OWNERS = ["claude", "gpt", "user"]
-let OWNER_LABEL = ["claude": "Claude", "gpt": "GPT", "user": L("You")]
+let OWNERS = ["claude", "gpt", "illuminati", "user"]
+let OWNER_LABEL = ["claude": "Claude", "gpt": "GPT", "illuminati": "Illuminati", "user": L("You")]   // short: fits the history label column
 let OWNER_COLOR: [String: Color] = [
     "claude": Color(nsColor: ownerColor("claude")),
     "gpt": Color(nsColor: ownerColor("gpt")),
+    // The icon's gold on dark backgrounds, a darker gold on light ones (like AI Illuminati's menu bar mark).
+    "illuminati": Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? ownerColor("illuminati") : rgb(196, 146, 36)
+    }),
     "user": Color.gray,
 ]
 // Emotion groups by id (from the server), with their names and colors.
@@ -156,6 +160,8 @@ final class SettingsStore: NSObject, ObservableObject {
     @Published var codexAvailable = false
     @Published var claudeCode = "off"
     @Published var claudeCodeAvailable = false
+    @Published var illuminati = "off"
+    @Published var illuminatiAvailable = false
     @Published var serverPath = ""
     @Published var helperPath = ""
     // Calendar (read only): macOS permission, which AIs may read it, which calendars, details
@@ -163,9 +169,11 @@ final class SettingsStore: NSObject, ObservableObject {
     @Published var calendars: [CalendarItem] = []
     @Published var calClaude = true
     @Published var calGPT = false
+    @Published var calIlluminati = false
     @Published var calDetails = false
     @Published var calWriteClaude = false
     @Published var calWriteGPT = false
+    @Published var calWriteIlluminati = false
     @Published var calConfirm = true
     @Published var calChanges: [CalendarChange] = []
     // Mail (read only): macOS permission, which AIs may read it, which accounts, links hidden
@@ -173,12 +181,14 @@ final class SettingsStore: NSObject, ObservableObject {
     @Published var mailAccounts: [MailAccount] = []
     @Published var mailClaude = true
     @Published var mailGPT = false
+    @Published var mailIlluminati = false
     @Published var mailHideLinks = true
     @Published var mailAsking = false
     // Shared folders (read only): which folders, which AIs may read them
     @Published var folders: [SharedFolder] = []
     @Published var folderClaude = true
     @Published var folderGPT = false
+    @Published var folderIlluminati = false
     @Published var folderDropping = false
     @Published var folderNotice = ""
     var foldersChanged: ((String) -> Void)?   // the menu refreshes its list (and shows errors)
@@ -614,10 +624,12 @@ final class SettingsStore: NSObject, ObservableObject {
             let apps = (s["apps"] as? [String: Any]) ?? [:]
             self.calClaude = (apps["claude"] as? Bool) ?? true
             self.calGPT = (apps["gpt"] as? Bool) ?? false
+            self.calIlluminati = (apps["illuminati"] as? Bool) ?? false
             self.calDetails = (s["details"] as? Bool) ?? false
             let writers = (s["write_apps"] as? [String: Any]) ?? [:]
             self.calWriteClaude = (writers["claude"] as? Bool) ?? false
             self.calWriteGPT = (writers["gpt"] as? Bool) ?? false
+            self.calWriteIlluminati = (writers["illuminati"] as? Bool) ?? false
             self.calConfirm = (s["confirm"] as? Bool) ?? true
             self.calendars = ((s["calendars"] as? [[String: Any]]) ?? []).compactMap { c in
                 guard let id = c["id"] as? String else { return nil }
@@ -684,6 +696,7 @@ final class SettingsStore: NSObject, ObservableObject {
             let apps = (s["apps"] as? [String: Any]) ?? [:]
             self.mailClaude = (apps["claude"] as? Bool) ?? true
             self.mailGPT = (apps["gpt"] as? Bool) ?? false
+            self.mailIlluminati = (apps["illuminati"] as? Bool) ?? false
             self.mailHideLinks = (s["hide_links"] as? Bool) ?? true
             self.mailAccounts = ((s["accounts"] as? [[String: Any]]) ?? []).compactMap { a in
                 guard let name = a["name"] as? String else { return nil }
@@ -735,6 +748,7 @@ final class SettingsStore: NSObject, ObservableObject {
         let apps = (s["apps"] as? [String: Any]) ?? [:]
         folderClaude = (apps["claude"] as? Bool) ?? true
         folderGPT = (apps["gpt"] as? Bool) ?? false
+        folderIlluminati = (apps["illuminati"] as? Bool) ?? false
         folders = ((s["folders"] as? [[String: Any]]) ?? []).compactMap(SharedFolder.init)
     }
 
@@ -831,6 +845,8 @@ final class SettingsStore: NSObject, ObservableObject {
             self.codexAvailable = (s["codex_available"] as? Bool) ?? false
             self.claudeCode = (s["claude_code"] as? String) ?? "off"
             self.claudeCodeAvailable = (s["claude_code_available"] as? Bool) ?? false
+            self.illuminati = (s["illuminati"] as? String) ?? "off"
+            self.illuminatiAvailable = (s["illuminati_available"] as? Bool) ?? false
             self.serverPath = (s["server"] as? String) ?? ""
             self.helperPath = (s["helper"] as? String) ?? ""
             self.hooks = (s["claude_code_awake"] as? String) ?? "off"

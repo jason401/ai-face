@@ -1,4 +1,5 @@
-"""Connect AI apps to the AI Face MCP server ("ai-face"): Claude desktop and Codex.
+"""Connect AI apps to the AI Face MCP server ("ai-face"): Claude desktop, Codex, Claude Code
+and AI Illuminati.
 
 The MCP server is one small file (core/ai_face_mcp.py) that only forwards requests to the
 running app. It is copied to ~/Library/Application Support/AI Face, because macOS does not
@@ -49,6 +50,18 @@ def claude_config():
 
 def codex_config():
     return Path.home() / '.codex' / 'config.toml'
+
+
+def illuminati_data():
+    return Path.home() / 'Library' / 'Application Support' / 'AI Illuminati'
+
+
+def illuminati_config():
+    return illuminati_data() / 'mcp.json'
+
+
+def illuminati_available():
+    return Path('/Applications/AI Illuminati.app').is_dir() or illuminati_data().is_dir()
 
 
 def _backup(path):
@@ -166,6 +179,61 @@ def claude_remove():
         for n in names:
             del servers[n]
         _write(claude_config(), json.dumps(data, indent=2, ensure_ascii=False))
+
+
+# ---------------------------------------------------------------------------
+# AI Illuminati: JSON like Claude desktop, in its own data folder (docs in AI Illuminati's
+# docs/AI_FACE.md). It reads the file before every plain-chat answer: no restart needed.
+# ---------------------------------------------------------------------------
+def _illuminati_entry():
+    return {'command': PYTHON, 'args': [str(server_path())], 'env': {'AIFACE_AGENT': 'illuminati'}}
+
+
+def _illuminati_load():
+    path = illuminati_config()
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text() or '{}')
+    except ValueError:
+        raise ValueError(T(f'AI Illuminati 설정 파일 형식이 올바르지 않아 고치지 않았습니다: {path}',
+                           f'The AI Illuminati settings file is not valid JSON, so it was left alone: {path}'))
+    if not isinstance(data, dict) or not isinstance(data.get('mcpServers', {}), dict):
+        raise ValueError(T(f'AI Illuminati 설정 파일 형식이 올바르지 않습니다: {path}',
+                           f'The AI Illuminati settings file has an unexpected format: {path}'))
+    return data
+
+
+def illuminati_status():
+    """'on', 'other' (an entry pointing somewhere else), 'off' or 'error'."""
+    try:
+        entry = (_illuminati_load().get('mcpServers') or {}).get(NAME)
+    except (OSError, ValueError, AttributeError):
+        return 'error'
+    if not isinstance(entry, dict):
+        return 'off'
+    args = entry.get('args') or []
+    return 'on' if args and args[0] == str(server_path()) else 'other'
+
+
+def illuminati_install():
+    data = _illuminati_load()
+    data.setdefault('mcpServers', {})[NAME] = _illuminati_entry()   # other entries are kept
+    _write(illuminati_config(), json.dumps(data, indent=2, ensure_ascii=False))
+
+
+def illuminati_remove():
+    data = _illuminati_load()
+    servers = data.get('mcpServers') or {}
+    if NAME not in servers:
+        return
+    del servers[NAME]
+    if not servers:
+        data.pop('mcpServers', None)
+    if data:
+        _write(illuminati_config(), json.dumps(data, indent=2, ensure_ascii=False))
+    else:
+        illuminati_config().unlink(missing_ok=True)   # nothing else was in it
 
 
 # ---------------------------------------------------------------------------
@@ -396,12 +464,14 @@ def hooks_remove():
 TARGETS = {'claude': (claude_status, claude_install, claude_remove),
            'codex': (codex_status, codex_install, codex_remove),
            'claude_code': (claude_code_status, claude_code_install, claude_code_remove),
+           'illuminati': (illuminati_status, illuminati_install, illuminati_remove),
            'claude_code_awake': (hooks_status, hooks_install, hooks_remove)}
 
 
 def status():
     return dict(claude=claude_status(), codex=codex_status(), codex_available=codex_available(),
                 claude_code=claude_code_status(), claude_code_available=claude_code_cli() is not None,
+                illuminati=illuminati_status(), illuminati_available=illuminati_available(),
                 claude_code_awake=hooks_status(), server=str(server_path()), helper=str(helper_path()),
                 python=PYTHON)
 

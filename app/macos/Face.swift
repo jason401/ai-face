@@ -462,28 +462,32 @@ struct FaceView {
     var photo: NSImage? = nil    // the picture for "photo" (a board photo, 240x240)
     var clockOnPhoto = false     // clock hands drawn over the photo
     var mono = false             // monochrome style: grays, owner shown by the ring pattern
-    var owner = "user"           // user / claude / gpt: ring color
+    var owner = "user"           // user / claude / gpt / illuminati: ring color
     var timerEnd = 0.0           // seconds since the reference date; 0 = no timer
     var timerTotal = 1.0
     var timerColor = 2
     var awake = false            // keep awake is on: a small sun at the top right
 }
 
-/// Monochrome ring patterns (same as the LCD): app solid, Claude short dashes, GPT six arcs.
+/// Monochrome ring patterns (same as the LCD): app solid, Claude short dashes, GPT six arcs,
+/// AI Illuminati 45 dots.
 /// Lengths are along the ring (radius 110 in 240 space: about 1.92 per degree).
 func ownerDash(_ owner: String) -> [CGFloat]? {
     switch owner {
     case "claude": return [19.2, 11.5]
     case "gpt": return [96, 19.2]
+    case "illuminati": return [3.84, 11.52]
     default: return nil
     }
 }
 
-/// Same colors as AI Illuminati's menu bar meter (Claude orange, Codex/GPT green).
+/// Same colors as AI Illuminati's menu bar meter (Claude orange, Codex/GPT green); AI Illuminati
+/// itself is the gold of its icon mark (#FFD673).
 func ownerColor(_ owner: String) -> NSColor {
     switch owner {
     case "claude": return .systemOrange
     case "gpt": return .systemGreen
+    case "illuminati": return rgb(255, 214, 115)
     default: return rgb(255, 255, 255)
     }
 }

@@ -12,7 +12,7 @@ from . import paths
 OTHER = 'other'   # group of a mood that is not in the catalog any more
 
 FOLDER = paths.DATA / 'history'
-OWNERS = ('claude', 'gpt', 'user')
+OWNERS = ('claude', 'gpt', 'illuminati', 'user')
 KEEP_DAYS = 400
 
 

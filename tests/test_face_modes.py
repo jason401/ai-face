@@ -126,6 +126,10 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(face_modes.owner_command('user'),('OWNER:0','OK OWNER'))
         self.assertEqual(face_modes.owner_command('claude'),('OWNER:1','OK OWNER'))
         self.assertEqual(face_modes.owner_command('gpt'),('OWNER:2','OK OWNER'))
+        self.assertEqual(face_modes.owner_command('illuminati'),('OWNER:3','OK OWNER'))
+        # a board without the gold (older firmware, 3 colors) gets white instead of a refused OWNER:3
+        self.assertEqual(face_modes.owner_command('illuminati',3),('OWNER:0','OK OWNER'))
+        self.assertEqual(face_modes.owner_command('gpt',3),('OWNER:2','OK OWNER'))
         with self.assertRaises(ValueError): face_modes.owner_command('someone')
 
     def test_firmware_matches_protocol(self):
@@ -181,7 +185,7 @@ class EngineTests(unittest.TestCase):
                 while b'\n' in buf:
                     line,buf=buf.split(b'\n',1);text=line.decode();seen.append(text)
                     key=text.split(':')[0]
-                    reply='OK SUM:%d'%sums.get(int(text[4:]),0) if key=='SUM' else 'OK LIST:0:-1' if text=='PHOTO:LIST' else {'HELLO':'OK FACE8','TOUCH':'OK TOUCH:0'}.get(key,'OK '+key)
+                    reply='OK SUM:%d'%sums.get(int(text[4:]),0) if key=='SUM' else 'OK LIST:0:-1' if text=='PHOTO:LIST' else {'HELLO':'OK FACE8','TOUCH':'OK TOUCH:0','OWNERS':'ERR COMMAND'}.get(key,'OK '+key)
                     os.write(master,(reply+'\r\n').encode())
         worker=threading.Thread(target=run,daemon=True);worker.start();return worker
 

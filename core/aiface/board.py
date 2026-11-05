@@ -33,7 +33,8 @@ class Device:
         self.port = ''
         self.mode = ''
         self.emotion = ''
-        self.owner = ''  # user / claude / gpt: who chose the current face
+        self.owner = ''  # user / claude / gpt / illuminati: who chose the current face
+        self.owner_colors = 3   # owner ring colors the board knows (OWNERS reply), set in prepare()
         self.photos = []  # photo ids stored on the board
         self.current_photo = -1
         # What the face should show even with no board (menu bar): the last chosen screen.
@@ -204,6 +205,10 @@ class Device:
             self.exchange(*face_modes.light_command(face_modes.load_settings()['light']))
         except ValueError:
             self.touch = 0   # older firmware: no touch support, one clock design
+        try:
+            self.owner_colors = int(self.exchange('OWNERS', 'OK OWNERS:').split(':')[1])
+        except ValueError:
+            self.owner_colors = 3   # older firmware: no AI Illuminati gold (it shows white)
         self.weather_supported = None
         self.set_weather(self.weather_scene)
         for mood in face_modes.idle_moods():
@@ -373,7 +378,7 @@ class Device:
 
     def upload(self, mode, owner='user'):
         mode = face_modes.validate(mode)
-        owner_line = face_modes.owner_command(owner)  # validate before touching the board
+        owner_line = face_modes.owner_command(owner, self.owner_colors)  # validate before touching the board
         for command, expected in face_modes.commands(mode):
             self.exchange(command, expected)
         # Sent after PLAY so the new face is already showing while the ring color sweeps in.

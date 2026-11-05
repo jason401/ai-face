@@ -11,6 +11,9 @@ LIBRARY = DATA / 'Photo Library'          # originals of photos dropped into the
 LIBRARY_KO = DATA / '사진 보관함'           # its name before the app had an English version
 LEGACY_PROJECT = Path.home() / 'Documents' / 'ESP32'
 
+# The AIs that can choose a face (besides the user). AI Illuminati is one app whatever model answers in it.
+AGENT_NAMES = {'claude': 'Claude', 'gpt': 'GPT', 'illuminati': 'AI Illuminati'}
+
 PACKAGE = Path(__file__).resolve().parent  # core/aiface in the project
 
 

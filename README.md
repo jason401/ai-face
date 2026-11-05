@@ -9,7 +9,7 @@
 ## Features
 
 - 78 animated expressions in 11 groups, from happy and thinking to curious, sleepy and facepalm.
-- Claude-orange / GPT-green / manual-white rings; monochrome menu bar mode uses patterns instead.
+- Claude-orange / GPT-green / AI Illuminati-gold / manual-white rings; monochrome menu bar mode uses patterns instead.
 - Manual expression picker, timer, clock, photo/slideshow and campfire screen savers.
 - Local expression history and statistics; conversation text is not saved in that history.
 - Optional, separately controlled Calendar access and read-only Mail access for connected AIs.

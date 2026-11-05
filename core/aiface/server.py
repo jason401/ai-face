@@ -47,7 +47,7 @@ def write_catalog():
 
 
 def _who(owner):
-    return {'claude': 'Claude', 'gpt': 'GPT'}.get(owner) or T('사용자(직접)', 'the user (by hand)')
+    return paths.AGENT_NAMES.get(owner) or T('사용자(직접)', 'the user (by hand)')
 
 
 def expression_text(view, limit=10, now=None):
@@ -525,10 +525,16 @@ def main():
                         device.set_light(data.get('light'))
                     elif action == 'mcp_install':
                         integrations.install(data.get('target'))
-                        device.message = T('연결했습니다. 그 앱을 완전히 종료(Cmd+Q)한 뒤 다시 실행하세요.', 'Connected. Quit that app completely (Cmd+Q) and open it again.')
+                        if data.get('target') == 'illuminati':   # it reads the file before every answer
+                            device.message = T('연결했습니다. AI Illuminati의 다음 답부터 적용됩니다.', 'Connected. It applies from AI Illuminati\'s next answer.')
+                        else:
+                            device.message = T('연결했습니다. 그 앱을 완전히 종료(Cmd+Q)한 뒤 다시 실행하세요.', 'Connected. Quit that app completely (Cmd+Q) and open it again.')
                     elif action == 'mcp_remove':
                         integrations.remove(data.get('target'))
-                        device.message = T('연결을 해제했습니다. 그 앱을 다시 실행하면 반영됩니다.', 'Disconnected. It takes effect when that app restarts.')
+                        if data.get('target') == 'illuminati':
+                            device.message = T('연결을 해제했습니다. AI Illuminati의 다음 답부터 적용됩니다.', 'Disconnected. It applies from AI Illuminati\'s next answer.')
+                        else:
+                            device.message = T('연결을 해제했습니다. 그 앱을 다시 실행하면 반영됩니다.', 'Disconnected. It takes effect when that app restarts.')
                     elif action == 'quit':
                         device.close()
                         device.message = T('종료되었습니다.', 'Stopped.')
