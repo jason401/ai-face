@@ -182,6 +182,7 @@ final class SettingsStore: NSObject, ObservableObject {
     @Published var folderDropping = false
     @Published var folderNotice = ""
     var foldersChanged: ((String) -> Void)?   // the menu refreshes its list (and shows errors)
+    var openBoard: (() -> Void)?        // opens the board details window
     @Published var folderShelfHover = FolderShelf.showOnHover {
         didSet { UserDefaults.standard.set(folderShelfHover, forKey: FolderShelf.hoverKey) }
     }
@@ -1039,6 +1040,7 @@ final class SettingsTabs: NSTabViewController {
 final class SettingsWindowController: NSObject, NSWindowDelegate {
     let store = SettingsStore()
     private var window: NSWindow?
+    private var boardWindow: NSWindow?
 
     static let size = NSSize(width: 334, height: 460)
 
@@ -1061,8 +1063,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             let tabs = SettingsTabs()
             tabs.tabStyle = .toolbar
             tabs.addTabViewItem(tab(GeneralTab(store: store), L("General"), "gearshape"))
+            tabs.addTabViewItem(tab(DisplayTab(store: store), L("Display"), "display"))
             tabs.addTabViewItem(tab(AITab(store: store), L("AI"), "sparkles"))
-            tabs.addTabViewItem(tab(BoardTab(store: store), L("Board"), "cpu"))
             tabs.addTabViewItem(tab(HistoryTab(store: store), L("History"), "chart.bar"))
             let w = NSWindow(contentViewController: tabs)
             w.styleMask = [.titled, .closable, .miniaturizable]
@@ -1071,6 +1073,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             w.delegate = self
             w.center()
             window = w
+            store.openBoard = { [weak self] in self?.showBoard() }
         }
         store.start()
         NSApp.activate(ignoringOtherApps: true)
@@ -1078,8 +1081,32 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         SettingsTabs.unfocus(window)
     }
 
+    /// Board details in a window of their own, beside the settings window.
+    func showBoard() {
+        if boardWindow == nil {
+            let size = NSSize(width: SettingsWindowController.size.width, height: 560)
+            let host = NSHostingController(rootView: BoardDetails(store: store).frame(width: size.width, height: size.height))
+            host.sizingOptions = []
+            let w = NSWindow(contentViewController: host)
+            w.title = L("Board")
+            w.styleMask = [.titled, .closable, .miniaturizable]
+            w.setContentSize(size)
+            w.isReleasedWhenClosed = false
+            w.delegate = self
+            if let frame = window?.frame {
+                w.setFrameTopLeftPoint(NSPoint(x: frame.maxX + 12, y: frame.maxY))
+            } else {
+                w.center()
+            }
+            boardWindow = w
+        }
+        boardWindow?.makeKeyAndOrderFront(nil)
+    }
+
     func windowWillClose(_ notification: Notification) {
-        store.stop()
+        // The store keeps polling while either window is still open.
+        let other = (notification.object as? NSWindow) === window ? boardWindow : window
+        if other?.isVisible != true { store.stop() }
     }
 }
 

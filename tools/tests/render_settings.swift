@@ -67,11 +67,11 @@ import SwiftUI
         weatherStore.weatherDate = SettingsStore.weatherDateFormat.date(from: "2026-10-20")!
         weatherStore.weatherDetail = L("Historical reanalysis") + " · " + L("Rain") + " · 2026-10-20T20:00:00-07:00"
         let views: [(String, () -> AnyView)] = [
-            ("1general", { AnyView(GeneralTab(store: store)) }),
+            ("1general", { AnyView(GeneralTab(store: store)) }), ("1display", { AnyView(DisplayTab(store: store)) }), ("1display-noboard", { AnyView(SettingsPage { BoardCard(store: SettingsStore()) }) }),
             ("1weather-date", { AnyView(SettingsPage { CampfireWeatherCard(store: weatherStore) }) }), ("2ai", { AnyView(AITab(store: store)) }),
             ("2ai-shelf", { AnyView(FolderShelfView(store: store, shelf: FolderShelf(store: store)).background(Color(nsColor: .windowBackgroundColor))) }), ("2ai-folders", { AnyView(FolderList(store: store).background(Color(nsColor: .windowBackgroundColor))) }), ("2ai-calendars", { AnyView(CalendarList(store: store).background(Color(nsColor: .windowBackgroundColor))) }), ("2ai-changes", { AnyView(CalendarChanges(store: store).background(Color(nsColor: .windowBackgroundColor))) }),
             ("2ai-mail", { AnyView(MailAccountList(store: store).background(Color(nsColor: .windowBackgroundColor))) }),
-            ("3board", { AnyView(BoardTab(store: store)) }),
+            ("3board", { AnyView(BoardDetails(store: store)) }),
             ("4history-day", { history("day") }), ("4history-week", { history("week") }),
             ("4history-month", { history("month") }), ("4history-year", { history("year") })]
         for appearance in [NSAppearance.Name.darkAqua, .aqua] {

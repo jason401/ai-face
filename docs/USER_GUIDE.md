@@ -31,11 +31,15 @@ Ring colors identify the selecting agent: orange for Claude, green for GPT and w
 
 ## Settings
 
-The four tabs are **General**, **AI**, **Board** and **History**. Hover over controls for more detail.
+The four tabs are **General** (login, updates, folders, keep awake), **Display** (face, campfire weather, board), **AI** and **History**. Hover over controls for more detail.
+
+### Display
+
+**Monochrome mode** uses grayscale and owner-specific ring patterns: manual is solid, Claude uses short dashes, and GPT uses six longer segments. The LCD remains in color. The **Board** card shows whether the board is connected and its brightness; **Details…** opens a separate window with the connection, screen light, photos and firmware. While no board is connected, the board controls are dimmed; the photo library still works, and **Update firmware** works whenever a board is plugged in (also when old firmware keeps it from connecting).
 
 ### General and updates
 
-**Open at login** launches the menu bar app at sign-in. **Monochrome mode** uses grayscale and owner-specific ring patterns: manual is solid, Claude uses short dashes, and GPT uses six longer segments. The LCD remains in color. Folder controls open the app and local data locations in Finder.
+**Open at login** launches the menu bar app at sign-in. Folder controls open the app and local data locations in Finder.
 
 Downloaded-app users should update manually through GitHub Releases. The in-app updater checks the stable source branch at startup and every three hours, but installs only after **Update now** or **Install new version** is selected. Source updates require a local signing identity, Python and Command Line Tools.
 
@@ -57,13 +61,13 @@ This optional feature holds a MacBook awake for a limited time, including with t
 
 After the configured idle interval, choose sleepy → sleeping, analog clock, the selected board photo, photo slideshow, pixel-art campfire, or no screen saver. The default becomes sleepy after N minutes and sleeping after 2N minutes.
 
-**Clock design** (Settings → General → Face) picks how the board draws the clock screen and the clock screen saver: Classic, Minimal, Railway, Roman numerals, Numbers, Chronograph, Rings, Digital, Radar or Hangul words (a Korean word clock). Digital and Chronograph also show the date. The menu bar keeps the simple clock. Needs the board's PSRAM (Update firmware switches it on); without it the board shows Classic.
+**Clock design** (Settings → Display → Face) picks how the board draws the clock screen and the clock screen saver: Classic, Minimal, Railway, Roman numerals, Numbers, Chronograph, Rings, Digital, Radar or Hangul words (a Korean word clock). Digital and Chronograph also show the date. The menu bar keeps the simple clock. Needs the board's PSRAM (Update firmware switches it on); without it the board shows Classic.
 
 ![The ten clock designs](images/clock-designs.png)
 
 A new expression or timer completion restores the face. Photo modes can overlay clock hands. The menu bar uses local copies of board photos and falls back to a sleeping face if none exist. Settings are also stored on the board, which can continue independently while powered.
 
-### Photos (Board tab)
+### Photos (Display → Board → Details…)
 
 Drag photos into the library or use **Add photos…**. JPG, PNG and HEIC are supported. Originals stay in the local library and duplicates are avoided. Select a photo to fit it to the 240×240 LCD. Store up to ten photos on the board; select one to show it or use its context menu to delete it. A new expression replaces a manual photo; use a photo screen saver for longer display.
 
@@ -115,7 +119,7 @@ Use Seeed XIAO ESP32S3 with a GC9A01 240×240 round LCD. The app connects automa
 
 A round GC9A01 module with a CST816 touch chip (S/T/D) adds swipes: swipe left on the board to go face → campfire → clock → face, swipe right for the other way. The whole screen slides with your finger (it uses the XIAO's 8 MB PSRAM, switched on by Update firmware); a short drag springs back. The menu bar face follows. The clock is skipped until the board knows the time. Wiring follows the module connectors in order (XIAO pin ← module pin): D0 ← BLK, D1 ← CS, D2 ← DC, D3 ← RES, D4 ← SDA, D5 ← SCL, 3V3 ← VIN, GND ← GND; touch: D10 ← TP_SCL, D9 ← TP_SDA, D8 ← TP_RST, D7 ← TP_INT. D6 stays free. (Boards wired for firmware before November 2026 need this new wiring after a firmware update.)
 
-**Screen light** (Settings → Board, needs BLK on D0): brightness 10–100 %, dark while the sleeping face shows, and dark at night between two hours you pick (by the board's clock). A touch lights a dark screen for 30 s without swiping; a timer alarm lights it too. Settings → Board shows whether a touch panel was found. **Settings → Board → Update firmware** compiles and uploads only when requested.
+**Screen light** (Display → Board → Details…, needs BLK on D0): brightness 10–100 %, dark while the sleeping face shows, and dark at night between two hours you pick (by the board's clock). A touch lights a dark screen for 30 s without swiping; a timer alarm lights it too. The board details show whether a touch panel was found. **Details… → Update firmware** compiles and uploads only when requested.
 
 Compilation requires Arduino IDE 2 or `arduino-cli`, the ESP32 board package and Adafruit GFX / GC9A01A libraries. Desktop downloads do not include these external tools or precompiled firmware. Close AI Face before uploading directly through Arduino IDE to release its serial connection.
 

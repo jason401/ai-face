@@ -1,56 +1,15 @@
-// The four settings tabs (General · AI · Board · History), built from the cards in SettingsKit.swift.
+// The four settings tabs (General · Display · AI · History) and the board details window, built from the cards in SettingsKit.swift.
 import Cocoa
 import SwiftUI
 import UniformTypeIdentifiers
 
-// MARK: - General: the face, the app and its updates, keep awake
+// MARK: - General: what any app has (login, updates, folders), and keep awake
 
 struct GeneralTab: View {
     @ObservedObject var store: SettingsStore
 
-    func bind<T>(_ path: ReferenceWritableKeyPath<SettingsStore, T>) -> Binding<T> {
-        return Binding(get: { store[keyPath: path] }, set: { store[keyPath: path] = $0; store.saveSaver() })
-    }
-
     var body: some View {
         SettingsPage {
-            SettingsCard(title: L("Face")) {
-                SettingsRow(title: L("Appearance")) {
-                    Toggle(L("Monochrome"), isOn: Binding(get: { store.mono }, set: { store.setMono($0) }))
-                        .toggleStyle(.checkbox)
-                        .help(L("Draws the menu bar face in grays and shows who chose it by the ring pattern: you = solid, Claude = short dashes, GPT = six long arcs. The board always stays in color."))
-                }
-                Divider()
-                SettingsRow(title: L("Screen saver")) {
-                    SettingsMenu(options: SAVER_TYPES.map { ($0.label, $0.value) }, selection: bind(\.saverType))
-                }
-                Divider()
-                SettingsRow(title: L("Wait")) {
-                    SettingsMenu(options: store.afterChoices.map { (minutesText($0), $0) }, selection: bind(\.saverAfter))
-                        .disabled(store.saverType == "off")
-                }
-                Divider()
-                SettingsRow(title: L("Clock design")) {
-                    SettingsMenu(options: CLOCK_DESIGNS.enumerated().map { ($0.element, $0.offset) },
-                                 selection: Binding(get: { store.clockStyle }, set: { store.setClockStyle($0) }))
-                        .help(L("How the clock looks on the board (clock screen and clock screen saver). The menu bar keeps the simple clock."))
-                }
-                if store.saverType == "photo" || store.saverType == "slideshow" {
-                    Divider()
-                    SettingsRow(title: L("Photos")) {
-                        Toggle(L("Clock hands over photos"), isOn: bind(\.saverClock)).toggleStyle(.checkbox)
-                    }
-                }
-                if store.saverType == "slideshow" {
-                    Divider()
-                    SettingsRow(title: L("Change every")) {
-                        SettingsMenu(options: store.slideChoices.map { ($0.label, $0.value) }, selection: bind(\.saverSlide))
-                    }
-                }
-                SettingsNote(text: store.saverHint, lines: 3)
-                    .help(store.saverHint + " " + L("A new face from an AI or the end of a timer brings the face back."))
-            }
-            CampfireWeatherCard(store: store)
             SettingsCard(title: L("App")) {
                 SettingsRow(title: L("Open at login")) {
                     SettingsSwitch(title: L("Open at login"), isOn: Binding(get: { store.loginItem }, set: { store.setLogin($0) }))
@@ -109,6 +68,99 @@ struct GeneralTab: View {
                         .help(L("Keeps the MacBook awake even with the lid closed, for 1, 2 or 4 hours (menu → Keep awake). It turns off at the end, at 20% battery, when the Mac gets hot, in Low Power Mode and when AI Face quits. Setting it up asks for your Mac password once, in Terminal, and allows only this one setting."))
                 }
             }
+        }
+    }
+}
+
+// MARK: - Display: the face, the campfire weather and the board (details in their own window)
+
+struct DisplayTab: View {
+    @ObservedObject var store: SettingsStore
+
+    func bind<T>(_ path: ReferenceWritableKeyPath<SettingsStore, T>) -> Binding<T> {
+        return Binding(get: { store[keyPath: path] }, set: { store[keyPath: path] = $0; store.saveSaver() })
+    }
+
+    var body: some View {
+        SettingsPage {
+            SettingsCard(title: L("Face")) {
+                SettingsRow(title: L("Appearance")) {
+                    Toggle(L("Monochrome"), isOn: Binding(get: { store.mono }, set: { store.setMono($0) }))
+                        .toggleStyle(.checkbox)
+                        .help(L("Draws the menu bar face in grays and shows who chose it by the ring pattern: you = solid, Claude = short dashes, GPT = six long arcs. The board always stays in color."))
+                }
+                Divider()
+                SettingsRow(title: L("Screen saver")) {
+                    SettingsMenu(options: SAVER_TYPES.map { ($0.label, $0.value) }, selection: bind(\.saverType))
+                }
+                Divider()
+                SettingsRow(title: L("Wait")) {
+                    SettingsMenu(options: store.afterChoices.map { (minutesText($0), $0) }, selection: bind(\.saverAfter))
+                        .disabled(store.saverType == "off")
+                }
+                Divider()
+                SettingsRow(title: L("Clock design")) {
+                    SettingsMenu(options: CLOCK_DESIGNS.enumerated().map { ($0.element, $0.offset) },
+                                 selection: Binding(get: { store.clockStyle }, set: { store.setClockStyle($0) }))
+                        .help(L("How the clock looks on the board (clock screen and clock screen saver). The menu bar keeps the simple clock."))
+                }
+                if store.saverType == "photo" || store.saverType == "slideshow" {
+                    Divider()
+                    SettingsRow(title: L("Photos")) {
+                        Toggle(L("Clock hands over photos"), isOn: bind(\.saverClock)).toggleStyle(.checkbox)
+                    }
+                }
+                if store.saverType == "slideshow" {
+                    Divider()
+                    SettingsRow(title: L("Change every")) {
+                        SettingsMenu(options: store.slideChoices.map { ($0.label, $0.value) }, selection: bind(\.saverSlide))
+                    }
+                }
+                SettingsNote(text: store.saverHint, lines: 3)
+                    .help(store.saverHint + " " + L("A new face from an AI or the end of a timer brings the face back."))
+            }
+            CampfireWeatherCard(store: store)
+            BoardCard(store: store)
+        }
+    }
+}
+
+extension SettingsStore {
+    var boardStatus: String {
+        connected ? L("Connected") : (ports.isEmpty ? L("Not connected") : L("Connecting or error"))
+    }
+
+    func lightBinding<T>(_ path: ReferenceWritableKeyPath<SettingsStore, T>) -> Binding<T> {
+        Binding(get: { self[keyPath: path] }, set: { self[keyPath: path] = $0; self.saveLight() })
+    }
+}
+
+/// The board in short: whether it is there, how bright, and a button for everything else.
+/// The board is often unplugged, so its controls wait (dimmed) until it connects.
+struct BoardCard: View {
+    @ObservedObject var store: SettingsStore
+
+    var body: some View {
+        SettingsCard(title: L("Board")) {
+            SettingsRow(title: L("Status")) {
+                SettingsStatus(text: store.boardStatus, ok: store.connected)
+                if !store.connected && !store.ports.isEmpty {
+                    SettingsAction(title: L("Reconnect")) { store.reconnect() }.fixedSize()
+                }
+            }
+            Divider()
+            SettingsRow(title: L("Brightness")) {
+                SettingsMenu(options: stride(from: 10, through: 100, by: 10).map { ("\($0)%", $0) },
+                             selection: store.lightBinding(\.lightBright))
+                    .disabled(!store.connected)
+            }
+            Divider()
+            SettingsRow(title: L("More")) {
+                SettingsAction(title: L("Details…")) { store.openBoard?() }
+                    .help(L("Screen light, photos on the board, the photo library and firmware"))
+            }
+            SettingsNote(text: store.connected ? L("Screen light, photos and firmware are in Details.")
+                         : (store.message.isEmpty ? L("Plug in the board to change its settings.") : store.message), lines: 2)
         }
     }
 }
@@ -299,9 +351,9 @@ struct AITab: View {
     }
 }
 
-// MARK: - Board: connection, photos, firmware
+// MARK: - Board details window: connection, screen light, photos, firmware
 
-struct BoardTab: View {
+struct BoardDetails: View {
     // No @State: the Command Line Tools have no SwiftUI macro plugin, and the newest SDK
     // resolves @State to a macro. View state lives in the store instead.
     @ObservedObject var store: SettingsStore
@@ -309,18 +361,14 @@ struct BoardTab: View {
     var hours: [(String, Int)] { (0..<24).map { (String(format: L("%d:00"), $0), $0) } }
 
     func lightBind<T>(_ path: ReferenceWritableKeyPath<SettingsStore, T>) -> Binding<T> {
-        Binding(get: { store[keyPath: path] }, set: { store[keyPath: path] = $0; store.saveLight() })
-    }
-
-    var statusText: String {
-        store.connected ? L("Connected") : (store.ports.isEmpty ? L("Not connected") : L("Connecting or error"))
+        store.lightBinding(path)
     }
 
     var body: some View {
         SettingsPage {
-            SettingsCard(title: L("ESP32 display")) {
+            SettingsCard(title: L("Connection")) {
                 SettingsRow(title: L("Status")) {
-                    SettingsStatus(text: statusText, ok: store.connected)
+                    SettingsStatus(text: store.boardStatus, ok: store.connected)
                     if !store.connected && !store.ports.isEmpty {
                         SettingsAction(title: L("Reconnect")) { store.reconnect() }.fixedSize()
                     }
@@ -367,6 +415,7 @@ struct BoardTab: View {
                 SettingsNote(text: L("A touch lights a dark screen for 30 s; a timer alarm lights it too."), lines: 2)
                     .help(L("Needs the BLK wire on D0. The night hours use the board's clock, set by the Mac."))
             }
+            .disabled(!store.connected)
 
             SettingsCard(title: L("Photos on the board") + "  \(store.photos.count)/10") {
                 if !store.connected {
