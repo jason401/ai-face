@@ -89,10 +89,11 @@ struct CampfireWeatherCard: View {
             }
             Divider()
             SettingsNote(text: (store.weatherLocation["name"] as? String) ?? "Palo Alto / Stanford", lines: 2)
-            HStack {
+            SettingsRow(title: L("Change place")) {
                 TextField(L("City or postal code"), text: $store.weatherQuery).textFieldStyle(.roundedBorder)
                     .onSubmit { store.searchWeatherLocation() }
                 SettingsAction(title: L("Search")) { store.searchWeatherLocation() }.disabled(store.weatherSearching)
+                    .frame(width: 56)
             }
             ForEach(store.weatherLocations.indices, id: \.self) { index in
                 Button(store.weatherLocations[index]["name"] as? String ?? "") {
@@ -107,9 +108,11 @@ struct CampfireWeatherCard: View {
                              selection: Binding(get: { store.weatherMode }, set: { store.weatherMode = $0; if $0 == "auto" { store.saveWeather() } }))
             }
             if store.weatherMode == "date" {
-                DatePicker(L("Date"), selection: $store.weatherDate, displayedComponents: .date)
-                    .environment(\.timeZone, TimeZone(secondsFromGMT: 0)!)
-                    .datePickerStyle(.field).font(.caption)
+                SettingsRow(title: L("Date")) {
+                    DatePicker(L("Date"), selection: $store.weatherDate, displayedComponents: .date)
+                        .environment(\.timeZone, TimeZone(secondsFromGMT: 0)!)
+                        .datePickerStyle(.field).labelsHidden()
+                }
                 SettingsRow(title: L("Local hour")) {
                     SettingsMenu(options: (0..<24).map { (String(format: "%02d:00", $0), $0) }, selection: $store.weatherHour)
                     SettingsAction(title: L("Show this time")) { store.saveWeather(showFire: true) }

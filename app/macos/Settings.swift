@@ -1023,6 +1023,19 @@ enum LoginItem {
 
 // MARK: - Window
 
+/// Opening the window or a tab must not put the cursor in its first text field (the weather
+/// place): macOS focuses it by itself, which looks like something is waiting for typing.
+final class SettingsTabs: NSTabViewController {
+    static func unfocus(_ window: NSWindow?) {
+        DispatchQueue.main.async { window?.makeFirstResponder(nil) }
+    }
+
+    override func tabView(_ tabView: NSTabView, didSelect tabViewItem: NSTabViewItem?) {
+        super.tabView(tabView, didSelect: tabViewItem)
+        SettingsTabs.unfocus(view.window)
+    }
+}
+
 final class SettingsWindowController: NSObject, NSWindowDelegate {
     let store = SettingsStore()
     private var window: NSWindow?
@@ -1045,7 +1058,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
     func show() {
         if window == nil {
-            let tabs = NSTabViewController()
+            let tabs = SettingsTabs()
             tabs.tabStyle = .toolbar
             tabs.addTabViewItem(tab(GeneralTab(store: store), L("General"), "gearshape"))
             tabs.addTabViewItem(tab(AITab(store: store), L("AI"), "sparkles"))
@@ -1062,6 +1075,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         store.start()
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
+        SettingsTabs.unfocus(window)
     }
 
     func windowWillClose(_ notification: Notification) {
