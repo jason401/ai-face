@@ -13,6 +13,7 @@
 using std::min; using std::max;
 #define PI 3.14159265358979f
 #define DEG_TO_RAD 0.017453292519943295f
+#define RAD_TO_DEG 57.29577951308232f
 template<class T,class L,class H> T constrain(T x,L lo,H hi){return x<lo?lo:(x>hi?hi:x);}
 extern uint32_t fakeMillis;
 inline uint32_t millis(){return fakeMillis;}

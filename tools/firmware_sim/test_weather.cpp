@@ -14,9 +14,9 @@ int main(){setup();fireInit();
     setFireWeather(1,kind,0,kind==0?0:100,80,100);
     for(int f=0;f<500;f++){
       fireStep();
-      for(auto &d:weatherDrops){CHECK(d.x>=0&&d.x<FG);CHECK(d.y>=0&&d.y<FG);}
+      for(auto &d:weatherDrops){CHECK(d.x>=-FE&&d.x<FG+FE);CHECK(d.y>=-FE&&d.y<FG+FE);}   // the whole screen
       CHECK(weatherDay>=0&&weatherDay<=100);CHECK(weatherCloud>=0&&weatherCloud<=100);
-      for(int y=0;y<FG;y++)for(int x=0;x<FG;x++)fireCell(x,y,200);
+      for(int y=-FE;y<FG+FE;y++)for(int x=-FE;x<FG+FE;x++)fireCell(x,y,200);
     }
     int rain=0;for(auto v:weatherRain)rain+=v!=0;
     CHECK((kind==3||kind==4)?rain>0:rain==0);

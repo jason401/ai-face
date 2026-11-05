@@ -21,4 +21,15 @@ int main(){ setup();
       CHECK(!(st.y>10&&abs(st.x*2-51)<26)); CHECK(starLight(st)>=0&&starLight(st)<=255); seen+=starLight(st)<64; } }
   for(int i=0;i<12;i++) moved+=stars[i].x!=first[i][0]||stars[i].y!=first[i][1];
   CHECK(moved>=8); CHECK(seen>0);
+  // The scene fills the screen to the round edge (no black band, no stepped circle of cells);
+  // a running timer is drawn into it at r 113-119 and the fire does not paint over it.
+  static uint16_t fb[240*240]; tft.fb=fb;
+  CHECK(cmd("TIMER:0:0:0")=="OK TIMER"); CHECK(cmd("FIRE")=="OK FIRE"); run(500);
+  auto at=[&](int x,int y){return fb[y*240+x];};
+  CHECK(at(120,1)!=0 && at(1,120)!=0 && at(238,120)!=0 && at(120,238)!=0);   // top sky, sides, ground
+  CHECK(cmd("TIMER:60:60:4")=="OK TIMER"); run(1000);
+  uint16_t ring=cdColor(359); CHECK(ring!=0);
+  CHECK(at(119,4)==ring && at(4,120)==cdColor(271));               // on the ring, through fire frames
+  CHECK(at(120,12)!=ring && at(120,0)!=ring);                     // sky inside and outside it
+  tft.fb=nullptr;
   printf(fails?"%d FAILED\n":"FIRE OK\n",fails); return fails;}

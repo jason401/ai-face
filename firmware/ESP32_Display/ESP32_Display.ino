@@ -450,11 +450,14 @@ void photoCommand(char *line) {
 }
 
 // ----- campfire -----
-// Pixel-art campfire: a 52x52 grid of 4x4-pixel cells inside the round screen. The flames
+// Pixel-art campfire: a 52x52 grid of 4x4-pixel cells in the middle of the screen. The flames
 // are a heat field: each cell takes the average of the cells below it, cools a little at
 // random and is squeezed toward the middle higher up. Drawn in a small fire palette over
 // crossed logs, with a flickering ground glow, rising sparks and twinkling stars.
 const int FG=52, FH=40, FCELL=4, FOX=16, FOY=16;    // grid size, fire rows, cell px, origin
+// The sky and ground go on FE cells past the grid on every side, so the scene fills the whole
+// screen like a photo and the round glass makes the smooth edge (no stepped circle of cells).
+const int FE=4, FV=FG+2*FE;                          // extra cells per side, cells across the screen
 const int FIRE_MAX=36, FIRE_MS=70;                   // heat range, frame time (~14 fps)
 uint8_t fireHeat[FH*FG];
 uint16_t fireBack[FG*FG];       // sky, stars, ground (without glow)
@@ -473,7 +476,7 @@ int weatherKind=0;
 float weatherDay=0, weatherCloud=0, weatherIntensity=0, weatherWind=0;
 int weatherTarget[4]={0,0,0,0};
 WeatherDrop weatherDrops[28];
-uint8_t weatherRain[FG*FG];
+uint8_t weatherRain[FV*FV];     // whole screen, cell (x,y) at (y+FE)*FV+x+FE
 uint32_t weatherFrame=0, weatherRng=0xA341316Cu, weatherReceived=0;
 uint32_t weatherRand() { weatherRng^=weatherRng<<13; weatherRng^=weatherRng>>17; weatherRng^=weatherRng<<5; return weatherRng; }
 void setFireWeather(int enabled,int kind,int day,int cloud,int intensity,int wind) {
@@ -483,7 +486,7 @@ void setFireWeather(int enabled,int kind,int day,int cloud,int intensity,int win
   weatherTarget[0]=day; weatherTarget[1]=cloud; weatherTarget[2]=intensity; weatherTarget[3]=wind;
   if(starting) {
     weatherDay=day; weatherCloud=cloud; weatherIntensity=intensity; weatherWind=wind;
-    for(auto &d:weatherDrops) { d.x=weatherRand()%FG; d.y=weatherRand()%FG; }
+    for(auto &d:weatherDrops) { d.x=(int)(weatherRand()%FV)-FE; d.y=(int)(weatherRand()%FV)-FE; }
   }
 }
 void stepFireWeather() {
@@ -501,11 +504,12 @@ void stepFireWeather() {
     auto &d=weatherDrops[i];
     d.x+=weatherWind*0.012f+(weatherKind==4 ? ((int)(weatherRand()%3)-1)*0.12f : 0);
     d.y+=weatherKind==4 ? 0.22f+(i%3)*0.09f : 1.7f+weatherIntensity*0.015f;
-    if(d.y>=FG) { d.y=0; d.x=weatherRand()%FG; }
-    if(d.x<0) d.x+=FG; if(d.x>=FG) d.x-=FG;
-    int x=(int)d.x,y=(int)d.y;
-    weatherRain[y*FG+x]=weatherKind==4 ? 190 : 105;
-    if(weatherKind==3 && y>0) weatherRain[(y-1)*FG+x]=65;
+    if(d.y>=FG+FE) { d.y=-FE; d.x=(int)(weatherRand()%FV)-FE; }
+    if(d.x<-FE) d.x+=FV; if(d.x>=FG+FE) d.x-=FV;
+    int x=(int)floorf(d.x)+FE,y=(int)floorf(d.y)+FE;
+    if(x<0 || x>=FV || y<0 || y>=FV) continue;
+    weatherRain[y*FV+x]=weatherKind==4 ? 190 : 105;
+    if(weatherKind==3 && y>0) weatherRain[(y-1)*FV+x]=65;
   }
 }
 // Three broad, moving pixel clouds; coverage changes their width and opacity.
@@ -558,15 +562,18 @@ void fireLogLine(float x0,float y0,float x1,float y1) {
     if(v>fireLog[cy*FG+cx] || fireLog[cy*FG+cx]==1) fireLog[cy*FG+cx]=v;
   }
 }
+// Night sky getting lighter toward the horizon, then dark ground (any row, also past the grid).
+uint16_t fireBackAt(int cy) {
+  return cy<41 ? rgb(max(0,8+cy/3),max(0,10+cy/4),max(0,26+cy/3)) : rgb(max(0,30-(cy-41)),max(0,20-(cy-41)/2),max(0,18-(cy-41)/2));
+}
 void fireInit() {
   memset(fireHeat,0,sizeof(fireHeat)); memset(fireLog,0,sizeof(fireLog));
   for(int cy=0;cy<FG;cy++) {
     fireSpan[cy][0]=FG; fireSpan[cy][1]=-1;
     for(int cx=0;cx<FG;cx++) {
       float px=FOX+cx*FCELL+2-CX, py=FOY+cy*FCELL+2-CY, r=sqrtf(px*px+py*py);
-      if(r<=101) { if(fireSpan[cy][0]==FG) fireSpan[cy][0]=cx; fireSpan[cy][1]=cx; }
-      // Night sky getting lighter toward the horizon, then dark ground.
-      fireBack[cy*FG+cx]= cy<41 ? rgb(8+cy/3,10+cy/4,26+cy/3) : rgb(30-(cy-41),20-(cy-41)/2,18-(cy-41)/2);
+      if(r<=104) { if(fireSpan[cy][0]==FG) fireSpan[cy][0]=cx; fireSpan[cy][1]=cx; }   // where stars may be
+      fireBack[cy*FG+cx]=fireBackAt(cy);
       float gx=(cx-25.5f)/19.0f, gy=(cy-43.0f)/7.0f, g=1.0f-sqrtf(gx*gx+gy*gy);
       fireGlowW[cy*FG+cx]= cy>=41 && g>0 ? (uint8_t)(min(1.0f,g*1.4f)*150) : 0;
     }
@@ -626,7 +633,8 @@ int starLight(const Star &st) {
   return a<edge ? a*255/edge : a>l-edge ? (l-a)*255/edge : 255;
 }
 uint16_t fireBaseCell(int cx,int cy,int flick) {
-  uint8_t lg=fireLog[cy*FG+cx];
+  bool grid=cx>=0 && cx<FG && cy>=0 && cy<FG;   // past the grid: only sky / ground (and weather)
+  uint8_t lg=grid ? fireLog[cy*FG+cx] : 0;
   if(lg) {   // logs in front of the flames, lit from above
     int lit=cy<41 ? 40 : 0;
     switch(lg) {
@@ -636,12 +644,12 @@ uint16_t fireBaseCell(int cx,int cy,int flick) {
       default: return rgb(150,96,52);
     }
   }
-  if(cy<FH) {
+  if(grid && cy<FH) {
     int h=fireHeat[cy*FG+cx];
     if(h>=5) { const uint8_t *c=FIRE_PAL[min(8,(h-5)*9/(FIRE_MAX-4))]; return rgb(c[0],c[1],c[2]); }
   }
   for(auto &sp:sparks) if(sp.life && (int)sp.x==cx && (int)sp.y==cy) return sp.hot&&sp.life>8 ? rgb(255,220,120) : rgb(240,120,40);
-  uint16_t b=fireWeatherSky(cx,cy,fireBack[cy*FG+cx]); uint8_t w=fireGlowW[cy*FG+cx];
+  uint16_t b=fireWeatherSky(cx,cy,grid ? fireBack[cy*FG+cx] : fireBackAt(cy)); uint8_t w=grid ? fireGlowW[cy*FG+cx] : 0;
   if(cy<32) for(auto &st:stars) if(st.x==cx && st.y==cy) {
     int r=(b>>11)<<3, g=((b>>5)&63)<<2, bl=(b&31)<<3;
     int light=starLight(st);
@@ -658,7 +666,7 @@ uint16_t fireBaseCell(int cx,int cy,int flick) {
 uint16_t fireCell(int cx,int cy,int flick) {
   uint16_t color=fireBaseCell(cx,cy,flick);
   if(!weatherActive) return color;
-  int overlay=weatherRain[cy*FG+cx];
+  int overlay=weatherRain[(cy+FE)*FV+cx+FE];
   if((weatherKind==3 || weatherKind==4) && overlay) {
     int r=(color>>11)<<3,g=((color>>5)&63)<<2,b=(color&31)<<3;
     return weatherKind==4 ? mix565(r,g,b,215,225,235,overlay) : mix565(r,g,b,110,145,180,overlay);
@@ -666,19 +674,32 @@ uint16_t fireCell(int cx,int cy,int flick) {
   return color;
 }
 
+// The whole screen, one row of cells (240 x 4 px = 1920 bytes) at a time. A running timer is
+// drawn into the same rows (r 113-119), so the fire never paints over it and it never flickers.
 void drawFire() {
   int flick=170+(int)(fireRand()%60);
-  uint16_t *row=(uint16_t*)photoBuf;   // one grid row: up to 52 cells x 4 x 4 px = 1664 bytes
-  for(int cy=0;cy<FG;cy++) {
-    int a=fireSpan[cy][0], b=fireSpan[cy][1];
-    if(b<a) continue;
-    int w=(b-a+1)*FCELL;
-    for(int cx=a;cx<=b;cx++) {
+  uint16_t *row=(uint16_t*)photoBuf;
+  const int W=FV*FCELL;
+  bool timer=cdState!=T_OFF;
+  for(int cy=-FE;cy<FG+FE;cy++) {
+    for(int cx=-FE;cx<FG+FE;cx++) {
       uint16_t c=fireCell(cx,cy,flick);
-      for(int k=0;k<FCELL;k++) row[(cx-a)*FCELL+k]=c;
+      for(int k=0;k<FCELL;k++) row[(cx+FE)*FCELL+k]=c;
     }
-    for(int k=1;k<FCELL;k++) memcpy(row+k*w,row,w*2);
-    tft.drawRGBBitmap(FOX+a*FCELL,FOY+cy*FCELL,row,w,FCELL);
+    for(int k=1;k<FCELL;k++) memcpy(row+k*W,row,W*2);
+    int y0=(cy+FE)*FCELL;
+    if(timer) for(int k=0;k<FCELL;k++) {
+      int dy=y0+k-CY;
+      if(abs(dy)>119) continue;
+      for(int x=0;x<W;x++) {
+        int dx=x-CX, d2=dx*dx+dy*dy;
+        if(d2<113*113 || d2>119*119) continue;
+        float a=atan2f((float)dx,(float)-dy)*RAD_TO_DEG; if(a<0) a+=360.0f;
+        uint16_t c=cdColor((int)(a/2)*2+1.0f);
+        if(c!=C_BLACK) row[k*W+x]=c;   // a blinking alarm shows the sky in its off moments
+      }
+    }
+    tft.drawRGBBitmap(0,y0,row,W,FCELL);
   }
 }
 void enterFire() {
@@ -690,7 +711,7 @@ void enterFire() {
 }
 void updateFire(uint32_t now) {
   if(now-lastFire>=FIRE_MS) { lastFire=now; uint32_t t=micros(); fireStep(); drawFire(); perfNote(perfFire,t); }
-  flushCountdown(OWNER_RING);         // the fire stays inside r 101, the timer uses the edge
+  cdDirty=false;                      // drawFire draws the timer into the scene
 }
 
 // ----- screen saver -----
@@ -1013,7 +1034,7 @@ bool screenAvailable(int s) { return s==1 || (s==2 && clockSynced) || (s==0 && s
 void composeFull(int s,Adafruit_GFX &g,uint32_t now) {
   g.fillScreen(C_BLACK);
   if(s==1) {
-    for(int cy=0;cy<FG;cy++) for(int cx=fireSpan[cy][0];cx<=fireSpan[cy][1];cx++)
+    for(int cy=-FE;cy<FG+FE;cy++) for(int cx=-FE;cx<FG+FE;cx++)
       g.fillRect(FOX+cx*FCELL,FOY+cy*FCELL,FCELL,FCELL,fireCell(cx,cy,200));
   } else if(s==2) {
     composeClock(g,0,0);
