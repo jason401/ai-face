@@ -132,6 +132,18 @@ final class SettingsStore: NSObject, ObservableObject {
     @Published var lightNight = false
     @Published var lightFrom = 0
     @Published var lightTo = 7
+    // Campfire weather. Draft date/hour are applied explicitly, not on each picker change.
+    @Published var weatherEnabled = true
+    @Published var weatherMode = "auto"
+    @Published var weatherDate = Date()
+    @Published var weatherHour = 20
+    @Published var weatherLocation: [String: Any] = [:]
+    @Published var weatherQuery = ""
+    @Published var weatherLocations: [[String: Any]] = []
+    @Published var weatherSearching = false
+    @Published var weatherNotice = ""
+    @Published var weatherDetail = ""
+    var weatherLoaded = false
     // Photo library
     @Published var library: [LibraryItem] = []
     @Published var thumbs: [String: NSImage] = [:]
@@ -222,6 +234,7 @@ final class SettingsStore: NSObject, ObservableObject {
 
     func start() {
         saverLoaded = false
+        weatherLoaded = false
         loginItem = LoginItem.enabled
         refresh()
         refreshAI()
@@ -242,6 +255,7 @@ final class SettingsStore: NSObject, ObservableObject {
     }
 
     func refresh() {
+        loadWeather()
         loadHistory()
         API.shared.getJSON("status") { [weak self] json in
             guard let self = self, let s = json as? [String: Any] else { return }

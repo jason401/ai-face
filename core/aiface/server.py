@@ -23,6 +23,7 @@ from .i18n import T
 from . import integrations
 from . import mail_access
 from . import updater
+from . import weather
 from . import library as photo_library
 from . import moods as face_modes
 from . import paths
@@ -239,7 +240,7 @@ def main():
                 return self.reply(200, data, kind)
             if self.path == '/view':   # for the menu bar face; no lock (a flash can hold it for minutes)
                 return self.reply(200, dict(device.view(), awake=awake.status(),
-                                            calendar_pending=calendar_access.pending(),
+                                            calendar_pending=calendar_access.pending(), weather=weather.scene(),
                                             update_available=updater.load_state().get('result') == 'available'))
             if self.path == '/status':   # for the settings window; no lock either
                 return self.reply(200, dict(device.status(), version=VERSION, revision=paths.running_revision(), awake=awake.status()))
@@ -329,6 +330,18 @@ def main():
                 return self.reply(200, {'text': awake.describe(), 'status': awake.status()})
             if self.path == '/mcp':
                 return self.reply(200, integrations.status())
+            if self.path == '/weather':
+                if self.headers.get('X-ESP-Token') != token:
+                    return self.reply(403, {'message': 'Invalid token'})
+                return self.reply(200, dict(weather.status(), board_supported=device.weather_supported))
+            if self.path.startswith('/weather/locations?'):
+                if self.headers.get('X-ESP-Token') != token:
+                    return self.reply(403, {'message': 'Invalid token'})
+                try:
+                    query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                    return self.reply(200, {'locations': weather.locations((query.get('q') or [''])[0])})
+                except (OSError, ValueError) as exc:
+                    return self.reply(400, {'message': str(exc)})
             if self.path == '/update':   # automatic updates, for the settings window
                 return self.reply(200, updater.status())
             if self.path == '/state':
@@ -376,6 +389,13 @@ def main():
                 except PermissionError as exc:
                     return self.reply(403, {'message': str(exc)})
                 except (ValueError, OSError) as exc:
+                    return self.reply(400, {'message': str(exc)})
+            if self.path == '/weather':
+                try:
+                    length = int(self.headers.get('Content-Length', 0))
+                    if not 0 < length <= 8192: raise ValueError('Invalid request')
+                    return self.reply(200, weather.save(json.loads(self.rfile.read(length))))
+                except (OSError, ValueError, TypeError) as exc:
                     return self.reply(400, {'message': str(exc)})
             if self.path == '/folders':
                 # The settings window or the menu adds / removes / pauses a shared folder.
@@ -534,6 +554,7 @@ def main():
     threading.Thread(target=watch_awake, args=(device, stop), daemon=True).start()
     threading.Thread(target=watch_board, args=(device, stop), daemon=True).start()
     threading.Thread(target=updater.watch, args=(device, stop), daemon=True).start()
+    threading.Thread(target=weather.watch, args=(device, stop), daemon=True).start()
     # The app stops the server with SIGTERM: run the cleanup below (keep awake off) then too.
     def terminated(*_):
         raise KeyboardInterrupt

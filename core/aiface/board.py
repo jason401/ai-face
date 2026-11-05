@@ -45,6 +45,8 @@ class Device:
         self.buffer = b''
         self.paused = False   # 'disconnect' until 'connect': no automatic reconnect
         self.flashing = False
+        self.weather_scene = {"active": False}
+        self.weather_supported = None
         self.touch = 0        # touch chip id reported by the board (0: no touch panel)
 
     def close(self):
@@ -202,6 +204,8 @@ class Device:
             self.exchange(*face_modes.light_command(face_modes.load_settings()['light']))
         except ValueError:
             self.touch = 0   # older firmware: no touch support, one clock design
+        self.weather_supported = None
+        self.set_weather(self.weather_scene)
         for mood in face_modes.idle_moods():
             reply = self.exchange(f"SUM:{mood['slot']}", 'OK SUM:')
             if reply != f'OK SUM:{face_modes.checksum(mood)}':
@@ -316,6 +320,18 @@ class Device:
                 raise ValueError(T('보드 펌웨어가 이전 버전이라 화면 밝기를 바꿀 수 없어요. 설정 → 보드에서 펌웨어를 업데이트해 주세요.',
                                    'The board firmware is too old for screen light settings. Update it in Settings → Board.'))
         self.message = T('화면 밝기 설정을 바꿨습니다.', 'Screen light changed.')
+
+    def set_weather(self, scene):
+        self.weather_scene = dict(scene)
+        if self.fd is None or self.weather_supported is False:
+            return
+        values = [int(bool(scene.get('active')))] + [int(scene.get(k, 0)) for k in
+                  ('kind', 'day', 'cloud', 'intensity', 'wind')]
+        try:
+            self.exchange('WEATHER:' + ':'.join(map(str, values)), 'OK WEATHER')
+            self.weather_supported = True
+        except ValueError:  # Old firmware still works; do not misreport its touch capability.
+            self.weather_supported = False
 
     def set_clock_style(self, style):
         command = face_modes.clock_style_command(style)   # validate first

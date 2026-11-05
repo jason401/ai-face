@@ -336,6 +336,12 @@ final class Campfire {
     private var heat = [Int](repeating: 0, count: Campfire.H * Campfire.G)
     private var log = [Int](repeating: 0, count: Campfire.G * Campfire.G)   // 0 none, 2 bark, 3 cut end
     private var rng: UInt32 = 0x9E37_79B9
+    private var weather: [String: Any] = [:]
+    private var weatherFrame = 0
+    func setWeather(_ value: [String: Any]) { weather = value }
+    private var weatherOn: Bool { weather["active"] as? Bool ?? false }
+    private func weatherValue(_ key: String) -> Double { (weather[key] as? NSNumber)?.doubleValue ?? 0 }
+
 
     init() {
         logLine(5, 17, 14, 14)
@@ -362,6 +368,7 @@ final class Campfire {
     }
 
     func step() {
+        weatherFrame = (weatherFrame + 1) % 100000
         let G = Campfire.G, H = Campfire.H, M = Campfire.MAXH
         for x in 0..<G {   // fuel row: hottest in the middle, flickering
             let d = abs(Double(x) - 9.5) / 4.2
@@ -376,7 +383,9 @@ final class Campfire {
             for x in 0..<G {
                 let p = heat[y * G + x]
                 let r = rand()
-                let nx = max(0, min(G - 1, x + Int(r % 3) - 1))
+                let wind = weatherOn ? weatherValue("wind") : 0
+                let bias = Int((r >> 16) % 100) < Int(abs(wind) * 0.25) ? (wind > 0 ? 1 : -1) : 0
+                let nx = max(0, min(G - 1, x + Int(r % 3) - 1 + bias))
                 let half = 1 + (y * 4) / H, off = abs(nx * 2 - 19) / 2
                 var cool = 1 + Int((r >> 3) & 1)
                 if off > half { cool += 1 + Int((r >> 5) & 1) }
@@ -396,7 +405,7 @@ final class Campfire {
         let G = Campfire.G, H = Campfire.H, M = Campfire.MAXH
         for cy in 0..<G {
             for cx in 0..<G {
-                let c: NSColor
+                var c: NSColor
                 let h = cy < H ? heat[cy * G + cx] : 0
                 if log[cy * G + cx] == 2 {
                     c = rgb(104, 58, 30)
@@ -412,8 +421,36 @@ final class Campfire {
                     let g = max(0.0, 1 - a * a - b * b) * 0.6
                     c = rgb(34 + (150 - 34) * g, 22 + (70 - 22) * g, 18 + (24 - 18) * g)
                 }
+                if weatherOn && log[cy * G + cx] == 0 && h < 5 && cy < 15 {
+                    let day = weatherValue("day") / 100
+                    let night = rgb(Double(10 + cy), Double(12 + cy / 2), Double(30 + cy))
+                    c = night.blended(withFraction: day, of: rgb(70, 115, 150)) ?? night
+                    let cloud = weatherValue("cloud")
+                    let shift = weatherFrame / 8
+                    let x = (cx + shift) % 25
+                    let inCloud = cloud > 5 && ((cy >= 3 && cy <= 5 && x < Int(3 + cloud / 10)) ||
+                                                  (cy >= 7 && cy <= 9 && (x + 12) % 25 < Int(3 + cloud / 10)))
+                    if inCloud || cloud > 75 {
+                        let alpha = inCloud ? 0.7 : (cloud - 60) / 100
+                        c = c.blended(withFraction: alpha, of: rgb(35 + day * 50, 40 + day * 50, 50 + day * 50)) ?? c
+                    }
+                    if weatherValue("kind") == 5 {
+                        c = c.blended(withFraction: 0.35 + Double(cy) / 60, of: rgb(90, 95, 105)) ?? c
+                    }
+                }
                 c.setFill()
                 NSBezierPath.fill(NSRect(x: Double(cx * 12), y: Double(cy * 12), width: 12.4, height: 12.4))
+            }
+        }
+        let kind = Int(weatherValue("kind"))
+        if weatherOn && (kind == 3 || kind == 4) {
+            let count = 3 + Int(weatherValue("intensity") / 15)
+            for i in 0..<count {
+                let travel = kind == 4 ? weatherFrame / 3 : weatherFrame
+                let x = (i * 7 + Int(Double(weatherFrame) * weatherValue("wind") / 250) + 100000) % G
+                let y = (i * 11 + travel) % G
+                (kind == 4 ? rgb(215, 225, 235) : rgb(110, 145, 180)).setFill()
+                NSBezierPath.fill(NSRect(x: x * 12, y: y * 12, width: 8, height: kind == 4 ? 8 : 15))
             }
         }
     }

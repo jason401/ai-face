@@ -72,3 +72,13 @@ Developed with assistance from Claude and ChatGPT/Codex for implementation, debu
 ## License
 
 Copyright © 2026 jason401. Project-owned material is available under the [MIT License](LICENSE), permitting use, modification and redistribution, including commercial use, with its required notices. External dependencies retain their own licenses; see [Third-party notices](THIRD_PARTY_NOTICES.md). Product names are trademarks of their owners; this is an unofficial project.
+
+## Weather-aware campfire
+
+The campfire can reflect local clear/partly cloudy/overcast/rain/snow/fog conditions, daylight and wind while keeping its original pixel-art fire. General → Campfire weather lets you choose a city, use automatic current weather, or preview a selected date and city-local hour. Future dates are limited to the available forecast horizon (up to 15 days ahead); older dates use historical reanalysis. The Apply button opens the campfire. Return to Automatic for current conditions.
+
+The Mac retrieves weather every 15 minutes and sends compact parameters to the board. Current conditions are model estimates, not direct local observations. A matching board firmware update is needed; older firmware remains usable with the original fire. Network/data failure retains the last valid selection for up to two hours, then restores the original scene. City selection is stored locally; the coordinates are sent to the weather service. No precise location permission, API key, microphone or camera is needed.
+
+Weather data: [Open-Meteo](https://open-meteo.com/), [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). City search uses Open-Meteo's [GeoNames-based geocoding](https://open-meteo.com/en/docs/geocoding-api). The free endpoint is for non-commercial use; commercial distribution requires reviewing the provider's terms.
+
+![Actual firmware weather previews](docs/images/campfire-weather.png)

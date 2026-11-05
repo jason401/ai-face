@@ -84,6 +84,7 @@ int active=CLOCK_SCREEN, savedActive=-99, uploadSlot=-1, received=0, target=0;
 const int CONT[11]={F_LEFT,F_RIGHT,F_X,F_Y,F_WIDTH,F_SMILE,F_OPEN,F_BROW,F_LIFT,F_TILT,F_SHAKE};
 enum { P_LEFT, P_RIGHT, P_X, P_Y, P_WIDTH, P_SMILE, P_OPEN, P_BROW, P_LIFT, P_TILT, P_SHAKE };
 struct Pose { float v[11]; float rgb[3]; int eyes; int fx; };
+struct WeatherDrop { float x,y; };
 struct Star { uint8_t x,y; uint16_t age,life; };   // campfire sky (types stay above the first function)
 Pose fromPose, pose;
 uint32_t frameStart=0, lastDraw=0;
@@ -462,6 +463,79 @@ Spark sparks[10];
 Star stars[12];
 uint32_t fireRng=0x9E3779B9u, lastFire=0;
 bool fireReady=false;
+// Weather uses the same 4-pixel cells and fire palette. Disabled = original campfire.
+bool weatherActive=false;
+int weatherKind=0;
+float weatherDay=0, weatherCloud=0, weatherIntensity=0, weatherWind=0;
+int weatherTarget[4]={0,0,0,0};
+WeatherDrop weatherDrops[28];
+uint8_t weatherRain[FG*FG];
+uint32_t weatherFrame=0, weatherRng=0xA341316Cu, weatherReceived=0;
+uint32_t weatherRand() { weatherRng^=weatherRng<<13; weatherRng^=weatherRng>>17; weatherRng^=weatherRng<<5; return weatherRng; }
+void setFireWeather(int enabled,int kind,int day,int cloud,int intensity,int wind) {
+  bool starting=!weatherActive && enabled;
+  weatherReceived=millis();
+  weatherActive=enabled; weatherKind=kind;
+  weatherTarget[0]=day; weatherTarget[1]=cloud; weatherTarget[2]=intensity; weatherTarget[3]=wind;
+  if(starting) {
+    weatherDay=day; weatherCloud=cloud; weatherIntensity=intensity; weatherWind=wind;
+    for(auto &d:weatherDrops) { d.x=weatherRand()%FG; d.y=weatherRand()%FG; }
+  }
+}
+void stepFireWeather() {
+  if(weatherActive && (uint32_t)(millis()-weatherReceived)>7200000u) weatherActive=false;
+  if(!weatherActive) return;
+  weatherFrame++;
+  weatherDay+=(weatherTarget[0]-weatherDay)*0.025f;
+  weatherCloud+=(weatherTarget[1]-weatherCloud)*0.025f;
+  weatherIntensity+=(weatherTarget[2]-weatherIntensity)*0.025f;
+  weatherWind+=(weatherTarget[3]-weatherWind)*0.025f;
+  memset(weatherRain,0,sizeof(weatherRain));
+  if(weatherKind!=3 && weatherKind!=4) return;
+  int count=constrain(5+(int)(weatherIntensity*0.23f),5,28);
+  for(int i=0;i<count;i++) {
+    auto &d=weatherDrops[i];
+    d.x+=weatherWind*0.012f+(weatherKind==4 ? ((int)(weatherRand()%3)-1)*0.12f : 0);
+    d.y+=weatherKind==4 ? 0.22f+(i%3)*0.09f : 1.7f+weatherIntensity*0.015f;
+    if(d.y>=FG) { d.y=0; d.x=weatherRand()%FG; }
+    if(d.x<0) d.x+=FG; if(d.x>=FG) d.x-=FG;
+    int x=(int)d.x,y=(int)d.y;
+    weatherRain[y*FG+x]=weatherKind==4 ? 190 : 105;
+    if(weatherKind==3 && y>0) weatherRain[(y-1)*FG+x]=65;
+  }
+}
+// Three broad, moving pixel clouds; coverage changes their width and opacity.
+int fireCloudAt(int x,int y) {
+  if(!weatherActive || y>27 || weatherCloud<2) return 0;
+  int shift=((int)(weatherFrame/14)*(weatherWind<0?-1:1))%76;
+  int width=5+(int)(weatherCloud*0.19f), mask=0;
+  for(int i=0;i<3;i++) {
+    int center=((i*25+shift+152)%76)-12;
+    int dx=x-center, dy=y-(6+i*6);
+    if(dx*dx*25+dy*dy*width*width < width*width*25) mask=190;
+  }
+  // Overcast gets a continuous veil as well as distinct cloud silhouettes.
+  return max(mask,(int)max(0.0f,(weatherCloud-60)*4));
+}
+uint16_t fireWeatherSky(int x,int y,uint16_t original) {
+  if(!weatherActive || y>=41) return original;
+  int r=(original>>11)<<3,g=((original>>5)&63)<<2,b=(original&31)<<3;
+  uint16_t sky=mix565(r,g,b,70+y/2,115+y/2,150+y/3,(int)(weatherDay*2.3f));
+  int cloud=fireCloudAt(x,y);
+  if(cloud) {
+    r=(sky>>11)<<3;g=((sky>>5)&63)<<2;b=(sky&31)<<3;
+    int daylight=(int)weatherDay;
+    sky=mix565(r,g,b,27+daylight/2,30+daylight/2,40+daylight/2,cloud);
+  }
+  if(weatherKind==5) {
+    r=(sky>>11)<<3;g=((sky>>5)&63)<<2;b=(sky&31)<<3;
+    int drift=((x+(int)(weatherFrame/8))%26)-13;
+    int haze=65+y*2+(abs(drift)<8?20:0);
+    sky=mix565(r,g,b,78,85,92,constrain(haze,0,175));
+  }
+  return sky;
+}
+
 // Dark red -> red -> orange -> yellow -> pale yellow -> white.
 const uint8_t FIRE_PAL[9][3]={{110,16,16},{160,28,12},{206,52,12},{238,90,16},{250,130,24},
                               {255,168,40},{255,206,70},{255,236,140},{255,250,214}};
@@ -511,7 +585,8 @@ void fireStep() {
   for(int y=1;y<FH;y++) for(int x=0;x<FG;x++) {
     int p=fireHeat[y*FG+x];
     uint32_t r=fireRand();
-    int nx=constrain(x+(int)(r%3)-1,0,FG-1);
+    int bias=weatherActive && (int)(r>>16)%100<(int)fabsf(weatherWind)*0.35f ? (weatherWind>0?1:-1) : 0;
+    int nx=constrain(x+(int)(r%3)-1+bias,0,FG-1);
     int half=2+(y*8)/FH, off=abs(nx*2-51)/2;
     int cool=(r>>3)&1;
     if(off>half) cool+=1+((r>>5)&1);
@@ -522,10 +597,11 @@ void fireStep() {
   }
   // Sparks: born at the fire, float up with a wobble, fade.
   for(auto &sp:sparks) {
-    if(sp.life) { sp.y-=0.55f; sp.x+=((int)(fireRand()%3)-1)*0.4f; sp.life--; continue; }
+    if(sp.life) { sp.y-=0.55f; sp.x+=((int)(fireRand()%3)-1)*0.4f+(weatherActive?weatherWind*0.008f:0); sp.life--; continue; }
     if(fireRand()%24==0) { sp.x=19+fireRand()%14; sp.y=24+fireRand()%8; sp.life=12+fireRand()%18; sp.hot=fireRand()&1; }
   }
   for(auto &st:stars) if(++st.age>=st.life) placeStar(st);
+  stepFireWeather();
 }
 // A new place in the sky: inside the circle, above the flames (clear of their middle), not on
 // another star; it then lives 3-10 s (at ~14 fire frames a second).
@@ -545,7 +621,7 @@ int starLight(const Star &st) {
   int a=st.age, l=st.life, edge=l/4;
   return a<edge ? a*255/edge : a>l-edge ? (l-a)*255/edge : 255;
 }
-uint16_t fireCell(int cx,int cy,int flick) {
+uint16_t fireBaseCell(int cx,int cy,int flick) {
   uint8_t lg=fireLog[cy*FG+cx];
   if(lg) {   // logs in front of the flames, lit from above
     int lit=cy<41 ? 40 : 0;
@@ -561,15 +637,31 @@ uint16_t fireCell(int cx,int cy,int flick) {
     if(h>=5) { const uint8_t *c=FIRE_PAL[min(8,(h-5)*9/(FIRE_MAX-4))]; return rgb(c[0],c[1],c[2]); }
   }
   for(auto &sp:sparks) if(sp.life && (int)sp.x==cx && (int)sp.y==cy) return sp.hot&&sp.life>8 ? rgb(255,220,120) : rgb(240,120,40);
-  uint16_t b=fireBack[cy*FG+cx]; uint8_t w=fireGlowW[cy*FG+cx];
+  uint16_t b=fireWeatherSky(cx,cy,fireBack[cy*FG+cx]); uint8_t w=fireGlowW[cy*FG+cx];
   if(cy<32) for(auto &st:stars) if(st.x==cx && st.y==cy) {
     int r=(b>>11)<<3, g=((b>>5)&63)<<2, bl=(b&31)<<3;
-    return mix565(r,g,bl,190,200,240,starLight(st));
+    int light=starLight(st);
+    if(weatherActive) {
+      light=(int)(light*(100-weatherDay)/100)*(255-fireCloudAt(cx,cy))/255;
+      if(weatherKind==5 || weatherCloud>95) light=0;
+    }
+    return mix565(r,g,bl,190,200,240,light);
   }
   if(!w) return b;
   int r=(b>>11)<<3, g=((b>>5)&63)<<2, bl=(b&31)<<3;
   return mix565(r,g,bl,150,70,24,(w*flick)>>8);
 }
+uint16_t fireCell(int cx,int cy,int flick) {
+  uint16_t color=fireBaseCell(cx,cy,flick);
+  if(!weatherActive) return color;
+  int overlay=weatherRain[cy*FG+cx];
+  if((weatherKind==3 || weatherKind==4) && overlay) {
+    int r=(color>>11)<<3,g=((color>>5)&63)<<2,b=(color&31)<<3;
+    return weatherKind==4 ? mix565(r,g,b,215,225,235,overlay) : mix565(r,g,b,110,145,180,overlay);
+  }
+  return color;
+}
+
 void drawFire() {
   int flick=170+(int)(fireRand()%60);
   uint16_t *row=(uint16_t*)photoBuf;   // one grid row: up to 52 cells x 4 x 4 px = 1664 bytes
@@ -1036,6 +1128,12 @@ void updateTouch(uint32_t now) {
 
 void command(char *line) {
   if(!strcmp(line,"HELLO")) { Serial.println("OK FACE8"); return; }
+  int we=0,wk=0,wd=0,wc=0,wi=0,ww=0,wn=0;
+  if(sscanf(line,"WEATHER:%d:%d:%d:%d:%d:%d%n",&we,&wk,&wd,&wc,&wi,&ww,&wn)==6 && !line[wn]
+     && we>=0 && we<=1 && wk>=0 && wk<=5 && wd>=0 && wd<=100 && wc>=0 && wc<=100
+     && wi>=0 && wi<=100 && ww>=-100 && ww<=100) {
+    setFireWeather(we,wk,wd,wc,wi,ww); Serial.println("OK WEATHER"); return;
+  }
   if(!strcmp(line,"TOUCH")) { Serial.printf("OK TOUCH:%d\r\n",touchChip); return; }
   int style=0, days=0, used=0;
   if(sscanf(line,"CLOCKSTYLE:%d%n",&style,&used)==1 && !line[used] && style>=0 && style<CLOCK_STYLES) {

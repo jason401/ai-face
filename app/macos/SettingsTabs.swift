@@ -50,6 +50,7 @@ struct GeneralTab: View {
                 SettingsNote(text: store.saverHint, lines: 3)
                     .help(store.saverHint + " " + L("A new face from an AI or the end of a timer brings the face back."))
             }
+            CampfireWeatherCard(store: store)
             SettingsCard(title: L("App")) {
                 SettingsRow(title: L("Open at login")) {
                     SettingsSwitch(title: L("Open at login"), isOn: Binding(get: { store.loginItem }, set: { store.setLogin($0) }))

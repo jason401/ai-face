@@ -10,6 +10,8 @@ import SwiftUI
         try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
         let store = SettingsStore()
         store.version = "2.1.0 (3613ce9)"
+        store.weatherLocation = ["name": "Palo Alto / Stanford", "timezone": "America/Los_Angeles"]
+        store.weatherDetail = L("Current model estimate") + " · " + L("Rain") + " · 2026-11-04T18:00:00-08:00"
         store.loginItem = true
         store.awakeSupported = true
         store.awakeReady = true
@@ -58,8 +60,15 @@ import SwiftUI
             store.applyHistory(periods[kind] ?? [:])
             return AnyView(HistoryTab(store: store))
         }
+        let weatherStore = SettingsStore()
+        weatherStore.weatherLocation = store.weatherLocation
+        weatherStore.weatherMode = "date"
+        weatherStore.weatherHour = 20
+        weatherStore.weatherDate = SettingsStore.weatherDateFormat.date(from: "2026-10-20")!
+        weatherStore.weatherDetail = L("Historical reanalysis") + " · " + L("Rain") + " · 2026-10-20T20:00:00-07:00"
         let views: [(String, () -> AnyView)] = [
-            ("1general", { AnyView(GeneralTab(store: store)) }), ("2ai", { AnyView(AITab(store: store)) }),
+            ("1general", { AnyView(GeneralTab(store: store)) }),
+            ("1weather-date", { AnyView(SettingsPage { CampfireWeatherCard(store: weatherStore) }) }), ("2ai", { AnyView(AITab(store: store)) }),
             ("2ai-shelf", { AnyView(FolderShelfView(store: store, shelf: FolderShelf(store: store)).background(Color(nsColor: .windowBackgroundColor))) }), ("2ai-folders", { AnyView(FolderList(store: store).background(Color(nsColor: .windowBackgroundColor))) }), ("2ai-calendars", { AnyView(CalendarList(store: store).background(Color(nsColor: .windowBackgroundColor))) }), ("2ai-changes", { AnyView(CalendarChanges(store: store).background(Color(nsColor: .windowBackgroundColor))) }),
             ("2ai-mail", { AnyView(MailAccountList(store: store).background(Color(nsColor: .windowBackgroundColor))) }),
             ("3board", { AnyView(BoardTab(store: store)) }),

@@ -600,6 +600,8 @@ def load_settings():
         out['mail']=data['mail']   # which AIs may read mail (mail_access.py)
     if isinstance(data.get('folders'),dict):
         out['folders']=data['folders']   # shared folders and which AIs may read them (folder_access.py)
+    if isinstance(data.get('weather'),dict):
+        out['weather']=data['weather']
     if isinstance(data.get('auto_update'),bool):
         out['auto_update']=data['auto_update']   # automatic updates from GitHub (updater.py)
     return out

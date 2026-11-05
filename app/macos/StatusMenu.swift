@@ -242,6 +242,7 @@ final class StatusController: NSObject, NSMenuDelegate {
     }
 
     func apply(_ v: [String: Any]) {
+        fire.setWeather((v["weather"] as? [String: Any]) ?? [:])
         let kind = (v["kind"] as? String) ?? "face"
         if kind == "fire" && view.kind != "fire" { fire.warmUp() }   // flames already up
         view.kind = kind

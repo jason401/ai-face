@@ -316,3 +316,35 @@
 "The screen goes dark while the sleeping face shows (screen saver)." = "대기 화면이 잠든 얼굴일 때 화면을 꺼요.";
 "A touch lights a dark screen for 30 s; a timer alarm lights it too." = "꺼져 있어도 터치하면 30초 켜지고, 타이머 알람이 울리면 켜져요.";
 "Needs the BLK wire on D0. The night hours use the board's clock, set by the Mac." = "BLK 선이 D0에 연결돼 있어야 해요. 밤 시간은 맥이 맞춰 준 보드 시계를 따라요.";
+
+"Campfire weather" = "모닥불 날씨";
+"Weather" = "날씨";
+"Use local weather" = "현지 날씨 반영";
+"Current model estimate" = "현재 날씨 추정";
+"Forecast" = "예보";
+"Recent model data" = "최근 날씨 자료";
+"Historical reanalysis" = "과거 날씨 재분석";
+"Clear" = "맑음";
+"Partly cloudy" = "부분 흐림";
+"Overcast" = "흐림";
+"Rain" = "비";
+"Snow" = "눈";
+"Fog" = "안개";
+"Loading weather…" = "날씨 읽는 중…";
+"Showing the original campfire until weather is available." = "날씨 자료가 없으면 기존 모닥불을 표시해요.";
+"Update board firmware to show weather on the display." = "디스플레이에 날씨를 표시하려면 보드 펌웨어를 업데이트해 주세요.";
+"Could not save weather settings." = "날씨 설정을 저장하지 못했어요.";
+"Enter at least two characters." = "두 글자 이상 입력해 주세요.";
+"Location search failed. Try again." = "지역 검색에 실패했어요. 다시 시도해 주세요.";
+"No matching city found." = "일치하는 도시가 없어요.";
+"City or postal code" = "도시 또는 우편번호";
+"Show weather" = "표시 방식";
+"Automatic" = "자동";
+"Selected date" = "지정 날짜";
+"Date" = "날짜";
+"Local hour" = "현지 시각";
+"Show this time" = "적용";
+"Time at the selected city. Past dates use model history; future dates use forecasts up to 15 days ahead." = "선택한 도시의 시각이에요. 과거는 날씨 자료, 미래는 최대 15일 뒤 예보를 표시해요.";
+
+"Search" = "검색";
+"Weather effects off." = "날씨 반영이 꺼져 있어요.";

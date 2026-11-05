@@ -254,6 +254,9 @@ class EndToEndTests(unittest.TestCase):
             replies = [json.loads(line) for line in off.stdout.splitlines()]
             self.assertEqual(replies[1]['result']['content'][0]['text'], 'app_not_running')
 
+            weather_settings = Path(home) / 'Library/Application Support/AI Face/settings.json'
+            weather_settings.parent.mkdir(parents=True, exist_ok=True)
+            weather_settings.write_text(json.dumps({'weather': {'enabled': False}}))
             app = subprocess.Popen([sys.executable, str(ROOT / 'core' / 'run_server.py')], env=env,
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             try:
