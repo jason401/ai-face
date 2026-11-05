@@ -404,17 +404,13 @@ struct BoardTab: View {
                             .padding(8)
                     }
                 }
-                .onDrop(of: [UTType.fileURL], isTargeted: $store.dropping) { providers in
-                    var urls: [URL] = []
-                    let group = DispatchGroup()
-                    for provider in providers {
-                        group.enter()
-                        _ = provider.loadObject(ofClass: URL.self) { url, _ in
-                            if let url = url { DispatchQueue.main.async { urls.append(url) } }
-                            group.leave()
-                        }
+                // Files from Finder, and pictures from the Photos app or a screenshot thumbnail.
+                .onDrop(of: [UTType.fileURL, UTType.image, UTType.item], isTargeted: $store.dropping) { providers in
+                    store.notice = L("Adding to the library…")
+                    PictureDrop.receive(providers) { urls, folder in
+                        store.addPictures(urls)   // reads the files right away
+                        if let folder = folder { try? FileManager.default.removeItem(at: folder) }
                     }
-                    group.notify(queue: .main) { store.addPictures(urls) }
                     return true
                 }
                 SettingsNote(text: store.notice.isEmpty ? L("Click a photo to show it on the board. Right-click to delete.") : store.notice, lines: 2)
