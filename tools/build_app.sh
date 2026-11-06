@@ -1,6 +1,6 @@
 #!/bin/zsh
 # Stage a complete signed bundle (AI Face.update.app) without touching the running app.
-# No option: also install it, but only when AI Face is not installed yet (first installation).
+# No option: also install it, but only as a first installation (tools/first_install.py).
 set -eu
 cd "${0:A:h}/.."
 MODE="${1:-}"
@@ -14,7 +14,7 @@ esac
 xcode-select -p >/dev/null
 IDENTITY="AI Face Local Signing"
 security find-certificate -c "$IDENTITY" >/dev/null 2>&1 || {
-  echo "Missing existing AI Face Local Signing identity; refusing ad-hoc signing." >&2; exit 1
+  echo "Missing AI Face Local Signing identity; refusing ad-hoc signing. Run: zsh tools/setup_signing.sh" >&2; exit 1
 }
 STAGING="$(mktemp -d "$PWD/.aiface-build-XXXXXX")"
 trap 'rm -rf "$STAGING"' EXIT
@@ -58,7 +58,7 @@ cat > "$CANDIDATE/Contents/Info.plist" <<'PLIST'
 <key>CFBundleDisplayName</key><string>AI Face</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleVersion</key><string>1.0</string>
-<key>CFBundleShortVersionString</key><string>2.1.0</string>
+<key>CFBundleShortVersionString</key><string>2.2.0</string>
 <key>LSMinimumSystemVersion</key><string>13.0</string>
 <key>LSUIElement</key><true/>
 <key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>
@@ -81,10 +81,7 @@ echo "Staged $APP ($REVISION)"
 if [ -z "$MODE" ]; then
   # Like AI Illuminati: an installed app changes only through its stable updates. A plain
   # build installs only on a Mac without AI Face in /Applications (first installation).
-  if [ -d "/Applications/AI Face.app" ]; then
-    echo "AI Face is already installed and was not changed. It installs new versions from the"
-    echo "stable branch by itself: git push origin main:stable, then Settings → General → Check now."
-    exit 0
-  fi
-  exec /usr/bin/python3 tools/deploy_app.py
+  # An AI Face signed on another Mac (the old ready-made download) is replaced; one signed with
+  # this Mac's identity is left alone (tools/first_install.py).
+  exec /usr/bin/python3 tools/first_install.py
 fi

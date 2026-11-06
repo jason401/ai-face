@@ -20,26 +20,35 @@
 
 ## Download and install
 
-1. Open the official [Releases page](https://github.com/jason401/ai-face/releases). Download **AI-Face-2.1.0-macOS-universal.zip**. This is the only download needed to install the app; **SHA256SUMS.txt** is optional and is used only to check file integrity. If no release is listed yet, a ready-to-run download is not yet available; GitHub's source ZIP is not an installer.
-2. Requires **macOS 13+** and **Xcode Command Line Tools**, which supply the external `/usr/bin/python3` runtime. If missing, run `xcode-select --install` and complete Apple's installation. A paid Apple Developer membership is not required.
-3. Extract the ZIP and move **AI Face.app** into **Applications**. The app is Universal 2 (Apple silicon + Intel); architecture inclusion is verified during packaging, but execution on every hardware/OS combination is not guaranteed.
-4. Open AI Face. In **Settings → AI**, connect Claude desktop, Codex and/or Claude Code, then fully quit and reopen that AI app. The conversation must expose the registered local MCP tools; this does not connect mobile/web chats or all chat modes automatically.
+1. Download **[AI-Face-2.2.0-source.zip](https://github.com/jason401/ai-face/releases/download/v2.2.0/AI-Face-2.2.0-source.zip)** from the official [Releases page](https://github.com/jason401/ai-face/releases). It is the only download needed; `SHA256SUMS.txt` is an optional integrity check.
+2. Requires **macOS 13+**, **Xcode Command Line Tools** (Swift compiler, Git and the `/usr/bin/python3` runtime) and an internet connection. If missing, run `xcode-select --install` and finish Apple's installation. A paid Apple Developer membership is not required.
+3. Extract the ZIP and double-click **`Install AI Face.command`**. It downloads the official `v2.2.0` tag, creates a local code-signing identity on this Mac (or reuses an existing one), builds AI Face and puts it in **Applications**. Approve macOS prompts yourself; the script never asks for a password. The first build takes a few minutes.
+4. AI Face appears in the menu bar. In **Settings → AI**, connect Claude desktop, Codex, Claude Code and/or AI Illuminati. Quit and reopen Claude desktop or Codex after connecting. The conversation must expose the registered local MCP tools; this does not connect mobile/web chats or all chat modes automatically.
 
-No hardware, signing private key or source checkout is required to run the downloaded app. The face changes while AI Face is running. Full instructions and uninstall steps: [Installation guide](docs/INSTALL_RELEASE.md).
+**This is a source installation package**, like AI Illuminati's, not a ready-to-run app. Building on your Mac with your Mac's own signing identity is what lets the app update itself later. No maintainer signing key or personal data is distributed. Full instructions and uninstall steps: [Installation guide](docs/INSTALL_RELEASE.md).
 
-Optional integrity check: download `SHA256SUMS.txt` and compare it with `shasum -a 256 <downloaded-zip>`. This is not required for installation and does not certify that an app is safe.
+**Coming from the ready-made 2.1.0 download?** Run the installer once. It quits that app, moves it to the Trash and installs your own build; settings, history and photos stay. macOS may ask again for Calendar or Mail access, because the app's signature changed.
 
-### macOS security warning
+Optional integrity check: compare `shasum -a 256 <downloaded-zip>` with `SHA256SUMS.txt`. This does not certify that the software is safe.
 
-The app uses a local signature, **not Apple Developer ID signing or notarization**. Apple has not verified this release. After confirming the download came from the official release page, try opening the app once. If blocked as an unidentified developer, use **System Settings → Privacy & Security → Open Anyway** for this specific trusted app and confirm. [Apple's guidance](https://support.apple.com/en-us/102445).
+### macOS security
 
-Do not disable Gatekeeper globally, remove quarantine recursively, or bypass malware/computer-damage warnings. Stop if the checksum does not match. An individual Gatekeeper exception does not install a missing Python runtime.
+The app uses a local signature, **not Apple Developer ID signing or notarization**; Apple has not verified it. Only run the installer from the official release page. If macOS blocks the `.command` file as from an unidentified developer, use **System Settings → Privacy & Security → Open Anyway** for this file after deciding you trust it. Do not disable Gatekeeper or SIP, and do not remove quarantine attributes in bulk. [Apple's guidance](https://support.apple.com/en-us/102445).
 
 ### Updates
 
-Downloaded-app users should get new versions from [GitHub Releases](https://github.com/jason401/ai-face/releases), quit AI Face and replace the app in Applications. Settings and history remain in your local Application Support folder.
+The app checks the public `stable` branch at startup and every three hours (Settings → General). When a new version is found, it shows **Update now**; it installs only after you click it: it runs the tests, builds on your Mac with your signing identity and swaps the app safely. Settings and history stay in `~/Library/Application Support/AI Face/`.
 
-The current in-app updater checks the `stable` source branch at startup and every three hours. It builds an update only after you click Update now, and requires an existing local signing identity, Python and Command Line Tools. It is for existing source-build installations, **not a release-ZIP updater**. Other users can turn off source update checks and use manual release downloads.
+### Install directly from Git
+
+```sh
+git clone --branch stable --single-branch https://github.com/jason401/ai-face.git
+cd ai-face
+zsh tools/setup_signing.sh
+zsh tools/build_app.sh
+```
+
+Signing setup creates a local code-signing certificate and private key on your Mac. Never share the private key or upload it.
 
 ### Optional LCD
 
@@ -54,16 +63,16 @@ Use Seeed XIAO ESP32S3 and a GC9A01 round SPI LCD (optionally with a CST816 touc
 
 ## Development
 
-The Swift app uses system frameworks; Python runtime code uses the standard library. Build prerequisites include an existing **AI Face Local Signing** identity in the developer's keychain. Never share its private key. The build stops if that identity is absent; there is no ad-hoc fallback.
+The Swift app uses system frameworks; Python runtime code uses the standard library. Builds need an **AI Face Local Signing** identity in the login keychain (`zsh tools/setup_signing.sh` creates one, or reuses an existing one). Never share its private key. The build stops if that identity is absent; there is no ad-hoc fallback.
 
 ```sh
 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests
 bash tools/firmware_sim/run.sh
 zsh tools/build_app.sh --stage       # stage only; installed app is untouched
-zsh tools/package_release.sh        # stage a Universal 2 release ZIP and checksums
+zsh tools/package_release.sh v2.2.0 # source installation ZIP of a tag, with checksums
 ```
 
-A normal source build installs only when `/Applications/AI Face.app` is absent. The app's source updater uses a separate checkout; it never modifies this developer folder. See [release maintenance](docs/RELEASING.md) for packaging and verification.
+A normal source build installs only as a first installation (no AI Face in Applications, or one signed on another Mac); an app signed with this Mac's identity changes only through its own updates. The app's source updater uses a separate checkout; it never modifies this developer folder. See [release maintenance](docs/RELEASING.md) for packaging and verification.
 
 ## AI-assisted development
 

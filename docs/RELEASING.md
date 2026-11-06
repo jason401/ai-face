@@ -1,19 +1,19 @@
 # Release maintenance
 
-Use `tools/package_release.sh` to stage a Universal 2 app ZIP and SHA256SUMS.txt in ignored `release-artifacts/`. It builds both app executables for arm64 and x86_64, combines them with lipo, signs with the existing AI Face Local Signing identity and verifies the bundle. It does not install or launch the result. Signing identity creation or private-key distribution is not part of packaging.
+Releases are **source installation packages**, like AI Illuminati's: the ZIP holds the tagged source and `Install AI Face.command`, which clones that tag, creates or reuses the user's own **AI Face Local Signing** identity (`tools/setup_signing.sh`), prepares the app's private stable checkout (`tools/prepare_update_source.py`), builds and installs (`tools/first_install.py`). Because each Mac signs with its own identity, the in-app updater (stable branch, Update now) works on every installation. No signing key is ever distributed.
 
-Before publishing:
+Steps:
 
-1. Review a clean source commit; run unit/regression tests and the firmware simulator.
-2. Build from that commit. Verify both executables' architectures and the deep/strict signature, extract a fresh archive, and compare its SHA-256. Scan the final app for personal paths and credentials. Include LICENSE, THIRD_PARTY_NOTICES.md and installation instructions.
-3. Exercise installer transactions with disposable signed fixtures. Distinguish fixture checks, current-Mac validation and actual fresh-Mac/hardware testing in release notes. Do not claim a fresh Intel Mac test when only cross-compilation was performed.
-4. Tag the actual build commit and prepare a draft release. Keep existing releases and assets. Only publish after the authorized release review.
-5. Attach the Universal ZIP, SHA256SUMS.txt and readable installation instructions. Mark signing as local / not Apple notarized. State Command Line Tools / external Python prerequisites.
+1. Set the version in `tools/build_app.sh` (`CFBundleShortVersionString`) and `RELEASE_TAG` in `Install AI Face.command`; update README download links.
+2. Run the unit tests and the firmware simulator on a clean commit; push `main` (and `stable` when it is the shipped version).
+3. Tag that commit (`git tag vX.Y.Z && git push origin vX.Y.Z`).
+4. `zsh tools/package_release.sh vX.Y.Z` writes `release-artifacts/AI-Face-X.Y.Z-source.zip` (git archive of the tag: no `.git`, ignored or locally excluded files) and `SHA256SUMS.txt`, after checking the tag's installer and version and scanning for secrets.
+5. Publish the release with those two files. Mark it as a source installation; state that signing is local, not Apple notarized, and what was actually tested (fixture tests vs a real fresh Mac).
 
-Downloaded apps use manual GitHub Release downloads for updates. The source-based in-app updater is for development installations with an existing local signing identity and follows stable, not release assets. Do not silently change this contract.
+`tools/first_install.py`: no app → install; an app signed by another identity (the old 2.1.0 download) → quit, move to the Trash, install; an app signed with this Mac's identity → left alone (it changes only through its own updates).
 
 After an authorized Git privacy-history rewrite, existing developer and updater clones cannot simply pull the new history. Back up local work, verify the rewritten remote, and align those clones deliberately. An already-installed app may still reference an old source commit; preserve a local-only ancestry bridge when migrating its source updater, or migrate through the signed transactional installer. Never push the original private history back to the public remote.
 
-Only the app, bundled project sources/firmware and required notices belong in the ZIP. Never package `.git`, personal support data, photos, logs, signing private keys, local privacy backups or development memos. Optional external firmware libraries/core are not bundled. A future compiled firmware release needs its own exact-version SDK/license inventory.
+Only tracked project files belong in the ZIP. Never package `.git`, personal support data, photos, logs, signing private keys, local privacy backups or development memos. Optional external firmware libraries/core are not bundled. A future compiled firmware release needs its own exact-version SDK/license inventory.
 
 The packaging script does not install Python, enable Calendar/Mail/keep-awake, flash firmware, or alter login items. Those remain optional user-controlled features.

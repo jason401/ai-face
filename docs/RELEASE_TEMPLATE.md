@@ -9,17 +9,19 @@ Free, open-source macOS menu bar face for AI conversations. Optional ESP32 round
 - Supported macOS: <tested minimum and versions>
 - Architecture: <arm64 and/or x86_64 actually tested>
 - Source commit / tag: <full SHA / tag>
-- App archive: <actual uploaded filename and link>
+- Source installation ZIP: <AI-Face-X.Y.Z-source.zip link>
 - Checksums: <uploaded SHA256SUMS.txt link>
-- External prerequisites: <Python, Command Line Tools and signing requirements actually verified>
-- Signing / notarization: <actual state; do not claim Apple verification for local signing>
+- External prerequisites: macOS 13+, Xcode Command Line Tools (Swift, Git, /usr/bin/python3), internet
+- Signing / notarization: built and signed on each user's Mac with its own local identity; not Apple notarized
 
 ## Install
 
-1. Download the app ZIP matching your Mac. Only the ZIP is needed to install; SHA256SUMS.txt is an optional integrity check.
-2. Extract the archive and move AI Face.app into Applications, following any tested prerequisites listed above.
-3. If a verified, trusted download is blocked as an unidentified developer, try opening it once, then use System Settings → Privacy & Security → Open Anyway. Do not disable Gatekeeper or bypass a malware/damage warning. [Apple guidance](https://support.apple.com/en-us/102445).
-4. Open AI Face, connect the desired local AI app in Settings → AI, and quit/reopen that AI app.
+1. Download the source ZIP (the only download needed; SHA256SUMS.txt is an optional integrity check) and extract it.
+2. Double-click **Install AI Face.command**. It downloads this tag from GitHub, creates or reuses this Mac's AI Face Local Signing identity, builds AI Face and puts it in Applications. Approve macOS prompts yourself; it never asks for a password.
+3. If macOS blocks the file and you trust this official download, use System Settings → Privacy & Security → Open Anyway. Do not disable Gatekeeper. [Apple guidance](https://support.apple.com/en-us/102445).
+4. Connect your AI app in Settings → AI. Later versions arrive in the app: Update now.
+
+An app from an earlier ready-made download is moved to the Trash and replaced; settings and history stay.
 
 ## Changes and known limitations
 
