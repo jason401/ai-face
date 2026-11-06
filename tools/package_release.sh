@@ -9,9 +9,9 @@ OUT="${2:-$PWD/release-artifacts}"
 [[ "$TAG" == v<->.<->.<-> ]] || { echo "Tag must look like v2.2.0" >&2; exit 2; }
 git rev-parse -q --verify "refs/tags/$TAG" >/dev/null || { echo "No tag $TAG" >&2; exit 2; }
 VERSION="${TAG#v}"
-git show "$TAG:Install AI Face.command" | grep -qx "RELEASE_TAG='$TAG'" \
+git show "${TAG}:Install AI Face.command" | grep -qx "RELEASE_TAG='$TAG'" \
   || { echo "Install AI Face.command RELEASE_TAG does not match $TAG" >&2; exit 2; }
-git show "$TAG:tools/build_app.sh" | grep -q "<string>$VERSION</string>" \
+git show "${TAG}:tools/build_app.sh" | grep -q "<string>$VERSION</string>" \
   || { echo "build_app.sh version does not match $TAG" >&2; exit 2; }
 mkdir -p "$OUT"
 NAME="AI-Face-$VERSION-source.zip"
