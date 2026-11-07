@@ -15,6 +15,7 @@ final class ShelfPanel: NSPanel {
 final class FolderShelf: NSObject {
     static let hoverKey = "folderShelfOnHover"
     static var showOnHover: Bool {
+        if API.preview { return true }
         return UserDefaults.standard.object(forKey: hoverKey) as? Bool ?? true
     }
 

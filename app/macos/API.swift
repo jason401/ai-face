@@ -12,13 +12,14 @@ let APP_LOCALE = Locale(identifier: APP_LANGUAGE)
 
 final class API {
     static let shared = API()
+    static var preview: Bool { ProcessInfo.processInfo.environment["AIFACE_PREVIEW"] == "1" }
     var base: URL?          // http://127.0.0.1:<port>/
     var token = ""          // needed for POST
 
-    var ready: Bool { return base != nil && !token.isEmpty }
+    var ready: Bool { return !Self.preview && base != nil && !token.isEmpty }
 
     func url(_ path: String) -> URL? {
-        guard let base = base else { return nil }
+        guard !Self.preview, let base = base else { return nil }
         return URL(string: path, relativeTo: base)
     }
 

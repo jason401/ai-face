@@ -137,6 +137,7 @@ def watch_awake(device, stop, interval=5):
             reason = ''
         if reason:
             device.message = T(f'깨어 있기를 껐습니다: {reason}', f'Keep awake turned off: {reason}')
+            updater.notify_idle(device)
 
 
 def expire_working(device, stop, interval=10):
@@ -213,7 +214,7 @@ def main():
             try:
                 operation()
             finally:
-                updater.request_finished()
+                updater.request_finished(device)
 
         def handle_get(self):
             if not self.allowed():

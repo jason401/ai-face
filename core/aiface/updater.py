@@ -3,6 +3,7 @@ Never changes the developer checkout. Runtime code is sealed in the installed bu
 Like AI Illuminati: checks run by themselves, but a new version is installed only after the
 user clicks "Update now" (install=True).
 """
+import hashlib
 import fcntl
 import importlib.util
 import json
@@ -27,12 +28,15 @@ CHANNELS = ('stable', 'main')   # main is the beta channel: what the AIs push be
 REPOSITORY = 'https://github.com/jason401/ai-face.git'
 TARGET = Path('/Applications/AI Face.app')
 EVERY = 3 * 3600          # seconds between checks
-RETRY = 10 * 60           # when busy, try again this soon
+RETRY = 10           # when busy, try again this soon
 FIRST = 60                # first check this long after the app starts
 AI_QUIET = 10 * 60        # an AI changed the face this recently: the user is probably chatting
 
 _lock = threading.Lock()   # one update at a time
 _running = False
+_prepared = None           # verified candidate, reused only in this running process
+_channel_generation = 0
+_wake = threading.Event()
 _progress = None
 _progress_lock = threading.RLock()
 STEPS = ('fetch', 'test', 'build', 'install')
@@ -50,10 +54,23 @@ def request_started():
         return True
 
 
-def request_finished():
+def request_finished(device=None):
     global _active_requests
     with _gate:
         _active_requests -= 1
+    notify_idle(device)
+
+
+def notify_idle(device=None):
+    """Wake a postponed install after an operation ends; polling remains a fallback."""
+    if _prepared is None:
+        return
+    with _gate:
+        if _active_requests or _quiescing:
+            return
+    state = load_state()
+    if state.get('want_install') and state.get('result') == 'waiting' and not busy(device, manual=True):
+        _wake.set()
 
 
 def prepare_installation(device):
@@ -118,11 +135,15 @@ def channel_label(name):
 
 def set_channel(name):
     """Switches the channel. What the other channel found no longer applies."""
+    global _prepared, _channel_generation
     if name not in CHANNELS:
         raise ValueError(T('업데이트 채널이 올바르지 않습니다.', 'Invalid update channel.'))
     if name == channel():
         return
     face_modes.save_settings(update_channel=name)
+    _channel_generation += 1
+    _prepared = None
+    _wake.set()
     save_state(result='', detail='', next='', changes=[], failed=None, want_install=False)
 
 
@@ -301,13 +322,16 @@ def check(device=None, manual=False, install=False):
     """One check. With install (the user clicked "Update now"), also test, build and install
     the new version. Returns the new state (also saved)."""
     global _running, _progress
+    if not install and _prepared is not None and load_state().get("want_install"):
+        return status()
     if not _lock.acquire(blocking=False):
         return status()
     _running = True
-    with _progress_lock:
-        _progress = None
-    if install:
-        progress_step('fetch')
+    if not install or _prepared is None:
+        with _progress_lock:
+            _progress = None
+        if install:
+            progress_step('fetch')
     try:
         picked = channel()
         result = _check(device, manual, install)
@@ -327,6 +351,7 @@ def check(device=None, manual=False, install=False):
     finally:
         _running = False
         _lock.release()
+        notify_idle(device)
 
 
 def request_install(device):
@@ -351,6 +376,7 @@ def _check(device, manual, install):
 
 
 def _check_locked(device, manual, install):
+    global _prepared
     bundle = paths.app_bundle()
     if bundle is not None and bundle != TARGET:
         reason = busy(device, manual=True)
@@ -361,11 +387,22 @@ def _check_locked(device, manual, install):
         return dict(result='installing', detail='')
     root = source_checkout()
     branch = channel()
+    generation = _channel_generation
     head = _out(root, 'rev-parse', '--abbrev-ref', 'HEAD')
     if head not in CHANNELS:
         return dict(result='skipped', detail=f'not on the {channel_label(branch)} branch')
     if _out(root, 'status', '--porcelain', '--untracked-files=normal'):
         return dict(result='skipped', detail=T('업데이트 소스에 로컬 변경이 있음', 'Update source has local changes'))
+    cached = _prepared
+    if install and cached is not None:
+        if (cached['root'] == root and cached['branch'] == branch
+                and cached['generation'] == generation
+                and cached['revision'] == _out(root, 'rev-parse', 'HEAD')
+                and cached['running'] == paths.running_revision()
+                and cached['stamp'] is not None and cached['stamp'] == candidate_stamp(root)):
+            return apply_prepared(device, cached)
+        _prepared = None
+        progress_step('fetch')
     p = git(root, 'fetch', '--quiet', 'origin', branch, timeout=120)
     if p.returncode != 0:
         return dict(result='error', detail=T('GitHub에 연결하지 못함', 'could not reach GitHub'))
@@ -399,9 +436,6 @@ def _check_locked(device, manual, install):
     if not install:
         return dict(result='available', current=_short(running or old), next=_short(new),
                     changes=subjects, detail='')
-    reason = busy(device, manual=manual)
-    if reason:
-        return dict(result='waiting', detail=reason)
     if switching:
         _out(root, 'checkout', '--quiet', '-B', branch, new)
     else:
@@ -423,20 +457,63 @@ def _check_locked(device, manual, install):
             git(root, 'reset', '--hard', '--quiet', old)
         return dict(result='failed', failed=new, current=_short(running or old),
                     detail='New version failed tests or build; keeping the running app', log=log)
-    # Building can take minutes: do not interrupt work started since the first check.
-    reason = busy(device, manual=manual)
+    # Preparation is safe during active work. Only replacement needs an idle app.
+    if channel() != branch or generation != _channel_generation:
+        return dict(result='skipped', detail='Update channel changed during preparation')
+    _prepared = dict(root=root, branch=branch, generation=generation, revision=new, running=running,
+                     previous=running or old, changes=subjects, stamp=candidate_stamp(root))
+    return apply_prepared(device, _prepared)
+
+
+def candidate_stamp(root):
+    """Detect a changed/deleted staged app before reusing a successful build."""
+    app = root / 'AI Face.update.app'
+    if not app.is_dir() or app.is_symlink():
+        return None
+    digest = hashlib.sha256()
+    files = sorted(p for p in app.rglob('*') if p.is_file() or p.is_symlink())
+    if not files:
+        return None
+    for path in files:
+        digest.update(str(path.relative_to(app)).encode())
+        digest.update(b'\0')
+        digest.update(os.readlink(path).encode() if path.is_symlink() else path.read_bytes())
+        digest.update(b'\0')
+    return digest.hexdigest()
+
+
+def apply_prepared(device, candidate):
+    global _prepared
+    if channel() != candidate['branch'] or candidate['generation'] != _channel_generation:
+        _prepared = None
+        return dict(result='skipped', detail='Update channel changed')
+    if progress_status() is None or progress_status()['stage'] != 'install':
+        progress_step('install')
+    with _gate:
+        reason = T('요청을 처리하는 중', 'A request is still running') if _active_requests else ''
+    reason = reason or busy(device, manual=True)
     if reason:
-        return dict(result='waiting', detail=reason)
-    save_state(result='installing', previous=_short(running or old), current=_short(new),
-               changes=subjects, failed=None, detail='')
-    progress_step('install')
-    install_app(root)
+        now = time.time()
+        with _progress_lock:
+            if _progress is not None:
+                _progress.update(prepared=True, wait_checked_at=now, retry_at=now + RETRY,
+                                 line=reason, output_at=now)
+        return dict(result='waiting', detail=reason, next=_short(candidate['revision']))
+    with _progress_lock:
+        if _progress is not None:
+            for key in ('waiting', 'failed', 'stopped', 'retry_at', 'wait_checked_at'):
+                _progress.pop(key, None)
+            _progress.update(line='', prepared=True, started=time.time())
+    save_state(result='installing', previous=_short(candidate['previous']),
+               current=_short(candidate['revision']), changes=candidate['changes'], failed=None, detail='')
+    install_app(candidate['root'])
+    _prepared = None
     return dict(result='installing', detail='')
 
 
 def status():
     s = load_state()
-    return dict(progress=progress_status(), enabled=enabled(), channel=channel(), running=_running, result=s.get('result', ''), detail=s.get('detail', ''),
+    return dict(prepared=_prepared is not None, progress=progress_status(), enabled=enabled(), channel=channel(), running=_running, result=s.get('result', ''), detail=s.get('detail', ''),
                 checked=s.get('checked', 0), current=s.get('current', ''), previous=s.get('previous', ''),
                 next=s.get('next', ''), installed=s.get('installed', 0), changes=s.get('changes', []),
                 want_install=bool(s.get('want_install')))
@@ -458,19 +535,31 @@ def announce(device):
         device.message = T('새 버전으로 업데이트했어요: ', 'Updated to the new version: ') + '; '.join(s.get('changes', [])[:3])
 
 
+def wait_for_check(stop, delay):
+    """An idle notification wakes immediately; shutdown is observed within one second."""
+    deadline = time.monotonic() + delay
+    while not stop.is_set():
+        left = deadline - time.monotonic()
+        if left <= 0:
+            return True
+        if _wake.wait(min(left, 1)):
+            _wake.clear()
+            return not stop.is_set()
+    return False
+
+
 def watch(device, stop):
-    """The background loop the server starts."""
+    """Prepare in the background after approval; replace only when work has finished."""
     try:
         announce(device)
     except OSError:
         pass
     wait = 2 if paths.app_bundle() and paths.app_bundle() != TARGET else FIRST
-    while not stop.wait(wait):
+    while wait_for_check(stop, wait):
         if not enabled() and not load_state().get('want_install') \
                 and (paths.app_bundle() is None or paths.app_bundle() == TARGET):
             wait = RETRY
             continue
-        # A new version is only looked for; it is installed when the user asked ("Update now").
         install = bool(load_state().get('want_install'))
-        result = check(device, manual=install, install=install).get('result')
-        wait = RETRY if result in ('waiting', 'error') else EVERY
+        result = check(device, manual=install, install=install)
+        wait = RETRY if result.get('result') in ('waiting', 'error') or result.get('running') or load_state().get('want_install') else EVERY

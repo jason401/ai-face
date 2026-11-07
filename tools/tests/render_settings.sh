@@ -15,7 +15,8 @@ xcrun swiftc -swift-version 5 -target "$(uname -m)-apple-macos13.0" -module-cach
   -o "$WORK/render" "${SOURCES[@]}" tools/tests/render_settings.swift
 # Localizable.strings next to the binary, so L() finds them as in the app bundle.
 cp -R app/macos/Resources/*.lproj "$WORK/"
+mkdir -p "$WORK/home"
 for LANG_CODE in en ko; do
-  "$WORK/render" "$OUTPUT" -AppleLanguages "($LANG_CODE)"
+  AIFACE_PREVIEW=1 CFFIXED_USER_HOME="$WORK/home" "$WORK/render" "$OUTPUT" -AppleLanguages "($LANG_CODE)"
 done
 echo "Previews in $OUTPUT"

@@ -122,6 +122,8 @@ struct UpdateProgress {
     let waiting: Bool
     let line: String
     let outputAt: Double
+    let prepared: Bool
+    let retryAt: Double?
 
     init?(_ json: [String: Any]) {
         guard let name = json["stage"] as? String, let index = Self.stages.firstIndex(of: name),
@@ -132,6 +134,8 @@ struct UpdateProgress {
         expected = (json["expected"] as? [String: NSNumber] ?? [:]).mapValues { $0.doubleValue }
         failed = json["failed"] as? Bool ?? false
         waiting = json["waiting"] as? Bool ?? false
+        prepared = json["prepared"] as? Bool ?? false
+        retryAt = (json["retry_at"] as? NSNumber)?.doubleValue
         line = json["line"] as? String ?? ""
         outputAt = (json["output_at"] as? NSNumber)?.doubleValue ?? started
     }
@@ -142,6 +146,10 @@ struct UpdateProgress {
         return min(0.95, elapsed(at: now) / total)
     }
     func summary(at now: Date) -> String {
+        if waiting && prepared {
+            let seconds = max(0, Int(ceil((retryAt ?? now.timeIntervalSince1970) - now.timeIntervalSince1970)))
+            return L("Ready · waiting to replace app") + " · " + String(format: L("checking again in %d s"), seconds)
+        }
         var text = Self.names[stage] + " · " + String(format: L("%@ elapsed"), Self.duration(elapsed(at: now)))
         if failed { text += " · " + L("Failed") }
         else if waiting { text += " · " + L("Waiting") }
@@ -246,7 +254,7 @@ final class SettingsStore: NSObject, ObservableObject {
     var foldersChanged: ((String) -> Void)?   // the menu refreshes its list (and shows errors)
     var openBoard: (() -> Void)?        // opens the board details window
     @Published var folderShelfHover = FolderShelf.showOnHover {
-        didSet { UserDefaults.standard.set(folderShelfHover, forKey: FolderShelf.hoverKey) }
+        didSet { if !API.preview { UserDefaults.standard.set(folderShelfHover, forKey: FolderShelf.hoverKey) } }
     }
     @Published var hooks = "off"
     @Published var aiNotice = ""
@@ -302,6 +310,7 @@ final class SettingsStore: NSObject, ObservableObject {
     }
 
     func start() {
+        guard !API.preview else { return }
         saverLoaded = false
         weatherLoaded = false
         loginItem = LoginItem.enabled
@@ -983,7 +992,10 @@ final class SettingsStore: NSObject, ObservableObject {
             text = String(format: L("New version available (%@)"), (u["next"] as? String) ?? "")
             if let first = (u["changes"] as? [String])?.first { text += "\n" + first }
         case "installing": text = L("Installing the new version…")
-        case "waiting": text = String(format: L("New version found, waiting: %@"), detail)
+        case "waiting":
+            text = (u["prepared"] as? Bool ?? false)
+                ? L("Update prepared · waiting for active work to finish") + "\n" + detail
+                : String(format: L("New version found, waiting: %@"), detail)
         case "skipped": text = String(format: L("Not updating: %@"), detail)
         case "failed": text = String(format: L("Update failed: %@"), detail)
         case "error": text = String(format: L("Could not check: %@"), detail)

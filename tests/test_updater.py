@@ -47,17 +47,29 @@ class UpdaterTests(unittest.TestCase):
         self.commit('a.txt', 'one', 'First')
         run(base, 'clone', '-q', str(self.remote), str(self.work))
         self.installs, self.tests_ok, self.ran_tests = [], True, 0
+        self.builds = 0
+        with (self.work / '.git/info/exclude').open('a') as stream:
+            stream.write('\nAI Face.update.app/\n')
+
+        def build(root):
+            self.builds += 1
+            candidate = root / 'AI Face.update.app/Contents/MacOS/AIFace'
+            candidate.parent.mkdir(parents=True, exist_ok=True)
+            candidate.write_text(self.head())
+            return True, ''
 
         def tests(root):
             self.ran_tests += 1
             return self.tests_ok, 'log'
-        for p in [patch.object(paths, 'DATA', base / 'data'),
+        for p in [patch.object(updater, '_prepared', None),
+                  patch.object(updater, '_wake', threading.Event()),
+                  patch.object(paths, 'DATA', base / 'data'),
                   patch.object(updater, 'source_checkout', return_value=self.work),
                   patch.object(paths, 'running_revision', return_value=self.head()),
                   patch.object(paths, 'app_bundle', return_value=None),
                   patch.object(updater, 'BRANCH', 'main'),
                   patch.object(updater, 'run_tests', side_effect=tests),
-                  patch.object(updater, 'compile_app', return_value=(True, '')),
+                  patch.object(updater, 'compile_app', side_effect=build),
                   patch.object(updater, 'install_app', side_effect=self.installs.append),
                   patch.object(face_modes, 'SETTINGS', base / 'data' / 'settings.json'),
                   patch.object(updater.awake, 'status', return_value={'ours': False, 'leases': []})]:
@@ -194,6 +206,82 @@ class UpdaterTests(unittest.TestCase):
         device.flashing = False
         self.assertEqual(updater.check(device, manual=True, install=True)['result'], 'installing')
         self.assertEqual(self.installs, [self.work])
+
+    def test_busy_prepares_once_then_reuses_until_idle(self):
+        self.commit('b.txt', 'two', 'Add b')
+        face_modes.save_settings(timer={'end': time.time() + 60, 'total': 60, 'color': 'blue'})
+        device = FakeDevice()
+        result = updater.request_install(device)
+        self.assertEqual((result['result'], self.ran_tests, self.builds), ('waiting', 1, 1))
+        progress = updater.status()['progress']
+        self.assertEqual(progress['stage'], 'install')
+        self.assertTrue(progress['prepared'])
+        self.assertAlmostEqual(progress['retry_at'] - progress['wait_checked_at'], 10)
+        with patch.object(updater, 'git', wraps=updater.git) as git:
+            for _ in range(3):
+                self.assertEqual(updater.check(device, manual=True, install=True)['result'], 'waiting')
+            self.assertFalse(any('fetch' in call.args for call in git.call_args_list))
+        self.assertEqual((self.ran_tests, self.builds, self.installs), (1, 1, []))
+        updater._progress['started'] = 1   # waiting time must not inflate install estimates
+        face_modes.save_settings(timer=None)
+        updater.notify_idle(device)
+        self.assertTrue(updater._wake.is_set())
+        self.assertTrue(updater.wait_for_check(threading.Event(), 3600))
+        self.assertEqual(updater.check(device, manual=True, install=True)['result'], 'installing')
+        self.assertEqual((self.ran_tests, self.builds, self.installs), (1, 1, [self.work]))
+        self.assertGreater(updater.status()['progress']['started'], 1)
+        self.assertNotIn('stopped', updater.status()['progress'])
+
+    def test_modified_candidate_is_built_again(self):
+        self.commit('b.txt', 'two', 'Add b')
+        face_modes.save_settings(timer={'end': time.time() + 60, 'total': 60, 'color': 'blue'})
+        updater.request_install(FakeDevice())
+        staged = self.work / 'AI Face.update.app/Contents/MacOS/AIFace'
+        staged.write_text('changed outside the updater')
+        updater.check(FakeDevice(), manual=True, install=True)
+        self.assertEqual((self.ran_tests, self.builds), (2, 2))
+
+    def test_idle_request_signal_respects_other_requests(self):
+        self.commit('b.txt', 'two', 'Add b')
+        self.assertTrue(updater.request_started())
+        self.assertTrue(updater.request_started())
+        try:
+            updater.request_install(FakeDevice())
+            self.assertEqual(updater.status()['progress']['stage'], 'install')
+            updater.request_finished(FakeDevice())
+            self.assertFalse(updater._wake.is_set())
+        finally:
+            updater.request_finished(FakeDevice())
+        self.assertTrue(updater._wake.is_set())
+
+    def test_channel_change_during_build_does_not_install(self):
+        self.commit('b.txt', 'two', 'Add b')
+        def switch(root):
+            updater.set_channel('stable')
+            return True, ''
+        self.publish('stable')
+        with patch.object(updater, 'compile_app', side_effect=switch):
+            updater.request_install(FakeDevice())
+        self.assertEqual(self.installs, [])
+        self.assertIsNone(updater._prepared)
+        self.assertFalse(updater.load_state()['want_install'])
+
+    def test_switching_away_and_back_still_cancels_preparation(self):
+        self.commit('b.txt', 'two', 'Add b')
+        def switch(root):
+            updater.set_channel('stable')
+            updater.set_channel('main')
+            return True, ''
+        with patch.object(updater, 'compile_app', side_effect=switch):
+            result = updater.request_install(FakeDevice())
+        self.assertEqual(result['result'], 'skipped')
+        self.assertEqual(self.installs, [])
+        self.assertIsNone(updater._prepared)
+
+    def test_stopped_watcher_does_not_run(self):
+        stop = threading.Event()
+        stop.set()
+        self.assertFalse(updater.wait_for_check(stop, 3600))
 
     def test_no_reset_of_developer_changes(self):
         developer = Path(self.tmp.name) / 'developer'

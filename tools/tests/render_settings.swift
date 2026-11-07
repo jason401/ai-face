@@ -4,13 +4,33 @@ import SwiftUI
 // Render settings tabs with fixture data to PNGs. No server, board, Calendar or Mail access.
 @main struct SettingsPreview {
     static func main() throws {
+        precondition(API.preview, "Render only with AIFACE_PREVIEW=1")
+        guard let home = ProcessInfo.processInfo.environment["CFFIXED_USER_HOME"] else {
+            fatalError("Preview requires an isolated home")
+        }
+        precondition(FileManager.default.homeDirectoryForCurrentUser.path == home)
+        let key = FolderShelf.hoverKey
+        let before = UserDefaults.standard.object(forKey: key) as? Bool
+        let probe = SettingsStore()
+        probe.folderShelfHover = false
+        precondition((UserDefaults.standard.object(forKey: key) as? Bool) == before,
+                     "Preview must not persist fixture values")
+        API.shared.base = URL(string: "http://127.0.0.1:1")
+        API.shared.token = "preview-fixture"
+        precondition(!API.shared.ready && API.shared.url("api") == nil,
+                     "Preview must never contact the app server")
+        let now = Date(timeIntervalSince1970: 100)
+        let progress = UpdateProgress(["stage": "install", "started": 90,
+            "waiting": true, "prepared": true, "retry_at": 110])!
+        precondition(progress.stage == 3 && progress.summary(at: now).contains("10"))
+        precondition(progress.summary(at: now.addingTimeInterval(3)).contains("7"))
         let app = NSApplication.shared
         app.setActivationPolicy(.prohibited)
         let output = URL(fileURLWithPath: CommandLine.arguments[1])
         try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
         let store = SettingsStore()
         store.version = "2.1.0 (3613ce9)"
-        store.weatherLocation = ["name": "Palo Alto / Stanford", "timezone": "America/Los_Angeles"]
+        store.weatherLocation = ["name": "Example City", "timezone": "America/Los_Angeles"]
         store.weatherDetail = L("Current model estimate") + " · " + L("Rain") + " · 2026-11-04T18:00:00-08:00"
         store.loginItem = true
         store.awakeSupported = true
@@ -30,8 +50,8 @@ import SwiftUI
                             CalendarChange(n: 2, text: "Moved “Dentist” to Nov 2 15:00", undone: true)]
         store.mailAccess = "allowed"
         store.mailAccounts = [MailAccount(name: "iCloud", shown: true), MailAccount(name: "Gmail", shown: false)]
-        store.folders = [SharedFolder(id: "f1", name: "Papers", path: NSHomeDirectory() + "/Documents/Papers", last: "Read by Claude · 5 min ago"),
-                         SharedFolder(id: "f2", name: "Lab data", path: NSHomeDirectory() + "/Documents/Lab data", on: false),
+        store.folders = [SharedFolder(id: "f1", name: "Papers", path: "/Users/example/Documents/Papers", last: "Read by Claude · 5 min ago"),
+                         SharedFolder(id: "f2", name: "Lab data", path: "/Users/example/Documents/Lab data", on: false),
                          SharedFolder(id: "f3", name: "Old notes", path: "/Volumes/Backup/Old notes", missing: true)]
         store.serverPath = "/Users/me/Library/Application Support/AI Face/ai_face_mcp.py"
         store.lightNight = true; store.lightOffSleeping = true; store.lightBright = 70; store.lightFrom = 23; store.lightTo = 7
@@ -68,7 +88,11 @@ import SwiftUI
         weatherStore.weatherHour = 20
         weatherStore.weatherDate = SettingsStore.weatherDateFormat.date(from: "2026-10-20")!
         weatherStore.weatherDetail = L("Historical reanalysis") + " · " + L("Rain") + " · 2026-10-20T20:00:00-07:00"
+        let waitingStore = SettingsStore()
+        waitingStore.updateProgress = progress
+        waitingStore.updateText = L("Update prepared · waiting for active work to finish")
         let views: [(String, () -> AnyView)] = [
+            ("1general-waiting", { AnyView(GeneralTab(store: waitingStore)) }),
             ("1general", { AnyView(GeneralTab(store: store)) }), ("1appearance", { AnyView(AppearanceTab(store: store)) }), ("1appearance-noboard", { AnyView(SettingsPage { BoardCard(store: SettingsStore()) }) }),
             ("1weather-date", { AnyView(SettingsPage { CampfireWeatherCard(store: weatherStore) }) }), ("2ai", { AnyView(AITab(store: store)) }),
             ("2ai-shelf", { AnyView(FolderShelfView(store: store, shelf: FolderShelf(store: store)).background(Color(nsColor: .windowBackgroundColor))) }), ("2ai-folders", { AnyView(FolderList(store: store).background(Color(nsColor: .windowBackgroundColor))) }), ("2ai-calendars", { AnyView(CalendarList(store: store).background(Color(nsColor: .windowBackgroundColor))) }), ("2ai-changes", { AnyView(CalendarChanges(store: store).background(Color(nsColor: .windowBackgroundColor))) }),
@@ -98,5 +122,9 @@ import SwiftUI
                 window.contentView = nil
             }
         }
+        let previewData = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/AI Face")
+        precondition(!FileManager.default.fileExists(atPath: previewData.path),
+                     "Preview must not create application data")
     }
 }

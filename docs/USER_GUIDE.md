@@ -43,7 +43,7 @@ The four tabs are **General** (login, updates, folders, keep awake), **Appearanc
 
 Downloaded-app users should update manually through GitHub Releases. The in-app updater checks the stable source branch at startup and every three hours, but installs only after **Update now** or **Install new version** is selected. Source updates require a local signing identity, Python and Command Line Tools.
 
-The source updater uses its own checkout under Application Support, runs tests, builds a signed candidate and installs transactionally. It waits while a timer, keep-awake lease, Calendar approval, firmware operation or other tracked request is active. A failed install rolls back. It does not modify the developer checkout. Turn off **Auto check** if you do not use source updates.
+The source updater uses its own checkout under Application Support, runs tests, builds a signed candidate and installs transactionally. Preparation (fetching, tests and building) continues while a timer, keep-awake lease, Calendar approval or firmware operation is active. Only app replacement and restart wait for that work to finish. The prepared candidate is reused while waiting; work-completion signals wake the installer promptly, with a ten-second fallback check and a visible countdown. Changing the update channel or changing/deleting the staged candidate invalidates reuse. A failed install rolls back. It does not modify the developer checkout. Turn off **Auto check** if you do not use source updates.
 
 ### Keep awake
 
@@ -126,3 +126,7 @@ Compilation requires Arduino IDE 2 or `arduino-cli`, the ESP32 board package and
 The current protocol is FACE8; older firmware needs an update before connecting. Use the default partition scheme containing SPIFFS for photo storage. `ESP32_FQBN` can override board configuration. The app retains timer state across board restarts.
 
 See the [English expression preview](faces-en.png). `tools/make_preview.py` regenerates the preview sheets; the Korean preview and UI translations are retained as localization resources.
+
+## Settings previews
+
+`tools/tests/render_settings.sh` renders fixture screens with `AIFACE_PREVIEW=1` and a temporary macOS home. Preview models cannot save the hover preference or contact the real app server; polling is disabled. The renderer checks these boundaries before creating fixture models. Do not run the renderer without its isolation wrapper.

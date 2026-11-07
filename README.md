@@ -37,7 +37,7 @@ The app uses a local signature, **not Apple Developer ID signing or notarization
 
 ### Updates
 
-The app checks the public `stable` branch at startup and every three hours (Settings → General). When a new version is found, it shows **Update now**; it installs only after you click it: it runs the tests, builds on your Mac with your signing identity and swaps the app safely. Settings and history stay in `~/Library/Application Support/AI Face/`.
+The app checks the public `stable` branch at startup and every three hours (Settings → General). When a new version is found, it shows **Update now**; it installs only after you click it: it fetches, tests and builds on your Mac with your signing identity even during active work, then waits only to replace and restart the app. Prepared builds are reused while waiting; work completion wakes the updater promptly, with a ten-second fallback check and a countdown. Settings and history stay in `~/Library/Application Support/AI Face/`.
 
 ### Install directly from Git
 

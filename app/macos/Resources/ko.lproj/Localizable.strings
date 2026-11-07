@@ -387,3 +387,7 @@
 "about %@ left" = "약 %@ 남음";
 "no output for %@" = "%@째 새 출력 없음";
 "%d min %d s" = "%d분 %d초";
+
+"Ready · waiting to replace app" = "준비 완료 · 앱 교체 대기 중";
+"checking again in %d s" = "%d초 후 다시 확인";
+"Update prepared · waiting for active work to finish" = "업데이트 준비 완료 · 진행 중인 작업이 끝나기를 기다리는 중";
