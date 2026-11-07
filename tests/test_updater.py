@@ -302,5 +302,41 @@ class UpdaterTests(unittest.TestCase):
         self.assertEqual(len(self.installs), 1)
 
 
+    def test_timed_out_switch_restores_and_stops_retrying(self):
+        self.on_stable()
+        old = self.head()
+        self.commit('b.txt', 'two', 'Slow beta')
+        updater.set_channel('main')
+        with patch.object(updater, 'compile_app', side_effect=subprocess.TimeoutExpired('build', 1200)):
+            s = updater.request_install(FakeDevice())
+        self.assertEqual(s['result'], 'failed')
+        self.assertFalse(s['want_install'])
+        self.assertEqual((self.branch(), self.head()), ('stable', old))
+        self.assertEqual(self.installs, [])
+        self.assertEqual(updater.check(FakeDevice())['result'], 'failed')   # not built again by itself
+        self.assertEqual(self.ran_tests, 1)
+
+    def test_unexpected_install_error_stops_retrying(self):
+        self.commit('b.txt', 'two', 'Add b')
+        with patch.object(updater, 'install_app', side_effect=RuntimeError('Installer failed')):
+            s = updater.request_install(FakeDevice())
+        self.assertEqual(s['result'], 'error')
+        self.assertFalse(s['want_install'])
+
+    def test_channel_changed_during_a_check_discards_its_result(self):
+        self.on_stable()
+        self.commit('b.txt', 'two', 'Beta change')   # main only: stable has nothing new
+        real = updater._check
+
+        def switched_meanwhile(*args):
+            result = real(*args)
+            if updater.channel() == 'stable':
+                updater.set_channel('main')   # the user picked Beta while stable was checked
+            return result
+        with patch.object(updater, '_check', side_effect=switched_meanwhile):
+            s = updater.check(FakeDevice())
+        self.assertEqual((s['result'], s['changes']), ('available', ['Beta change']))
+        self.assertEqual((self.installs, self.ran_tests), ([], 0))
+
 if __name__ == '__main__':
     unittest.main()

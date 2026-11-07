@@ -225,12 +225,19 @@ def check(device=None, manual=False, install=False):
         return status()
     _running = True
     try:
+        picked = channel()
         result = _check(device, manual, install)
+        if channel() != picked:
+            # The channel changed while this ran: its result belongs to the other channel.
+            # Look again; installing waits for a new "Update now" (set_channel cancelled it).
+            install = False
+            result = _check(device, manual, False)
         if install and result.get('result') != 'waiting':
             result['want_install'] = False   # done, failed or nothing to install: stop retrying
         return save_state(**result, checked=int(time.time()))
     except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
-        return save_state(result='error', detail=str(exc)[:300], checked=int(time.time()))
+        stop = dict(want_install=False) if install else {}   # do not repeat a broken install every RETRY
+        return save_state(result='error', detail=str(exc)[:300], checked=int(time.time()), **stop)
     finally:
         _running = False
         _lock.release()
@@ -312,9 +319,12 @@ def _check_locked(device, manual, install):
         _out(root, 'checkout', '--quiet', '-B', branch, new)
     else:
         _out(root, 'merge', '--ff-only', '--quiet', new)
-    ok, log = run_tests(root)
-    if ok:
-        ok, log = compile_app(root)
+    try:
+        ok, log = run_tests(root)
+        if ok:
+            ok, log = compile_app(root)
+    except (OSError, subprocess.SubprocessError) as exc:   # timed out or could not start
+        ok, log = False, str(exc)[-2000:]
     if not ok:
         if switching:   # back to the branch and commit the running app came from
             git(root, 'checkout', '--quiet', '--force', '-B', head, old)
