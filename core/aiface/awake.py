@@ -266,8 +266,8 @@ def acquire(lid, minutes, label='', pid=None, auto=False, now=None):
     if not supported():
         raise ValueError(T('이 Mac에서는 쓸 수 없습니다.', 'Not available on this Mac.'))
     if not ready():
-        raise ValueError(T('먼저 설정 → 일반에서 "깨어 있기 설정"을 한 번 해 주세요.',
-                           'Set it up once first: Settings → General → Set up keep awake.'))
+        raise ValueError(T('먼저 설정 → AI → 깨어 있기에서 권한을 한 번 설정해 주세요.',
+                           'Set it up once first: Settings → AI → Keep awake → Set up….'))
     reason = veto()
     if reason:
         raise ValueError(T(f'켜지 않았습니다: {reason}', f'Not turned on: {reason}'))
@@ -391,7 +391,7 @@ def describe(now=None):
     if not s['supported']:
         return 'Keep awake: not available on this Mac.'
     if not s['ready']:
-        return 'Keep awake: not set up (Settings > General > Keep awake).'
+        return 'Keep awake: not set up (Settings > AI > Keep awake).'
     if not s['on']:
         line = 'Keep awake: off (the Mac sleeps normally when the lid closes).'
     else:

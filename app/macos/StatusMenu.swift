@@ -398,7 +398,7 @@ final class StatusController: NSObject, NSMenuDelegate {
         _ = add(timerMenu, L("Custom…"), #selector(customTimer))
         timer.submenu = timerMenu
         if awakeSupported {
-            // Short: the state only when it is on; the explanation is in Settings → General.
+            // Short: the state only when it is on; the explanation is in Settings → AI → Keep awake.
             let now = Date.timeIntervalSinceReferenceDate
             let title = view.awake ? (awakeText(now) ?? L("Keep awake")) : L("Keep awake")
             let item = add(menu, title, nil)

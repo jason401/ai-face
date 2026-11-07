@@ -3,7 +3,7 @@ import Cocoa
 import SwiftUI
 import UniformTypeIdentifiers
 
-// MARK: - General: what any app has (login, updates, folders), and keep awake
+// MARK: - General: what any app has (login, updates, folders)
 
 struct GeneralTab: View {
     @ObservedObject var store: SettingsStore
@@ -51,34 +51,6 @@ struct GeneralTab: View {
                         .help(L("Settings, photos, history, the update copy and backups"))
                     SettingsAction(title: L("App")) { store.revealApp() }
                         .help(Bundle.main.bundlePath)
-                }
-            }
-            if store.awakeSupported {
-                SettingsCard(title: L("Keep awake")) {
-                    SettingsRow(title: L("Status")) {
-                        SettingsStatus(text: store.awakeStatus, ok: store.awakeOn)
-                    }
-                    Divider()
-                    SettingsRow(title: L("Permission")) {
-                        SettingsAction(title: store.awakeReady ? L("Remove…") : L("Set up…")) {
-                            store.setUpAwake(remove: store.awakeReady)
-                        }
-                        .help(store.awakeReady ? L("Removes the permission and the awake command (in Terminal, with your Mac password).") : "")
-                    }
-                    if store.awakeReady {
-                        Divider()
-                        SettingsRow(title: L("Terminal command")) {
-                            if store.awakeCommand {
-                                SettingsStatus(text: L("Installed"))
-                            } else {
-                                SettingsAction(title: L("Install…")) { store.setUpAwake() }
-                            }
-                        }
-                        .help(L("In Terminal, awake COMMAND keeps the Mac awake while COMMAND runs (for example: awake python train.py)."))
-                    }
-                    SettingsNote(text: store.awakeNotice.isEmpty
-                                 ? L("Lid closed, 1–4 hours from the menu. Turns off by itself.") : store.awakeNotice, lines: 3)
-                        .help(L("Keeps the MacBook awake even with the lid closed, for 1, 2 or 4 hours (menu → Keep awake). It turns off at the end, at 20% battery, when the Mac gets hot, in Low Power Mode and when AI Face quits. Setting it up asks for your Mac password once, in Terminal, and allows only this one setting."))
                 }
             }
         }
@@ -216,8 +188,9 @@ struct AITab: View {
         }.toggleStyle(.checkbox).font(.system(size: store.illuminatiAvailable ? 11 : 12))
     }
 
-    func accessRow(_ text: String, ok: Bool, busy: Bool = false, button: String?, _ action: @escaping () -> Void) -> some View {
-        SettingsRow(title: L("Access")) {
+    func accessRow(_ text: String, ok: Bool, busy: Bool = false, button: String?, title: String = L("Access"),
+                   _ action: @escaping () -> Void) -> some View {
+        SettingsRow(title: title) {
             SettingsStatus(text: text, ok: ok)
             if busy {
                 ProgressView().controlSize(.small)
@@ -258,22 +231,44 @@ struct AITab: View {
 
             if store.awakeSupported {
                 SettingsCard(title: L("Keep awake")) {
-                    SettingsRow(title: "Claude Code") {
-                        Toggle(L("While it works"), isOn: Binding(get: { store.hooks == "on" },
-                                                                  set: { store.setAI("claude_code_awake", on: $0) }))
-                            .toggleStyle(.checkbox)
-                            .help(L("Claude Code: keep the Mac awake while it works"))
+                    accessRow(store.awakeReady ? L("Allowed") : L("Not set up"), ok: store.awakeReady,
+                              button: store.awakeReady ? L("Remove…") : L("Set up…"), title: L("Permission")) {
+                        store.setUpAwake(remove: store.awakeReady)
                     }
+                    .help(store.awakeReady ? L("Removes the permission and the awake command (in Terminal, with your Mac password).")
+                          : L("Asks for your Mac password once, in Terminal, and allows only this one setting."))
                     Divider()
-                    SettingsRow(title: L("AI can ask")) {
-                        perAI(store.awakeClaude, store.awakeGPT, store.awakeIlluminati) { ai, on in store.setAwakeApps(ai, on) }
-                            .help(L("Which AIs may keep the Mac awake when you ask them to (up to 4 hours, renewed while they work)."))
+                    SettingsRow(title: L("Status")) {
+                        SettingsStatus(text: store.awakeStatus, ok: store.awakeOn)
                     }
-                    if !store.awakeReady {
-                        SettingsNote(text: L("Needs the permission first: General → Keep awake."), lines: 2)
+                    Group {
+                        Divider()
+                        SettingsRow(title: "Claude Code") {
+                            Toggle(L("While it works"), isOn: Binding(get: { store.hooks == "on" },
+                                                                      set: { store.setAI("claude_code_awake", on: $0) }))
+                                .toggleStyle(.checkbox)
+                                .help(L("Claude Code: keep the Mac awake while it works"))
+                        }
+                        Divider()
+                        SettingsRow(title: L("AI can ask")) {
+                            perAI(store.awakeClaude, store.awakeGPT, store.awakeIlluminati) { ai, on in store.setAwakeApps(ai, on) }
+                                .help(L("Which AIs may keep the Mac awake when you ask them to (up to 4 hours, renewed while they work)."))
+                        }
+                        Divider()
+                        SettingsRow(title: L("Terminal command")) {
+                            if store.awakeCommand {
+                                SettingsStatus(text: L("Installed"))
+                            } else {
+                                SettingsAction(title: L("Install…")) { store.setUpAwake() }
+                            }
+                        }
+                        .help(L("In Terminal, awake COMMAND keeps the Mac awake while COMMAND runs (for example: awake python train.py)."))
                     }
+                    .disabled(!store.awakeReady)
+                    SettingsNote(text: store.awakeNotice.isEmpty
+                                 ? L("Lid closed, 1–4 hours from the menu. Turns off by itself.") : store.awakeNotice, lines: 3)
+                        .help(L("Keeps the MacBook awake even with the lid closed, for 1, 2 or 4 hours (menu → Keep awake). It turns off at the end, at 20% battery, when the Mac gets hot, in Low Power Mode and when AI Face quits. Setting it up asks for your Mac password once, in Terminal, and allows only this one setting."))
                 }
-                .disabled(!store.awakeReady)
             }
 
             SettingsCard(title: L("Shared folders")) {

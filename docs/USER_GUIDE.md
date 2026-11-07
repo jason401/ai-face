@@ -49,7 +49,7 @@ The source updater uses its own checkout under Application Support, runs tests, 
 
 This optional feature holds a MacBook awake for a limited time, including with the lid closed.
 
-- **Settings → General → Keep awake → Set up…** opens a local setup script. It asks for administrator authorization and installs a rule permitting only `pmset -a disablesleep 0/1` without another password prompt. It does not store the password. **Remove…** removes the setup.
+- **Settings → AI → Keep awake → Set up…** opens a local setup script. It asks for administrator authorization and installs a rule permitting only `pmset -a disablesleep 0/1` without another password prompt. It does not store the password. **Remove…** removes the setup.
 - It ends at its deadline, on app exit, low battery, excessive temperature, Low Power Mode, or when turned off manually. A separate deadline failsafe handles an app crash.
 - Manual requests, Claude Code, the `awake` command and AI requests hold separate leases; every lease must finish before the shared hold ends.
 - **Turn all off** releases all leases and blocks automatic requests for one hour. A manual duration or **Allow automatic keep awake** clears the block.

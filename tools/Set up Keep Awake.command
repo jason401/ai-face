@@ -7,7 +7,7 @@
 # Nothing else gets root. Your password is typed here, in Terminal, and never stored.
 # Also installs the `awake` command (/usr/local/bin/awake): `awake COMMAND` keeps the Mac
 # awake while COMMAND runs.
-# With the argument `remove` (from "Remove Keep Awake.command", Settings → General → Remove…)
+# With the argument `remove` (from "Remove Keep Awake.command", Settings → AI → Keep awake → Remove…)
 # it only removes both, without asking first.
 RULE=/etc/sudoers.d/aiface-keepawake
 AWAKE=/usr/local/bin/awake
