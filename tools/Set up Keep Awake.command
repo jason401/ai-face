@@ -7,6 +7,8 @@
 # Nothing else gets root. Your password is typed here, in Terminal, and never stored.
 # Also installs the `awake` command (/usr/local/bin/awake): `awake COMMAND` keeps the Mac
 # awake while COMMAND runs.
+# With the argument `remove` (from "Remove Keep Awake.command", Settings → General → Remove…)
+# it only removes both, without asking first.
 RULE=/etc/sudoers.d/aiface-keepawake
 AWAKE=/usr/local/bin/awake
 ME="$(id -un)"
@@ -23,8 +25,28 @@ install_awake() {
 }
 bye() { if [ -n "$KO" ]; then read "?엔터를 누르면 창이 닫힙니다."; else read "?Press Return to close."; fi; exit $1; }
 
+remove_all() {
+  msg "관리자 비밀번호를 입력하세요 (화면에 안 보여요)." "Enter your Mac password (it is not shown)."
+  sudo /usr/bin/pmset -a disablesleep 0 && sudo rm -f "$RULE" || bye 1
+  grep -q ai_face_awake "$AWAKE" 2>/dev/null && sudo rm -f "$AWAKE"
+  if sudo -k; sudo -n /usr/bin/pmset -a disablesleep 0 >/dev/null 2>&1; then
+    msg "지웠지만 다른 규칙이 아직 허용하고 있어요: /etc/sudoers.d 를 확인하세요." \
+        "Removed, but another rule still allows it: check /etc/sudoers.d."
+  else
+    msg "지웠습니다. 깨어 있기는 이제 쓸 수 없어요." "Removed. Keep awake is no longer available."
+  fi
+}
+
 msg "AI Face 깨어 있기 설정" "AI Face keep awake setup"
 echo
+if [ "$1" = "remove" ]; then
+  if [ -f "$RULE" ] || grep -q ai_face_awake "$AWAKE" 2>/dev/null; then
+    remove_all
+  else
+    msg "지울 설정이 없어요." "Nothing to remove."
+  fi
+  bye 0
+fi
 if [ -f "$RULE" ] || sudo -n -l /usr/bin/pmset -a disablesleep 0 >/dev/null 2>&1; then
   if ! grep -q ai_face_awake "$AWAKE" 2>/dev/null; then
     msg "awake 명령을 설치해요. 관리자 비밀번호를 입력하세요 (화면에 안 보여요)." \
@@ -39,17 +61,7 @@ if [ -f "$RULE" ] || sudo -n -l /usr/bin/pmset -a disablesleep 0 >/dev/null 2>&1
   fi
   msg "이미 설정되어 있어요. 지우려면 r, 그대로 두려면 엔터:" "Already set up. Type r to remove it, or Return to keep it:"
   read ANSWER
-  if [ "$ANSWER" = "r" ] || [ "$ANSWER" = "R" ]; then
-    msg "관리자 비밀번호를 입력하세요 (화면에 안 보여요)." "Enter your Mac password (it is not shown)."
-    sudo /usr/bin/pmset -a disablesleep 0 && sudo rm -f "$RULE" || bye 1
-    grep -q ai_face_awake "$AWAKE" 2>/dev/null && sudo rm -f "$AWAKE"
-    if sudo -k; sudo -n /usr/bin/pmset -a disablesleep 0 >/dev/null 2>&1; then
-      msg "지웠지만 다른 규칙이 아직 허용하고 있어요: /etc/sudoers.d 를 확인하세요." \
-          "Removed, but another rule still allows it: check /etc/sudoers.d."
-    else
-      msg "지웠습니다. 깨어 있기는 이제 쓸 수 없어요." "Removed. Keep awake is no longer available."
-    fi
-  fi
+  if [ "$ANSWER" = "r" ] || [ "$ANSWER" = "R" ]; then remove_all; fi
   bye 0
 fi
 

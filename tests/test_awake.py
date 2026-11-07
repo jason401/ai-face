@@ -142,6 +142,35 @@ class AwakeTests(unittest.TestCase):
         awake.start(60, now + 60)                               # the user's own lease ends the pause
         self.assertTrue(awake.acquire('claude-code:s2', 20, auto=True, now=now + 60))
 
+    def test_each_ai_can_be_turned_off(self):
+        settings = awake.settings_store.SETTINGS
+        saved = settings.read_text() if settings.exists() else None
+        self.addCleanup(lambda: settings.write_text(saved) if saved is not None else settings.unlink(missing_ok=True))
+        now = time.time()
+        self.assertEqual(awake.agents(), dict(claude=True, gpt=True, illuminati=True))   # default: all
+        self.assertTrue(awake.acquire('mcp:gpt', 20, 'GPT', auto=True, now=now))
+        self.assertEqual(self.value(), '1')
+        awake.save_agents({'gpt': False}, now)
+        self.assertEqual(self.value(), '0')                     # its lease ended right away
+        self.assertEqual(awake.agents(), dict(claude=True, gpt=False, illuminati=True))
+        with self.assertRaises(ValueError):
+            awake.acquire('mcp:gpt', 20, 'GPT', auto=True, now=now)
+        self.assertTrue(awake.acquire('mcp:claude', 20, 'Claude', auto=True, now=now))
+        self.assertTrue(awake.acquire('claude-code:s1', 20, 'Claude Code', auto=True, now=now))  # hooks: own switch
+        self.assertFalse(awake.status(now)['apps']['gpt'])
+        for bad in (None, {}, {'gpt': 1}, {'someone': True}):
+            with self.assertRaises(ValueError):
+                awake.save_agents(bad, now)
+
+    def test_setup_and_remove_open_their_own_script(self):
+        opened = []
+        with patch.object(awake, '_run', lambda args, timeout=10: (opened.append(args[-1]), (0, ''))[1]):
+            awake.open_setup()
+            awake.open_setup(remove=True)
+        self.assertEqual([Path(p).name for p in opened], [awake.SETUP, awake.REMOVE])
+        for p in opened:
+            self.assertTrue(os.access(p, os.X_OK), p)
+
     def test_job_lease_ends_with_its_process(self):
         job = subprocess.Popen(['sleep', '30'])
         self.addCleanup(job.kill)

@@ -26,6 +26,7 @@ import subprocess
 import threading
 import time
 
+from . import moods as settings_store
 from . import paths
 from .i18n import T
 
@@ -78,20 +79,50 @@ def set_state(on):
     return actual() == on
 
 
-SETUP = 'Set up Keep Awake.command'   # in tools/: installs or removes the sudoers rule and `awake`
+SETUP = 'Set up Keep Awake.command'   # in tools/: installs the sudoers rule and `awake` (or asks to remove)
+REMOVE = 'Remove Keep Awake.command'  # in tools/: only removes both (the Remove… button)
 COMMAND = '/usr/local/bin/awake'      # the `awake COMMAND` shortcut, installed by SETUP
 
 
-def open_setup():
-    """Open the setup script in Terminal (it asks for the admin password there, not here)."""
+def open_setup(remove=False):
+    """Open the setup (or remove) script in Terminal (it asks for the admin password there, not here)."""
     root = paths.project_root()
-    script = root / 'tools' / SETUP if root else None
+    script = root / 'tools' / (REMOVE if remove else SETUP) if root else None
     if script is None or not script.is_file():
         raise ValueError(T('설정 스크립트를 찾지 못했습니다.', 'The setup script is missing.'))
     code, _ = _run(['/usr/bin/open', '-a', 'Terminal', str(script)])
     if code != 0:
         raise ValueError(T('터미널을 열지 못했습니다.', 'Could not open Terminal.'))
     _cache['ready'] = None   # check again soon
+
+
+AGENTS = ('claude', 'gpt', 'illuminati')   # the AIs that may ask through MCP (default: all)
+
+
+def agents():
+    """Which AIs may keep the Mac awake through MCP (settings 'awake': {'apps': {...}})."""
+    data = settings_store.load_settings().get('awake')
+    apps = data.get('apps') if isinstance(data, dict) else None
+    apps = apps if isinstance(apps, dict) else {}
+    return {k: apps.get(k, True) is not False for k in AGENTS}
+
+
+def agent_allowed(agent):
+    return agents().get(agent, False)
+
+
+def save_agents(apps, now=None):
+    """From the settings window. An AI that is no longer allowed loses its lease right away."""
+    if not isinstance(apps, dict) or not apps or any(k not in AGENTS or type(v) is not bool for k, v in apps.items()):
+        raise ValueError(T('잘못된 요청입니다.', 'Bad request.'))
+    with _lock:
+        current = agents()
+        current.update(apps)
+        settings_store.save_settings(awake=dict(apps=current))
+        for k, on in current.items():
+            if not on:
+                release('mcp:' + k, now)
+    return current
 
 
 def command_installed():
@@ -219,6 +250,7 @@ def _reconcile(state, now, reason=''):
 
 def acquire(lid, minutes, label='', pid=None, auto=False, now=None):
     """Hold (or renew) lease `lid` for `minutes`; with pid, only while that process lives.
+    An AI's lease ('mcp:<ai>') needs that AI allowed in the settings window.
     auto: asked by a hook or an AI, not the user. It is ignored while the user's "Turn off
     all" pause runs; a lease from the user ends that pause. Returns True when held."""
     now = time.time() if now is None else now
@@ -226,6 +258,9 @@ def acquire(lid, minutes, label='', pid=None, auto=False, now=None):
         raise ValueError(T(f'1~{MAX_MINUTES}분 사이로 정해 주세요.', f'Choose 1 to {MAX_MINUTES} minutes.'))
     if not isinstance(lid, str) or not 1 <= len(lid) <= 80:
         raise ValueError('lease id')
+    if lid.startswith('mcp:') and not agent_allowed(lid[4:]):
+        raise ValueError(T('사용자가 이 AI의 깨어 있기 요청을 꺼 두었습니다 (설정 → AI → 깨어 있기).',
+                           'The user turned off keep awake for this AI (AI Face settings → AI → Keep awake).'))
     if pid is not None and (type(pid) is not int or not _alive(pid)):
         raise ValueError(T('작업 프로세스를 찾지 못했습니다.', 'The job process is not running.'))
     if not supported():
@@ -345,7 +380,7 @@ def status(now=None):
                      for k, v in state['leases'].items() if _active(v, now)), key=lambda x: -x['left'])
     paused = max(0, int((state.get('paused_until') or 0) - now))
     return dict(supported=supported(), ready=bool(_cache['ready']), command=command_installed(),
-                on=bool(_cache['on']),
+                on=bool(_cache['on']), apps=agents(),
                 ours=bool(state.get('on')), left=max([x['left'] for x in leases], default=0),
                 leases=leases, paused=paused, reason=last_reason)
 

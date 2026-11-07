@@ -424,7 +424,7 @@ def main():
                     action = data.get('action')
                     # A board that was plugged in after the app started is picked up here.
                     if action not in ('connect', 'disconnect', 'quit', 'firmware', 'mcp_install', 'mcp_remove',
-                                      'awake_acquire', 'awake_release', 'awake_resume', 'calendar_settings',
+                                      'awake_acquire', 'awake_release', 'awake_resume', 'awake_settings', 'calendar_settings',
                                       'calendar_decide', 'calendar_undo', 'mail_settings', 'update_settings',
                                       'update_channel', 'update_check', 'update_install') \
                             and device.fd is None and not device.paused and ports():
@@ -488,6 +488,8 @@ def main():
                         awake.release(data.get('id'))
                     elif action == 'awake_resume':
                         awake.resume_auto()
+                    elif action == 'awake_settings':   # which AIs may ask (settings window)
+                        awake.save_agents(data.get('apps'))
                     elif action == 'calendar_settings':
                         calendar_access.save(data.get('changes'))
                     elif action == 'mail_settings':
@@ -507,7 +509,7 @@ def main():
                         calendar_access.undo(data.get('n'))
                         device.message = T('변경을 되돌렸습니다.', 'Undone.')
                     elif action == 'awake_setup':
-                        awake.open_setup()
+                        awake.open_setup(remove=data.get('remove') is True)
                         device.message = T('터미널에서 설정을 마쳐 주세요.', 'Finish the setup in Terminal.')
                     elif action == 'history_clear':
                         n = history.clear()

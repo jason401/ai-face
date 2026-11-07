@@ -219,6 +219,9 @@ final class SettingsStore: NSObject, ObservableObject {
     @Published var awakeLeft = 0
     @Published var awakeNotice = ""
     @Published var awakeCommand = false
+    @Published var awakeClaude = true      // which AIs may keep the Mac awake (MCP keep_awake)
+    @Published var awakeGPT = true
+    @Published var awakeIlluminati = true
     // Expression history (History tab)
     @Published var historyKind = "day"   // day, week, month, year
     @Published var historyDay = Calendar.current.startOfDay(for: Date())   // any day in the period
@@ -291,6 +294,11 @@ final class SettingsStore: NSObject, ObservableObject {
                 self.awakeOn = (a["on"] as? Bool) ?? false
                 self.awakeLeft = (a["left"] as? NSNumber)?.intValue ?? 0
                 self.awakeCommand = (a["command"] as? Bool) ?? false
+                if let apps = a["apps"] as? [String: Bool] {
+                    self.awakeClaude = apps["claude"] ?? true
+                    self.awakeGPT = apps["gpt"] ?? true
+                    self.awakeIlluminati = apps["illuminati"] ?? true
+                }
             }
             let photos = ((s["photos"] as? [NSNumber]) ?? []).map { $0.intValue }
             let current = (s["current_photo"] as? NSNumber)?.intValue ?? -1
@@ -1000,9 +1008,22 @@ final class SettingsStore: NSObject, ObservableObject {
         return String(format: L("On · %ld:%02ld left"), awakeLeft / 3600, awakeLeft % 3600 / 60)
     }
 
-    func setUpAwake() {
-        API.shared.call("awake_setup") { [weak self] ok, reply in
+    /// Opens the setup script in Terminal; remove: the one that only removes it (Remove…).
+    func setUpAwake(remove: Bool = false) {
+        API.shared.call("awake_setup", ["remove": remove]) { [weak self] ok, reply in
             if !ok { self?.notice = (reply["message"] as? String) ?? "" }
+        }
+    }
+
+    /// Which AIs may keep the Mac awake through MCP. Applies right away (no restart).
+    func setAwakeApps(_ ai: String, _ on: Bool) {
+        switch ai {
+        case "claude": awakeClaude = on
+        case "gpt": awakeGPT = on
+        default: awakeIlluminati = on
+        }
+        API.shared.call("awake_settings", ["apps": [ai: on]]) { [weak self] ok, reply in
+            if !ok { self?.aiNotice = (reply["message"] as? String) ?? "" }
         }
     }
 

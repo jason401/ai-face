@@ -60,17 +60,21 @@ struct GeneralTab: View {
                     }
                     Divider()
                     SettingsRow(title: L("Permission")) {
-                        SettingsAction(title: store.awakeReady ? L("Remove…") : L("Set up…")) { store.setUpAwake() }
+                        SettingsAction(title: store.awakeReady ? L("Remove…") : L("Set up…")) {
+                            store.setUpAwake(remove: store.awakeReady)
+                        }
+                        .help(store.awakeReady ? L("Removes the permission and the awake command (in Terminal, with your Mac password).") : "")
                     }
                     if store.awakeReady {
                         Divider()
-                        SettingsRow(title: L("awake command")) {
+                        SettingsRow(title: L("Terminal command")) {
                             if store.awakeCommand {
                                 SettingsStatus(text: L("Installed"))
                             } else {
                                 SettingsAction(title: L("Install…")) { store.setUpAwake() }
                             }
                         }
+                        .help(L("In Terminal, awake COMMAND keeps the Mac awake while COMMAND runs (for example: awake python train.py)."))
                     }
                     SettingsNote(text: store.awakeNotice.isEmpty
                                  ? L("Lid closed, 1–4 hours from the menu. Turns off by itself.") : store.awakeNotice, lines: 3)
@@ -248,17 +252,28 @@ struct AITab: View {
                     appRow("AI Illuminati", store.illuminati, "illuminati")
                         .help(L("AI Illuminati shows its plain-chat replies here as its own AI (gold ring), whichever model answers. No restart needed: it applies within 30 seconds."))
                 }
-                if store.awakeSupported {
-                    Divider()
-                    SettingsRow(title: L("Keep awake")) {
-                        Toggle(L("While Claude Code works"), isOn: Binding(get: { store.hooks == "on" },
-                                                                          set: { store.setAI("claude_code_awake", on: $0) }))
-                            .toggleStyle(.checkbox).disabled(!store.awakeReady)
-                            .help(L("Claude Code: keep the Mac awake while it works"))
-                    }
-                }
                 SettingsNote(text: store.aiNotice.isEmpty ? L("After connecting or disconnecting, quit that app (⌘Q) and open it again.") : store.aiNotice, lines: 3)
                     .help(L("Once connected, the AI picks a face for every reply. After connecting or disconnecting, quit that app (⌘Q) and open it again. Ring colors: Claude orange, GPT green, AI Illuminati gold, your own picks white."))
+            }
+
+            if store.awakeSupported {
+                SettingsCard(title: L("Keep awake")) {
+                    SettingsRow(title: "Claude Code") {
+                        Toggle(L("While it works"), isOn: Binding(get: { store.hooks == "on" },
+                                                                  set: { store.setAI("claude_code_awake", on: $0) }))
+                            .toggleStyle(.checkbox)
+                            .help(L("Claude Code: keep the Mac awake while it works"))
+                    }
+                    Divider()
+                    SettingsRow(title: L("AI can ask")) {
+                        perAI(store.awakeClaude, store.awakeGPT, store.awakeIlluminati) { ai, on in store.setAwakeApps(ai, on) }
+                            .help(L("Which AIs may keep the Mac awake when you ask them to (up to 4 hours, renewed while they work)."))
+                    }
+                    if !store.awakeReady {
+                        SettingsNote(text: L("Needs the permission first: General → Keep awake."), lines: 2)
+                    }
+                }
+                .disabled(!store.awakeReady)
             }
 
             SettingsCard(title: L("Shared folders")) {

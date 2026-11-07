@@ -36,7 +36,7 @@ find "$CANDIDATE" -name __pycache__ -type d -prune -exec rm -rf {} +
 cp LICENSE THIRD_PARTY_NOTICES.md "$CANDIDATE/Contents/Resources/"
 mkdir -p "$CANDIDATE/Contents/Resources/firmware"
 cp -R firmware/ESP32_Display "$CANDIDATE/Contents/Resources/firmware/"
-cp 'tools/Set up Keep Awake.command' "$CANDIDATE/Contents/Resources/tools/"
+cp 'tools/Set up Keep Awake.command' 'tools/Remove Keep Awake.command' "$CANDIDATE/Contents/Resources/tools/"
 cp tools/install_app.py tools/deploy_app.py "$CANDIDATE/Contents/Resources/"
 ICONSET="$STAGING/AppIcon.iconset"
 mkdir -p "$ICONSET"

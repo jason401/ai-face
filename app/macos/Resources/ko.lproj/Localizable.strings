@@ -149,7 +149,9 @@
 "Automatic keep awake paused · %ld min" = "자동 깨어 있기 일시 중지 · %ld분";
 "Resume automatic keep awake" = "자동 깨어 있기 다시 켜기";
 "Claude Code: keep the Mac awake while it works" = "Claude Code가 일하는 동안 맥 깨어 있기";
-"awake command" = "awake 명령";
+"Terminal command" = "터미널 명령";
+"In Terminal, awake COMMAND keeps the Mac awake while COMMAND runs (for example: awake python train.py)." = "터미널에서 awake 명령어 형태로 쓰면 그 명령이 도는 동안 맥이 깨어 있어요 (예: awake python train.py).";
+"Removes the permission and the awake command (in Terminal, with your Mac password)." = "권한과 awake 명령을 지워요 (터미널에서 맥 비밀번호 입력).";
 "Installed" = "설치됨";
 "Install…" = "설치…";
 "Saved. Quit that AI app (⌘Q) and open it again for the change to apply." = "저장했어요. 그 AI 앱을 ⌘Q로 껐다 켜야 반영돼요.";
@@ -241,7 +243,10 @@
 "Saved history" = "저장된 기록";
 "The bundled AI Face server is missing. Rebuild the app." = "앱 안의 AI Face 서버가 없어요. 앱을 다시 빌드해 주세요.";
 "Update" = "업데이트";
-"While Claude Code works" = "Claude Code 작업 중";
+"While it works" = "작업하는 동안";
+"AI can ask" = "AI 요청 허용";
+"Which AIs may keep the Mac awake when you ask them to (up to 4 hours, renewed while they work)." = "부탁하면 맥을 깨어 있게 할 수 있는 AI예요 (최대 4시간, 작업 중이면 연장).";
+"Needs the permission first: General → Keep awake." = "먼저 일반 → 깨어 있기에서 권한을 설정하세요.";
 "%d of %d on…" = "%d / %d개 켜짐…";
 "%d changes…" = "%d개 보기…";
 "Accounts" = "계정";
