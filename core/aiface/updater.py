@@ -7,6 +7,7 @@ import fcntl
 import importlib.util
 import json
 import shutil
+import signal
 import tempfile
 from pathlib import Path
 import os
@@ -32,6 +33,9 @@ AI_QUIET = 10 * 60        # an AI changed the face this recently: the user is pr
 
 _lock = threading.Lock()   # one update at a time
 _running = False
+_progress = None
+_progress_lock = threading.RLock()
+STEPS = ('fetch', 'test', 'build', 'install')
 _gate = threading.RLock()
 _active_requests = 0
 _quiescing = False
@@ -136,19 +140,95 @@ def _out(root, *args):
     return p.stdout.strip()
 
 
+
+def progress_step(stage):
+    """Live UI telemetry only; never controls the installation transaction."""
+    global _progress
+    now = time.time()
+    with _progress_lock:
+        if _progress is None:
+            _progress = dict(stage=stage, started=now, durations={}, line='', output_at=now,
+                             expected=load_state().get('step_times', {}))
+        else:
+            previous = _progress['stage']
+            _progress['durations'][previous] = max(0, now - _progress['started'])
+            _progress.update(stage=stage, started=now, line='', output_at=now)
+            if stage == 'install':
+                save_state(step_times=dict(_progress['durations']))
+
+
+def progress_output(text):
+    lines = text.strip().splitlines()
+    if lines:
+        with _progress_lock:
+            if _progress is not None:
+                _progress.update(line=lines[-1][-300:], output_at=time.time())
+
+
+def progress_status():
+    with _progress_lock:
+        if _progress is None:
+            return None
+        return dict(_progress, durations=dict(_progress['durations']),
+                    expected=dict(_progress['expected']))
+
+
+def finish_progress(result):
+    global _progress
+    with _progress_lock:
+        if _progress is None:
+            return
+        outcome = result.get('result')
+        if outcome in ('failed', 'error', 'waiting'):
+            _progress.update(failed=outcome in ('failed', 'error'), waiting=outcome == 'waiting',
+                             stopped=time.time())
+        elif outcome == 'installing':
+            durations = dict(_progress['durations'])
+            durations[_progress['stage']] = max(0, time.time() - _progress['started'])
+            save_state(step_times=durations)
+        else:
+            _progress = None
+
+
+def _run_logged(args, root, timeout=1200, env=None):
+    """Keep bounded output and live last-line telemetry, including commands without newlines."""
+    with tempfile.TemporaryFile() as output:
+        process = subprocess.Popen(args, cwd=str(root), stdout=output, stderr=subprocess.STDOUT,
+                                   stdin=subprocess.DEVNULL, env=env, start_new_session=True)
+        deadline = time.monotonic() + timeout
+        seen = 0
+        try:
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise subprocess.TimeoutExpired(args, timeout)
+                try:
+                    process.wait(timeout=min(0.25, remaining))
+                except subprocess.TimeoutExpired:
+                    pass
+                size = os.fstat(output.fileno()).st_size
+                if size != seen:
+                    tail = os.pread(output.fileno(), min(size, 4096), max(0, size - 4096))
+                    progress_output(tail.decode('utf-8', errors='replace'))
+                    seen = size
+                if process.poll() is not None:
+                    return process.returncode == 0, os.pread(
+                        output.fileno(), min(size, 2000), max(0, size - 2000)).decode('utf-8', errors='replace')
+        finally:
+            if process.poll() is None:
+                os.killpg(process.pid, signal.SIGKILL)
+                process.wait()
+
+
 def run_tests(root):
     """The project's own tests (Python and the firmware simulator). Returns (ok, output)."""
-    p = subprocess.run([sys.executable, '-m', 'unittest', 'discover', '-s', 'tests'], cwd=str(root),
-                       capture_output=True, text=True, timeout=1200, stdin=subprocess.DEVNULL,
+    return _run_logged([sys.executable, '-u', '-m', 'unittest', 'discover', '-s', 'tests'], root,
                        env={k: v for k, v in os.environ.items() if not k.startswith('AIFACE_')})
-    return p.returncode == 0, (p.stdout + p.stderr)[-2000:]
 
 
 def compile_app(root):
-    """Stages a complete signed candidate in the private checkout; the running app is not touched."""
-    p = subprocess.run(['/bin/zsh', str(root / 'tools' / 'build_app.sh'), '--stage'], cwd=str(root),
-                       capture_output=True, text=True, timeout=1200, stdin=subprocess.DEVNULL)
-    return p.returncode == 0, (p.stdout + p.stderr)[-2000:]
+    """Stages a complete signed candidate; the running app is not touched."""
+    return _run_logged(['/bin/zsh', str(root / 'tools' / 'build_app.sh'), '--stage'], root)
 
 
 def install_app(root):
@@ -220,10 +300,14 @@ def _short(rev):
 def check(device=None, manual=False, install=False):
     """One check. With install (the user clicked "Update now"), also test, build and install
     the new version. Returns the new state (also saved)."""
-    global _running
+    global _running, _progress
     if not _lock.acquire(blocking=False):
         return status()
     _running = True
+    with _progress_lock:
+        _progress = None
+    if install:
+        progress_step('fetch')
     try:
         picked = channel()
         result = _check(device, manual, install)
@@ -234,9 +318,11 @@ def check(device=None, manual=False, install=False):
             result = _check(device, manual, False)
         if install and result.get('result') != 'waiting':
             result['want_install'] = False   # done, failed or nothing to install: stop retrying
+        finish_progress(result)
         return save_state(**result, checked=int(time.time()))
     except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
         stop = dict(want_install=False) if install else {}   # do not repeat a broken install every RETRY
+        finish_progress(dict(result='error'))
         return save_state(result='error', detail=str(exc)[:300], checked=int(time.time()), **stop)
     finally:
         _running = False
@@ -270,6 +356,7 @@ def _check_locked(device, manual, install):
         reason = busy(device, manual=True)
         if reason:
             return dict(result='waiting', detail=reason)
+        progress_step('install')
         install_app(bundle)
         return dict(result='installing', detail='')
     root = source_checkout()
@@ -320,9 +407,13 @@ def _check_locked(device, manual, install):
     else:
         _out(root, 'merge', '--ff-only', '--quiet', new)
     try:
+        progress_step('test')
         ok, log = run_tests(root)
+        progress_output(log)
         if ok:
+            progress_step('build')
             ok, log = compile_app(root)
+            progress_output(log)
     except (OSError, subprocess.SubprocessError) as exc:   # timed out or could not start
         ok, log = False, str(exc)[-2000:]
     if not ok:
@@ -338,13 +429,14 @@ def _check_locked(device, manual, install):
         return dict(result='waiting', detail=reason)
     save_state(result='installing', previous=_short(running or old), current=_short(new),
                changes=subjects, failed=None, detail='')
+    progress_step('install')
     install_app(root)
     return dict(result='installing', detail='')
 
 
 def status():
     s = load_state()
-    return dict(enabled=enabled(), channel=channel(), running=_running, result=s.get('result', ''), detail=s.get('detail', ''),
+    return dict(progress=progress_status(), enabled=enabled(), channel=channel(), running=_running, result=s.get('result', ''), detail=s.get('detail', ''),
                 checked=s.get('checked', 0), current=s.get('current', ''), previous=s.get('previous', ''),
                 next=s.get('next', ''), installed=s.get('installed', 0), changes=s.get('changes', []),
                 want_install=bool(s.get('want_install')))

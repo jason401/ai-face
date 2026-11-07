@@ -369,3 +369,21 @@
 "Screen light, photos and firmware are in Details." = "화면 조명, 사진, 펌웨어는 '자세히…'에 있어요.";
 "Plug in the board to change its settings." = "보드를 연결하면 설정을 바꿀 수 있어요.";
 "AI Illuminati shows its plain-chat replies here as its own AI (gold ring), whichever model answers. No restart needed: it applies within 30 seconds." = "AI Illuminati의 일반 채팅 답을 하나의 AI로 보여줘요(금색 테두리). 안에서 어떤 모델이 답하든 같아요. 다시 실행할 필요 없이 30초 안에 적용돼요.";
+
+/* Shared General layout and live update progress */
+"Check automatically" = "자동 확인";
+"Check Now" = "지금 확인";
+"Update Now" = "지금 업데이트";
+"Open" = "열기";
+"Licenses" = "라이선스";
+"Show" = "보기";
+"Fetch" = "받기";
+"Test" = "시험";
+"Build" = "빌드";
+"Install" = "설치";
+"%@ elapsed" = "%@ 경과";
+"Failed" = "실패";
+"Waiting" = "대기 중";
+"about %@ left" = "약 %@ 남음";
+"no output for %@" = "%@째 새 출력 없음";
+"%d min %d s" = "%d분 %d초";

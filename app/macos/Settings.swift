@@ -109,6 +109,58 @@ struct LibraryItem: Identifiable, Hashable {
     var id: String { return "\(name)|\(mtime)" }
 }
 
+
+/// Four real updater stages; timing comes from /update, never from a simulated percentage.
+struct UpdateProgress {
+    static var names: [String] { [L("Fetch"), L("Test"), L("Build"), L("Install")] }
+    static let stages = ["fetch", "test", "build", "install"]
+    let stage: Int
+    let started: Double
+    let stopped: Double?
+    let expected: [String: Double]
+    let failed: Bool
+    let waiting: Bool
+    let line: String
+    let outputAt: Double
+
+    init?(_ json: [String: Any]) {
+        guard let name = json["stage"] as? String, let index = Self.stages.firstIndex(of: name),
+              let started = (json["started"] as? NSNumber)?.doubleValue else { return nil }
+        stage = index
+        self.started = started
+        stopped = (json["stopped"] as? NSNumber)?.doubleValue
+        expected = (json["expected"] as? [String: NSNumber] ?? [:]).mapValues { $0.doubleValue }
+        failed = json["failed"] as? Bool ?? false
+        waiting = json["waiting"] as? Bool ?? false
+        line = json["line"] as? String ?? ""
+        outputAt = (json["output_at"] as? NSNumber)?.doubleValue ?? started
+    }
+
+    func elapsed(at now: Date) -> Double { max(0, (stopped ?? now.timeIntervalSince1970) - started) }
+    func fraction(at now: Date) -> Double? {
+        guard let total = expected[Self.stages[stage]], total > 0 else { return nil }
+        return min(0.95, elapsed(at: now) / total)
+    }
+    func summary(at now: Date) -> String {
+        var text = Self.names[stage] + " · " + String(format: L("%@ elapsed"), Self.duration(elapsed(at: now)))
+        if failed { text += " · " + L("Failed") }
+        else if waiting { text += " · " + L("Waiting") }
+        else if let total = expected[Self.stages[stage]], total > elapsed(at: now) {
+            text += " · " + String(format: L("about %@ left"), Self.duration(total - elapsed(at: now)))
+        }
+        return text
+    }
+    func quiet(at now: Date) -> Double? {
+        let seconds = now.timeIntervalSince1970 - outputAt
+        return !failed && !waiting && seconds >= 45 ? seconds : nil
+    }
+    static func duration(_ seconds: Double) -> String {
+        let value = max(0, Int(seconds))
+        return value >= 60 ? String(format: L("%d min %d s"), value / 60, value % 60)
+            : String(format: L("%d s"), value)
+    }
+}
+
 // MARK: - State shared by the tabs
 
 final class SettingsStore: NSObject, ObservableObject {
@@ -207,6 +259,8 @@ final class SettingsStore: NSObject, ObservableObject {
     @Published var loginItem = false
     @Published var mono = false
     @Published var version = ""
+    @Published var versionDetail = ""
+    @Published var updateProgress: UpdateProgress?
     @Published var autoUpdate = true
     @Published var updateChannel = "stable"   // or "main": the beta channel (updater.py CHANNELS)
     @Published var updateRunning = false
@@ -287,6 +341,9 @@ final class SettingsStore: NSObject, ObservableObject {
             if let revision = s["revision"] as? String, !revision.isEmpty {
                 self.version += " (" + revision.prefix(7) + ")"
             }
+            let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "–"
+            let revision = s["revision"] as? String ?? ""
+            self.versionDetail = L("Build") + " " + build + (revision.isEmpty ? "" : " · " + revision)
             self.mono = (s["mono"] as? Bool) ?? false
             if let a = s["awake"] as? [String: Any] {
                 self.awakeSupported = (a["supported"] as? Bool) ?? false
@@ -327,7 +384,8 @@ final class SettingsStore: NSObject, ObservableObject {
             self.updateChannel = (u["channel"] as? String) ?? "stable"
             self.updateRunning = (u["running"] as? Bool) ?? false
             self.updateText = SettingsStore.updateText(u)
-            self.updateAvailable = (u["result"] as? String) == "available" && !self.updateRunning
+            self.updateProgress = (u["progress"] as? [String: Any]).flatMap(UpdateProgress.init)
+            self.updateAvailable = ["available", "failed", "waiting"].contains((u["result"] as? String) ?? "") && !self.updateRunning
         }
         API.shared.getJSON("library") { [weak self] json in
             guard let self = self, let list = json as? [[String: Any]] else { return }

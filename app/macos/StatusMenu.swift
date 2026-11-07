@@ -89,6 +89,8 @@ final class StatusController: NSObject, NSMenuDelegate {
     private let header = MenuHeader()
     private let headerItem = NSMenuItem()
     private var menuOpen = false
+    private var updateProgress: UpdateProgress?
+    private let updateProgressItem = NSMenuItem()
     private var polling = false
     private var drawTimer: Timer?
     private var pollTimer: Timer?
@@ -151,6 +153,13 @@ final class StatusController: NSObject, NSMenuDelegate {
                 self.loadRecent()
                 self.rebuildMenu()
                 self.applyEmotion(self.pendingEmotion)
+            }
+        }
+        if menuOpen {
+            API.shared.getJSON("update") { [weak self] json in
+                guard let self = self, let data = json as? [String: Any] else { return }
+                self.updateProgress = (data["progress"] as? [String: Any]).flatMap(UpdateProgress.init)
+                self.updateProgressItem.isHidden = self.updateProgress == nil
             }
         }
         if folderPolls % 15 == 0 { loadFolders() }
@@ -332,7 +341,10 @@ final class StatusController: NSObject, NSMenuDelegate {
         let side = NSStatusBar.system.thickness
         item.button?.image = renderFace(side: side, inset: 2, view: view, pose: animator.pose, fire: fire, now: now,
                                         offset: bounce(now))
-        if menuOpen { updateHeader(now) }
+        if menuOpen {
+            updateHeader(now)
+            if let progress = updateProgress { updateProgressItem.title = progress.summary(at: Date()) }
+        }
         if let face = item.button?.window?.frame, API.shared.ready {
             shelf.tick(face: face, menuOpen: menuOpen, now: now)
         }
@@ -450,6 +462,10 @@ final class StatusController: NSObject, NSMenuDelegate {
         shared.submenu = sharedMenu
 
         menu.addItem(.separator())
+        updateProgressItem.isEnabled = false
+        updateProgressItem.isHidden = updateProgress == nil
+        updateProgressItem.title = updateProgress?.summary(at: Date()) ?? ""
+        menu.addItem(updateProgressItem)
         if updateAvailable {   // like AI Illuminati: found by itself, installed only from here or Settings
             _ = add(menu, L("Install new version"), #selector(installUpdate))
         }

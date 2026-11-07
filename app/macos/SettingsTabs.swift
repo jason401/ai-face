@@ -3,7 +3,7 @@ import Cocoa
 import SwiftUI
 import UniformTypeIdentifiers
 
-// MARK: - General: what any app has (login, updates, folders)
+// MARK: - General: shared App → Updates → Folders → About layout
 
 struct GeneralTab: View {
     @ObservedObject var store: SettingsStore
@@ -15,12 +15,10 @@ struct GeneralTab: View {
                     SettingsSwitch(title: L("Open at login"), isOn: Binding(get: { store.loginItem }, set: { store.setLogin($0) }))
                         .help(L("The face appears in the menu bar as soon as you log in."))
                 }
-                Divider()
-                SettingsRow(title: L("Auto check")) {
-                    SettingsAction(title: L("Check now")) { store.checkUpdate() }
-                        .disabled(store.updateRunning)
-                    Toggle(L("Check for updates automatically"), isOn: Binding(get: { store.autoUpdate }, set: { store.setAutoUpdate($0) }))
-                        .labelsHidden().toggleStyle(.switch)
+            }
+            SettingsCard(title: L("Updates")) {
+                SettingsRow(title: L("Check automatically")) {
+                    SettingsSwitch(title: L("Check for updates automatically"), isOn: Binding(get: { store.autoUpdate }, set: { store.setAutoUpdate($0) }))
                         .help(L("Check for updates automatically"))
                 }
                 Divider()
@@ -30,30 +28,115 @@ struct GeneralTab: View {
                         .disabled(store.updateRunning)
                         .help(L("Stable gets versions that were published after testing. Beta follows main, where new changes arrive first; it may be broken. Going back to Stable updates once stable catches up with the version you run."))
                 }
-                if store.updateAvailable {
-                    Divider()
+                Divider()
+                if let progress = store.updateProgress {
+                    UpdateProgressBar(progress: progress)
+                        .padding(.horizontal, 10).padding(.vertical, 8)
+                }
+                if store.updateProgress == nil || !store.updateRunning {
                     SettingsRow(title: L("New version")) {
-                        Button(action: { store.installUpdate() }) {
-                            Text(L("Update now")).lineLimit(1).foregroundStyle(.white)
-                                .frame(maxWidth: .infinity, minHeight: 24)
-                                .background(RoundedRectangle(cornerRadius: 5).fill(Color.accentColor))
-                        }.buttonStyle(.plain)
+                        if store.updateAvailable {
+                            Button(action: { store.installUpdate() }) {
+                                Text(L("Update Now")).lineLimit(1).foregroundStyle(.white)
+                                    .frame(maxWidth: .infinity, minHeight: 24)
+                                    .background(RoundedRectangle(cornerRadius: 5).fill(Color.accentColor))
+                            }.buttonStyle(.plain).disabled(store.updateRunning)
+                        } else {
+                            SettingsAction(title: L("Check Now")) { store.checkUpdate() }
+                                .disabled(store.updateRunning)
+                        }
                     }
                 }
-                SettingsNote(text: "AI Face " + store.version + "\n"
-                             + (store.updateChannel == "main" ? L("Beta: changes may not be tested yet.") + "\n" : "")
+                SettingsNote(text: (store.updateChannel == "main" ? L("Beta: changes may not be tested yet.") + "\n" : "")
                              + store.updateText, lines: 5)
                     .textSelection(.enabled)
                     .help(L("AI Face looks for a new version of the chosen channel on GitHub at startup and every 3 hours, but installs it only when you click Update now (here or in the menu). It then tests and builds it in its own source folder and restarts. Your development folder is never changed. Existing Python and Command Line Tools are required."))
-                Divider()
-                SettingsRow(title: L("Folders")) {
+            }
+            SettingsCard(title: L("Folders")) {
+                SettingsRow(title: L("Open")) {
                     SettingsAction(title: L("App data")) { store.openDataFolder() }
                         .help(L("Settings, photos, history, the update copy and backups"))
                     SettingsAction(title: L("App")) { store.revealApp() }
                         .help(Bundle.main.bundlePath)
                 }
             }
+            SettingsCard(title: L("About")) {
+                SettingsRow(title: L("Version")) {
+                    Text(store.version).foregroundStyle(.secondary).textSelection(.enabled)
+                        .help(store.versionDetail)
+                }
+                Divider()
+                SettingsRow(title: L("Licenses")) {
+                    SettingsAction(title: L("Show")) {
+                        if let url = Bundle.main.url(forResource: "THIRD_PARTY_NOTICES", withExtension: "md") {
+                            NSWorkspace.shared.open(url)
+                        }
+                    }
+                    .disabled(Bundle.main.url(forResource: "THIRD_PARTY_NOTICES", withExtension: "md") == nil)
+                }
+            }
         }
+        .environment(\.settingsLabelWidth, 118)
+    }
+}
+
+private struct UpdateProgressBar: View {
+    let progress: UpdateProgress
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            let now = context.date
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .top, spacing: 3) {
+                    ForEach(0 ..< UpdateProgress.stages.count, id: \.self) { step in
+                        VStack(alignment: .leading, spacing: 3) {
+                            segment(step, now)
+                            Text(UpdateProgress.names[step] + (step < progress.stage ? " ✓" : ""))
+                                .font(.system(size: 10, weight: step == progress.stage ? .semibold : .regular))
+                                .foregroundStyle(step == progress.stage ? Color.primary : Color.secondary)
+                                .lineLimit(1)
+                        }
+                    }
+                }
+                Text(progress.summary(at: now))
+                    .font(.system(size: 11)).foregroundStyle(tint == .accentColor ? Color.primary : tint)
+                    .lineLimit(2).fixedSize(horizontal: false, vertical: true)
+                if let output = output(now) {
+                    Text(output).font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary)
+                        .lineLimit(1).truncationMode(.tail)
+                        .frame(maxWidth: .infinity, alignment: .leading)   // a long line must not squeeze the steps
+                        .help(progress.line)
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var tint: Color { progress.failed ? .red : progress.waiting ? .yellow : .accentColor }
+
+    private func segment(_ step: Int, _ now: Date) -> some View {
+        let current = step == progress.stage
+        let fill: Double = step < progress.stage ? 1
+            : current ? (progress.failed || progress.waiting ? 1 : progress.fraction(at: now) ?? 0.5) : 0
+        // Without last time's duration the current segment pulses instead of pretending to know.
+        let pulse = current && !progress.failed && !progress.waiting && progress.fraction(at: now) == nil
+            && Int(now.timeIntervalSince1970) % 2 == 1
+        return GeometryReader { box in
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color.primary.opacity(0.1))
+                Capsule().fill(current ? tint : Color.accentColor)
+                    .frame(width: box.size.width * fill)
+                    .opacity(pulse ? 0.45 : 1)
+                    .animation(.easeInOut(duration: 0.9), value: pulse)
+            }
+        }
+        .frame(height: 4)
+    }
+
+    private func output(_ now: Date) -> String? {
+        let quiet = progress.quiet(at: now).map { String(format: L("no output for %@"), UpdateProgress.duration($0)) }
+        guard !progress.line.isEmpty || quiet != nil else { return nil }
+        return "› " + [progress.line, quiet].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
     }
 }
 

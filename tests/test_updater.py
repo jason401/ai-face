@@ -338,5 +338,89 @@ class UpdaterTests(unittest.TestCase):
         self.assertEqual((s['result'], s['changes']), ('available', ['Beta change']))
         self.assertEqual((self.installs, self.ran_tests), ([], 0))
 
+
+    def test_progress_follows_real_work_and_reuses_stage_times(self):
+        self.commit('b.txt', 'two', 'Add b')
+        seen = []
+        def stage(name):
+            def run(root):
+                snapshot = updater.status()['progress']
+                seen.append(snapshot['stage'])
+                self.assertEqual(snapshot['stage'], name)
+                return True, name + ' output'
+            return run
+        with patch.object(updater, 'run_tests', side_effect=stage('test')), \
+                patch.object(updater, 'compile_app', side_effect=stage('build')):
+            updater.request_install(FakeDevice())
+        self.assertEqual(seen, ['test', 'build'])
+        self.assertEqual(updater.status()['progress']['stage'], 'install')
+        self.assertIn('build', updater.load_state()['step_times'])
+        updater.check(FakeDevice())
+        self.assertIsNone(updater.status()['progress'])
+
+    def test_failed_and_waiting_progress_stop_at_the_actual_stage(self):
+        self.commit('b.txt', 'two', 'Add b')
+        self.tests_ok = False
+        updater.request_install(FakeDevice())
+        failed = updater.status()['progress']
+        self.assertEqual(failed['stage'], 'test')
+        self.assertTrue(failed['failed'])
+        self.assertEqual(failed['line'], 'log')
+        self.assertIn('stopped', failed)
+        self.tests_ok = True
+        with patch.object(updater, 'compile_app', return_value=(False, 'compiler failed')):
+            updater.request_install(FakeDevice())
+        self.assertEqual(updater.status()['progress']['stage'], 'build')
+        face_modes.save_settings(timer={'end': time.time() + 60, 'total': 60, 'color': 'blue'})
+        updater.request_install(FakeDevice())
+        waiting = updater.status()['progress']
+        self.assertTrue(waiting['waiting'])
+        self.assertFalse(waiting['failed'])
+
+
+class LoggedCommandTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        p = patch.object(paths, 'DATA', Path(self.tmp.name) / 'data')
+        p.start()
+        self.addCleanup(p.stop)
+        p = patch.object(updater, '_progress', None)
+        p.start()
+        self.addCleanup(p.stop)
+        updater.progress_step('test')
+
+    def test_output_is_live_and_bounded_with_a_failing_exit(self):
+        reported = threading.Event()
+        real = updater.progress_output
+        def output(text):
+            real(text)
+            reported.set()
+        with patch.object(updater, 'progress_output', side_effect=output):
+            def run():
+                self.reply = updater._run_logged(
+                    [sys.executable, '-u', '-c',
+                     "import sys,time; print('ready', flush=True); time.sleep(1); "
+                     "print('x'*5000); print('last line'); sys.exit(7)"],
+                    Path(self.tmp.name), timeout=10)
+            worker = threading.Thread(target=run)
+            worker.start()
+            try:
+                self.assertTrue(reported.wait(5))
+                self.assertTrue(worker.is_alive())
+                self.assertEqual(updater.progress_status()['line'], 'ready')
+            finally:
+                worker.join(10)
+        self.assertFalse(worker.is_alive())
+        self.assertFalse(self.reply[0])
+        self.assertLessEqual(len(self.reply[1]), 2000)
+        self.assertTrue(self.reply[1].endswith('last line\n'))
+        self.assertEqual(updater.progress_status()['line'], 'last line')
+
+    def test_timeout_stops_the_command(self):
+        with self.assertRaises(subprocess.TimeoutExpired):
+            updater._run_logged([sys.executable, '-c', 'import time; time.sleep(10)'],
+                                Path(self.tmp.name), timeout=0.05)
+
 if __name__ == '__main__':
     unittest.main()

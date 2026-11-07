@@ -34,13 +34,25 @@ struct SettingsCard<Content: View>: View {
     }
 }
 
+private struct SettingsLabelWidthKey: EnvironmentKey {
+    static let defaultValue: CGFloat = 96
+}
+
+extension EnvironmentValues {
+    var settingsLabelWidth: CGFloat {
+        get { self[SettingsLabelWidthKey.self] }
+        set { self[SettingsLabelWidthKey.self] = newValue }
+    }
+}
+
 struct SettingsRow<Content: View>: View {
+    @Environment(\.settingsLabelWidth) private var labelWidth
     let title: String
     @ViewBuilder var content: Content
 
     var body: some View {
         HStack(spacing: 10) {
-            Text(title).frame(width: 96, alignment: .leading)
+            Text(title).frame(width: labelWidth, alignment: .leading)
             HStack(spacing: 6) { content }.frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal, 10).padding(.vertical, 6)
