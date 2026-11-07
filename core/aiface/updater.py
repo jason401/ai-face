@@ -1,4 +1,4 @@
-"""App-owned stable checkout -> tests -> complete signed candidate -> transactional install.
+"""App-owned checkout of the update channel (stable, or main for beta) -> tests -> complete signed candidate -> transactional install.
 Never changes the developer checkout. Runtime code is sealed in the installed bundle.
 Like AI Illuminati: checks run by themselves, but a new version is installed only after the
 user clicks "Update now" (install=True).
@@ -21,7 +21,8 @@ from . import moods as face_modes
 from . import paths
 from .i18n import T
 
-BRANCH = 'stable'
+BRANCH = 'stable'         # the default update channel
+CHANNELS = ('stable', 'main')   # main is the beta channel: what the AIs push before stable
 REPOSITORY = 'https://github.com/jason401/ai-face.git'
 TARGET = Path('/Applications/AI Face.app')
 EVERY = 3 * 3600          # seconds between checks
@@ -101,6 +102,26 @@ def set_enabled(on):
     face_modes.save_settings(auto_update=on)
 
 
+def channel():
+    """The branch updates come from: 'stable' (default) or 'main' (beta, for testing)."""
+    name = face_modes.load_settings().get('update_channel', BRANCH)
+    return name if name in CHANNELS else BRANCH
+
+
+def channel_label(name):
+    return T('베타(main)', 'beta (main)') if name == 'main' else name
+
+
+def set_channel(name):
+    """Switches the channel. What the other channel found no longer applies."""
+    if name not in CHANNELS:
+        raise ValueError(T('업데이트 채널이 올바르지 않습니다.', 'Invalid update channel.'))
+    if name == channel():
+        return
+    face_modes.save_settings(update_channel=name)
+    save_state(result='', detail='', next='', changes=[], failed=None, want_install=False)
+
+
 def git(root, *args, timeout=60):
     env = dict(os.environ, GIT_TERMINAL_PROMPT='0', LC_ALL='C',
                PATH=os.pathsep.join(['/usr/bin', '/bin', '/opt/homebrew/bin', '/usr/local/bin']))
@@ -156,7 +177,7 @@ def source_checkout():
         paths.DATA.mkdir(parents=True, exist_ok=True, mode=0o700)
         temporary = Path(tempfile.mkdtemp(prefix='source-clone-', dir=paths.DATA))
         try:
-            p = subprocess.run(['git', 'clone', '--branch', BRANCH, '--single-branch',
+            p = subprocess.run(['git', 'clone', '--branch', channel(), '--single-branch',
                                 REPOSITORY, str(temporary)], capture_output=True, text=True,
                                timeout=180, stdin=subprocess.DEVNULL,
                                env=dict(os.environ, GIT_TERMINAL_PROMPT='0'))
@@ -245,31 +266,39 @@ def _check_locked(device, manual, install):
         install_app(bundle)
         return dict(result='installing', detail='')
     root = source_checkout()
-    if _out(root, 'rev-parse', '--abbrev-ref', 'HEAD') != BRANCH:
-        return dict(result='skipped', detail=f'not on the {BRANCH} branch')
+    branch = channel()
+    head = _out(root, 'rev-parse', '--abbrev-ref', 'HEAD')
+    if head not in CHANNELS:
+        return dict(result='skipped', detail=f'not on the {channel_label(branch)} branch')
     if _out(root, 'status', '--porcelain', '--untracked-files=normal'):
         return dict(result='skipped', detail=T('업데이트 소스에 로컬 변경이 있음', 'Update source has local changes'))
-    p = git(root, 'fetch', '--quiet', 'origin', BRANCH, timeout=120)
+    p = git(root, 'fetch', '--quiet', 'origin', branch, timeout=120)
     if p.returncode != 0:
         return dict(result='error', detail=T('GitHub에 연결하지 못함', 'could not reach GitHub'))
     old, new = _out(root, 'rev-parse', 'HEAD'), _out(root, 'rev-parse', 'FETCH_HEAD')
+    switching = head != branch   # the user picked the other channel: the checkout follows it
     running = paths.running_revision()
     if running == new:
+        if switching:
+            _out(root, 'checkout', '--quiet', '-B', branch, new)
         return dict(result='latest', detail='', current=_short(running))
-    if git(root, 'merge-base', '--is-ancestor', 'HEAD', new).returncode != 0:
-        return dict(result='skipped', detail='Update source has local commits or stable was rewound')
+    if not switching and git(root, 'merge-base', '--is-ancestor', 'HEAD', new).returncode != 0:
+        return dict(result='skipped', detail=f'Update source has local commits or {branch} was rewound')
     if running:
-        # A build installed from main (or a local build) may be ahead of stable: never go back.
+        # A build from the other channel (or a local build) may be ahead of this one: never go back.
         def known():
             return git(root, 'cat-file', '-e', running + '^{commit}').returncode == 0
-        if not known():
-            git(root, 'fetch', '--quiet', 'origin', 'main', timeout=120)
+        for other in CHANNELS:
+            if not known() and other != branch:
+                git(root, 'fetch', '--quiet', 'origin', other, timeout=120)
         if not known():
             return dict(result='skipped', current=_short(running),
                         detail=T('이 맥의 앱은 GitHub에 없는 로컬 빌드예요', 'this Mac runs a local build that is not on GitHub'))
         if git(root, 'merge-base', '--is-ancestor', running, new).returncode != 0:
+            label = channel_label(branch)
             return dict(result='skipped', current=_short(running),
-                        detail=T('이 맥의 앱이 stable보다 새 버전이에요', 'this Mac already runs a newer version than stable'))
+                        detail=T(f'이 맥의 앱이 {label}보다 새 버전이에요. {label}이 따라잡으면 업데이트돼요',
+                                 f'this Mac already runs a newer version than {label}; it updates once {label} catches up'))
     if not manual and load_state().get('failed') == new:
         return dict(result='failed', detail=load_state().get('detail', ''))
     subjects = _out(root, 'log', '--format=%s', f'{running or old}..{new}').splitlines()[:10]
@@ -279,12 +308,18 @@ def _check_locked(device, manual, install):
     reason = busy(device, manual=manual)
     if reason:
         return dict(result='waiting', detail=reason)
-    _out(root, 'merge', '--ff-only', '--quiet', new)
+    if switching:
+        _out(root, 'checkout', '--quiet', '-B', branch, new)
+    else:
+        _out(root, 'merge', '--ff-only', '--quiet', new)
     ok, log = run_tests(root)
     if ok:
         ok, log = compile_app(root)
     if not ok:
-        git(root, 'reset', '--hard', '--quiet', old)
+        if switching:   # back to the branch and commit the running app came from
+            git(root, 'checkout', '--quiet', '--force', '-B', head, old)
+        else:
+            git(root, 'reset', '--hard', '--quiet', old)
         return dict(result='failed', failed=new, current=_short(running or old),
                     detail='New version failed tests or build; keeping the running app', log=log)
     # Building can take minutes: do not interrupt work started since the first check.
@@ -299,7 +334,7 @@ def _check_locked(device, manual, install):
 
 def status():
     s = load_state()
-    return dict(enabled=enabled(), running=_running, result=s.get('result', ''), detail=s.get('detail', ''),
+    return dict(enabled=enabled(), channel=channel(), running=_running, result=s.get('result', ''), detail=s.get('detail', ''),
                 checked=s.get('checked', 0), current=s.get('current', ''), previous=s.get('previous', ''),
                 next=s.get('next', ''), installed=s.get('installed', 0), changes=s.get('changes', []),
                 want_install=bool(s.get('want_install')))

@@ -17,8 +17,10 @@ from aiface import moods as face_modes, paths, updater  # noqa: E402
 
 
 def run(cwd, *args):
-    subprocess.run(['git', '-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'init.defaultBranch=main', *args],
-                   cwd=str(cwd), check=True, capture_output=True)
+    p = subprocess.run(['git', '-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'init.defaultBranch=main', *args],
+                       cwd=str(cwd), capture_output=True, text=True)
+    if p.returncode:
+        raise RuntimeError(f'git {" ".join(args)}: {(p.stderr or p.stdout).strip()}')
 
 
 SOURCE_CHECKOUT = updater.source_checkout
@@ -71,7 +73,11 @@ class UpdaterTests(unittest.TestCase):
         run(where, 'add', name)
         run(where, 'commit', '-q', '-m', subject)
         if where == self.seed:
-            run(where, 'push', '-q', 'origin', 'main')
+            self.publish('main')
+
+    def publish(self, branch, source=None, ref='main'):
+        """Like `git push origin <ref>:<branch>` from the seed, done as a fetch by the throwaway remote."""
+        run(self.remote, 'fetch', '-q', str(source or self.seed), f'{ref}:refs/heads/{branch}')
 
     def head(self):
         return subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=str(self.work), capture_output=True,
@@ -101,7 +107,7 @@ class UpdaterTests(unittest.TestCase):
         # The running app was built from a main commit that stable does not have yet.
         self.commit('n.txt', 'new', 'Newer on main', where=self.work)
         newer = self.head()
-        run(self.work, 'push', '-q', 'origin', 'HEAD:refs/heads/dev')
+        self.publish('dev', self.work, 'HEAD')
         run(self.work, 'reset', '-q', '--hard', 'HEAD~1')
         run(self.work, 'reflog', 'expire', '--expire=now', '--all')
         run(self.work, 'gc', '-q', '--prune=now')
@@ -223,6 +229,77 @@ class UpdaterTests(unittest.TestCase):
         self.assertFalse(updater.enabled())
         with self.assertRaises(ValueError):
             updater.set_enabled('yes')
+
+    # Update channels: stable (default) and main (beta).
+
+    def branch(self):
+        return subprocess.run(['git', 'rev-parse', '--abbrev-ref', 'HEAD'], cwd=str(self.work),
+                              capture_output=True, text=True).stdout.strip()
+
+    def on_stable(self):
+        """stable = main on the remote; the update source follows stable."""
+        self.publish('stable')
+        run(self.work, 'fetch', '-q', 'origin', 'stable')
+        run(self.work, 'checkout', '-q', '-B', 'stable', 'FETCH_HEAD')
+        face_modes.save_settings(update_channel='stable')
+
+    def test_channel_setting(self):
+        self.on_stable()
+        self.assertEqual((updater.channel(), updater.status()['channel']), ('stable', 'stable'))
+        for wrong in ('beta', 'dev', None, 1):
+            with self.assertRaises(ValueError):
+                updater.set_channel(wrong)
+        updater.save_state(result='available', next='abc1234', changes=['Old'], want_install=True)
+        updater.set_channel('main')
+        face_modes.save_settings(mono=True)
+        self.assertEqual(updater.channel(), 'main')
+        s = updater.status()
+        self.assertEqual((s['result'], s['next'], s['changes'], s['want_install']), ('', '', [], False))
+
+    def test_switch_to_beta_installs_main(self):
+        self.on_stable()
+        self.commit('b.txt', 'two', 'Beta change')   # pushed to main only
+        self.assertEqual(updater.check(FakeDevice())['result'], 'latest')
+        updater.set_channel('main')
+        s = updater.check(FakeDevice())
+        self.assertEqual((s['result'], s['changes']), ('available', ['Beta change']))
+        self.assertEqual(self.branch(), 'stable')   # only looked
+        self.assertEqual(updater.request_install(FakeDevice())['result'], 'installing')
+        self.assertEqual(self.branch(), 'main')
+        self.assertTrue((self.work / 'b.txt').exists())
+        self.assertEqual(self.installs, [self.work])
+
+    def test_failed_switch_restores_branch_and_commit(self):
+        self.on_stable()
+        old = self.head()
+        self.commit('b.txt', 'two', 'Broken beta')
+        updater.set_channel('main')
+        self.tests_ok = False
+        self.assertEqual(updater.check(FakeDevice(), manual=True, install=True)['result'], 'failed')
+        self.assertEqual((self.branch(), self.head()), ('stable', old))
+        self.assertFalse((self.work / 'b.txt').exists())
+        self.assertEqual(self.installs, [])
+
+    def test_back_to_stable_waits_until_stable_catches_up(self):
+        self.on_stable()
+        self.commit('b.txt', 'two', 'Beta change')
+        updater.set_channel('main')
+        updater.request_install(FakeDevice())
+        beta = self.head()
+        with patch.object(paths, 'running_revision', return_value=beta):   # now runs the beta build
+            updater.set_channel('stable')
+            s = updater.check(FakeDevice())
+            self.assertEqual(s['result'], 'skipped')
+            self.assertIn('stable', s['detail'])
+            self.assertEqual(self.branch(), 'main')
+            self.publish('stable')   # stable publishes the beta commit
+            self.assertEqual(updater.check(FakeDevice())['result'], 'latest')
+            self.assertEqual((self.branch(), self.head()), ('stable', beta))
+            self.commit('c.txt', 'three', 'Next')
+            self.publish('stable')
+            s = updater.check(FakeDevice())
+            self.assertEqual((s['result'], s['changes']), ('available', ['Next']))
+        self.assertEqual(len(self.installs), 1)
 
 
 if __name__ == '__main__':

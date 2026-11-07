@@ -426,7 +426,7 @@ def main():
                     if action not in ('connect', 'disconnect', 'quit', 'firmware', 'mcp_install', 'mcp_remove',
                                       'awake_acquire', 'awake_release', 'awake_resume', 'calendar_settings',
                                       'calendar_decide', 'calendar_undo', 'mail_settings', 'update_settings',
-                                      'update_check', 'update_install') \
+                                      'update_channel', 'update_check', 'update_install') \
                             and device.fd is None and not device.paused and ports():
                         try:
                             device.connect(ports()[0])
@@ -494,6 +494,9 @@ def main():
                         mail_access.save(data.get('changes'))
                     elif action == 'update_settings':
                         updater.set_enabled(data.get('enabled'))
+                    elif action == 'update_channel':   # Stable / Beta (main), then look right away
+                        updater.set_channel(data.get('channel'))
+                        threading.Thread(target=updater.check, args=(device, True), daemon=True).start()
                     elif action == 'update_check':   # "Check now": only looks for a new version
                         threading.Thread(target=updater.check, args=(device, True), daemon=True).start()
                     elif action == 'update_install':   # "Update now": tests, builds, installs (minutes)

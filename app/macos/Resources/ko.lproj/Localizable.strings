@@ -262,7 +262,12 @@
 "Check for updates automatically" = "업데이트 자동 확인";
 "New version" = "새 버전";
 "Update now" = "지금 업데이트";
-"AI Face looks for a new stable version on GitHub at startup and every 3 hours, but installs it only when you click Update now (here or in the menu). It then tests and builds it in its own source folder and restarts. Your development folder is never changed. Existing Python and Command Line Tools are required." = "앱을 켤 때와 3시간마다 GitHub에서 새 stable 버전을 찾지만, 설치는 여기나 메뉴에서 '지금 업데이트'를 눌러야 해요. 누르면 앱 전용 소스 폴더에서 테스트·빌드하고 다시 켜요. 개발 폴더는 수정하지 않아요. 기존 Python과 Command Line Tools가 필요해요.";
+"Channel" = "채널";
+"Stable" = "안정(Stable)";
+"Beta (main, for testing)" = "베타(main, 테스트용)";
+"Beta: changes may not be tested yet." = "베타: 아직 테스트되지 않은 변경이 올 수 있어요.";
+"Stable gets versions that were published after testing. Beta follows main, where new changes arrive first; it may be broken. Going back to Stable updates once stable catches up with the version you run." = "안정 채널은 테스트를 거쳐 배포된 버전만 받아요. 베타는 새 변경이 먼저 올라오는 main을 따라가서 깨져 있을 수도 있어요. 안정으로 돌아가면 stable이 지금 쓰는 버전을 따라잡을 때 업데이트돼요.";
+"AI Face looks for a new version of the chosen channel on GitHub at startup and every 3 hours, but installs it only when you click Update now (here or in the menu). It then tests and builds it in its own source folder and restarts. Your development folder is never changed. Existing Python and Command Line Tools are required." = "앱을 켤 때와 3시간마다 GitHub에서 고른 채널의 새 버전을 찾지만, 설치는 여기나 메뉴에서 '지금 업데이트'를 눌러야 해요. 누르면 앱 전용 소스 폴더에서 테스트·빌드하고 다시 켜요. 개발 폴더는 수정하지 않아요. 기존 Python과 Command Line Tools가 필요해요.";
 
 /* Shared folders */
 "Folder list" = "폴더 목록";

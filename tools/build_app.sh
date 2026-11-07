@@ -58,7 +58,7 @@ cat > "$CANDIDATE/Contents/Info.plist" <<'PLIST'
 <key>CFBundleDisplayName</key><string>AI Face</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleVersion</key><string>1.0</string>
-<key>CFBundleShortVersionString</key><string>2.2.0</string>
+<key>CFBundleShortVersionString</key><string>2.3.0</string>
 <key>LSMinimumSystemVersion</key><string>13.0</string>
 <key>LSUIElement</key><true/>
 <key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>
@@ -71,6 +71,7 @@ REVISION="$(git rev-parse HEAD)"
 BUILD="$(git rev-list --count HEAD)"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD" "$CANDIDATE/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Add :AISourceRevision string $REVISION" "$CANDIDATE/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Add :AISourceChannel string $(git rev-parse --abbrev-ref HEAD)" "$CANDIDATE/Contents/Info.plist"
 codesign --force --sign "$IDENTITY" "$CANDIDATE/Contents/Helpers/InstallBridge" >>"$LOG" 2>&1
 codesign --force --sign "$IDENTITY" "$CANDIDATE" >>"$LOG" 2>&1
 codesign --verify --deep --strict "$CANDIDATE" >>"$LOG" 2>&1

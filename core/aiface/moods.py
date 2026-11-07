@@ -605,6 +605,8 @@ def load_settings():
         out['weather']=data['weather']
     if isinstance(data.get('auto_update'),bool):
         out['auto_update']=data['auto_update']   # automatic updates from GitHub (updater.py)
+    if data.get('update_channel') in ('stable','main'):
+        out['update_channel']=data['update_channel']   # stable, or main for beta (updater.py)
     return out
 
 

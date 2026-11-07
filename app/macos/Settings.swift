@@ -208,6 +208,7 @@ final class SettingsStore: NSObject, ObservableObject {
     @Published var mono = false
     @Published var version = ""
     @Published var autoUpdate = true
+    @Published var updateChannel = "stable"   // or "main": the beta channel (updater.py CHANNELS)
     @Published var updateRunning = false
     @Published var updateText = ""
     @Published var updateAvailable = false   // found by the automatic check, waits for "Update now"
@@ -277,6 +278,9 @@ final class SettingsStore: NSObject, ObservableObject {
             self.message = (s["message"] as? String) ?? ""
             self.flashing = (s["flashing"] as? Bool) ?? false
             self.version = (s["version"] as? String) ?? ""
+            if Bundle.main.object(forInfoDictionaryKey: "AISourceChannel") as? String == "main" {
+                self.version += " Beta"   // built from main, not stable
+            }
             if let revision = s["revision"] as? String, !revision.isEmpty {
                 self.version += " (" + revision.prefix(7) + ")"
             }
@@ -312,6 +316,7 @@ final class SettingsStore: NSObject, ObservableObject {
         API.shared.getJSON("update") { [weak self] json in
             guard let self = self, let u = json as? [String: Any] else { return }
             self.autoUpdate = (u["enabled"] as? Bool) ?? true
+            self.updateChannel = (u["channel"] as? String) ?? "stable"
             self.updateRunning = (u["running"] as? Bool) ?? false
             self.updateText = SettingsStore.updateText(u)
             self.updateAvailable = (u["result"] as? String) == "available" && !self.updateRunning
@@ -932,6 +937,18 @@ final class SettingsStore: NSObject, ObservableObject {
         autoUpdate = on
         API.shared.call("update_settings", ["enabled": on]) { [weak self] ok, reply in
             if !ok { self?.autoUpdate = !on; self?.notice = (reply["message"] as? String) ?? "" }
+        }
+    }
+
+    func setUpdateChannel(_ name: String) {
+        let before = updateChannel
+        guard name != before else { return }
+        updateChannel = name
+        updateAvailable = false
+        updateRunning = true
+        updateText = L("Checking for a new version…")
+        API.shared.call("update_channel", ["channel": name]) { [weak self] ok, reply in
+            if !ok { self?.updateChannel = before; self?.updateRunning = false; self?.notice = (reply["message"] as? String) ?? "" }
         }
     }
 
