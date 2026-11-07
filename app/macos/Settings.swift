@@ -1047,6 +1047,21 @@ final class SettingsTabs: NSTabViewController {
         DispatchQueue.main.async { window?.makeFirstResponder(nil) }
     }
 
+    /// macOS keeps typing in a text field when the user clicks empty space, a label or a card.
+    /// A click anywhere but a text field ends it; the click itself still goes through.
+    static func clickMonitor(for window: NSWindow) -> Any? {
+        return NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak window] event in
+            guard let window, event.window === window, window.firstResponder is NSText else { return event }
+            var view = window.contentView?.hitTest(event.locationInWindow)
+            while let v = view {
+                if v is NSText || (v as? NSTextField)?.isEditable == true { return event }
+                view = v.superview
+            }
+            window.makeFirstResponder(nil)
+            return event
+        }
+    }
+
     override func tabView(_ tabView: NSTabView, didSelect tabViewItem: NSTabViewItem?) {
         super.tabView(tabView, didSelect: tabViewItem)
         SettingsTabs.unfocus(view.window)
@@ -1057,6 +1072,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     let store = SettingsStore()
     private var window: NSWindow?
     private var boardWindow: NSWindow?
+    private var clickMonitor: Any?
 
     static let size = NSSize(width: 334, height: 460)
 
@@ -1091,6 +1107,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             window = w
             store.openBoard = { [weak self] in self?.showBoard() }
         }
+        if clickMonitor == nil, let window { clickMonitor = SettingsTabs.clickMonitor(for: window) }
         store.start()
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
@@ -1121,6 +1138,10 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
     func windowWillClose(_ notification: Notification) {
         // The store keeps polling while either window is still open.
+        if (notification.object as? NSWindow) === window, let monitor = clickMonitor {
+            NSEvent.removeMonitor(monitor)
+            clickMonitor = nil
+        }
         let other = (notification.object as? NSWindow) === window ? boardWindow : window
         if other?.isVisible != true { store.stop() }
     }

@@ -89,6 +89,7 @@ struct CampfireWeatherCard: View {
             }
             Divider()
             SettingsNote(text: (store.weatherLocation["name"] as? String) ?? "Palo Alto / Stanford", lines: 2)
+                .padding(.top, 7)
             SettingsRow(title: L("Change place")) {
                 TextField(L("City or postal code"), text: $store.weatherQuery).textFieldStyle(.roundedBorder)
                     .onSubmit { store.searchWeatherLocation() }
