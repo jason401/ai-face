@@ -259,7 +259,7 @@ def main():
                     kind = (query.get('kind') or ['day'])[0]
                     return self.reply(200, history.period(
                         kind, day, face_modes.emotions(),
-                        source=history_sync.aggregate((query.get('device') or ['all'])[0])))
+                        source=history_sync.aggregate((query.get('device') or ['all'])[0], kind, day)))
                 if self.path.startswith('/history/week'):
                     return self.reply(200, history.week(day))
                 return self.reply(200, history.summary(day, face_modes.emotions()))

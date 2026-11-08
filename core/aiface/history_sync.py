@@ -4,6 +4,8 @@ Only the owning Mac publishes a device directory. A manifest is the commit recor
 readers adopt a complete verified generation, retaining their previous cache otherwise.
 No conversation text or hardware identifier is published.
 """
+import datetime
+import functools
 import hashlib
 import json
 import platform
@@ -93,8 +95,19 @@ def enabled():
     return read_json(folder() / "settings.json", {}).get("enabled") is True
 
 
+@functools.lru_cache(maxsize=1)
+def _cached_generation(path, stamp):
+    # Reuse the decoded local snapshot between the settings window's polls.
+    return read_json(path, {})
+
+
 def cached():
-    return read_json(folder() / "cache.json", {})
+    path = folder() / "cache.json"
+    try:
+        stat = path.stat()
+    except FileNotFoundError:
+        return {}
+    return _cached_generation(path, (stat.st_ino, stat.st_mtime_ns, stat.st_size))
 
 
 def configure(on, import_existing=True):
@@ -205,29 +218,42 @@ def shutdown():
     _wake.set()
 
 
-def aggregate(selection="all"):
-    """One source per device. Cache supersedes a migrated local copy of that device."""
-    with history.LOCK:
-        local = [e for p in history.FOLDER.glob("*.jsonl") if DAY.fullmatch(p.name)
-                 for e in history.read_events(p)]
+def aggregate(selection="all", kind=None, day=None):
+    """None selects history.period's local path when OFF; no cache or log scan."""
     if not enabled():
-        return local
+        return None
+    start, end = history.period_range(kind, day) if kind is not None else (None, None)
+    if end is not None:
+        end = min(end, datetime.date.today())
+    with history.LOCK:
+        if start is None:
+            local = [e for p in history.FOLDER.glob("*.jsonl") if DAY.fullmatch(p.name)
+                     for e in history.read_events(p)]
+        else:
+            local = []
+            date = start
+            while date <= end:
+                local.extend(history.events(date.isoformat()))
+                date += datetime.timedelta(days=1)
     mine = device_id()
     if selection == "local":
-        return [e for e in local if e.get("device") == mine]
-    cache = cached()
-    by_device = {}
-    for e in local:
-        owner = e.get("device")
-        if owner:
-            by_device.setdefault(owner, []).append(e)
-    for key, value in cache.items():
-        if key != mine:
-            by_device[key] = value["events"]
-    if selection != "all":
-        by_device = {selection: by_device.get(selection, [])}
+        by_device = {mine: [e for e in local if e.get("device") == mine]}
+    else:
+        by_device = {}
+        for e in local:
+            owner = e.get("device")
+            if owner:
+                by_device.setdefault(owner, []).append(e)
+        # Cache is local disk only, and is read outside the recording lock.
+        for key, value in cached().items():
+            if key != mine:
+                by_device[key] = value["events"]
+        if selection != "all":
+            by_device = {selection: by_device.get(selection, [])}
     cutoff = time.time() - history.KEEP_DAYS * 86400
-    return sorted((e for rows in by_device.values() for e in rows if e["t"] >= cutoff),
+    return sorted((e for rows in by_device.values() for e in rows
+                   if e["t"] >= cutoff and
+                   (start is None or start.isoformat() <= history._day(e["t"]) <= end.isoformat())),
                   key=lambda e: e["t"])
 
 
@@ -271,10 +297,23 @@ def replicate(payload):
         manifest(previous, owner)
     files = {name: value.encode() for name, value in payload["files"].items()}
     hashes = {name: hashlib.sha256(value).hexdigest() for name, value in files.items()}
-    if not previous or previous["files"] != hashes or previous["name"] != payload["name"]:
-        for name, value in files.items():
-            if not previous or previous["files"].get(name) != hashes[name]:
-                atomic(own / name, value)
+    # Manifest equality does not prove the referenced bytes still exist.
+    # Hydrate before checking; access errors/timeouts abort rather than overwrite.
+    download([own / name for name in files])
+    repaired = False
+    for name, value in files.items():
+        target = own / name
+        try:
+            actual = hashlib.sha256(target.read_bytes()).hexdigest()
+        except FileNotFoundError:
+            # A legacy placeholder is pending download, not a deleted file.
+            if target.with_name("." + name + ".icloud").exists():
+                raise TimeoutError("iCloud download pending")
+            actual = None
+        if actual != hashes[name]:
+            atomic(target, value)
+            repaired = True
+    if repaired or not previous or previous["files"] != hashes or previous["name"] != payload["name"]:
         head = dict(version=1, id=owner, name=payload["name"],
                     generation=max(time.time_ns(), (previous["generation"] if previous else 0) + 1), files=hashes)
         save_json(own / "device.json", head)  # publish only after all files

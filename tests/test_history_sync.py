@@ -132,7 +132,8 @@ class SyncTests(unittest.TestCase):
         sync.configure(True, import_existing=False)
         self.assertEqual(sync.aggregate(), [])
         sync.configure(False)
-        self.assertEqual(len(sync.aggregate()), 1)
+        self.assertIsNone(sync.aggregate())
+        self.assertEqual(history.period("day", history._day(self.now), [], source=sync.aggregate())["total"], 1)
 
     def test_worker_roundtrip_and_enable_disable_retry(self):
         with patch.object(sync, "hardware", return_value="mac"):
@@ -206,6 +207,104 @@ class SyncTests(unittest.TestCase):
         raw["files"] = {"../escape.jsonl": "0" * 64}
         with self.assertRaises(ValueError):
             sync.manifest(raw, self.a)
+
+
+    def test_owner_repairs_missing_and_corrupt_files_for_new_mac(self):
+        payload = self.payload(self.a)
+        sync.replicate(payload)
+        sync.replicate(self.payload(self.b))
+        peer_before = {p.name: p.read_bytes() for p in (self.cloud / self.b).iterdir()}
+        path = self.cloud / self.a / next(iter(payload["files"]))
+        head_path = path.parent / "device.json"
+        for damage in ("missing", "corrupt"):
+            with self.subTest(damage=damage):
+                before = sync.read_json(head_path)
+                if damage == "missing":
+                    path.unlink()
+                else:
+                    path.write_bytes(b"broken")
+                sync.replicate(payload)
+                self.assertEqual(path.read_text(), payload["files"][path.name])
+                self.assertGreater(sync.read_json(head_path)["generation"], before["generation"])
+                # A reader with no prior cache receives exactly one restored record.
+                fresh = sync.replicate(self.payload(self.b))
+                self.assertEqual(len(fresh["cache"][self.a]["events"]), 1)
+                again = sync.replicate(self.payload(self.b, cache=fresh["cache"]))
+                self.assertEqual(again["cache"], fresh["cache"])
+        self.assertEqual(peer_before, {p.name: p.read_bytes() for p in (self.cloud / self.b).iterdir()})
+
+    def test_repair_failure_keeps_manifest_and_retries(self):
+        payload = self.payload(self.a)
+        sync.replicate(payload)
+        path = self.cloud / self.a / next(iter(payload["files"]))
+        head = (path.parent / "device.json").read_bytes()
+        path.unlink()
+        with patch.object(sync, "atomic", side_effect=OSError("upload failed")):
+            with self.assertRaises(OSError):
+                sync.replicate(payload)
+        self.assertEqual((path.parent / "device.json").read_bytes(), head)
+        sync.replicate(payload)
+        self.assertEqual(path.read_text(), payload["files"][path.name])
+
+    def test_pending_download_and_access_error_do_not_repair(self):
+        payload = self.payload(self.a)
+        sync.replicate(payload)
+        path = self.cloud / self.a / next(iter(payload["files"]))
+        head = (path.parent / "device.json").read_bytes()
+        path.unlink()
+        placeholder = path.with_name("." + path.name + ".icloud")
+        placeholder.touch()
+        with patch.object(sync, "atomic", side_effect=AssertionError("pending overwrite")):
+            with self.assertRaises(TimeoutError):
+                sync.replicate(payload)
+        placeholder.unlink()
+        path.write_text(payload["files"][path.name])
+        with patch.object(Path, "read_bytes", side_effect=PermissionError("denied")):
+            with patch.object(sync, "atomic", side_effect=AssertionError("access overwrite")):
+                with self.assertRaises(PermissionError):
+                    sync.replicate(payload)
+        self.assertEqual((path.parent / "device.json").read_bytes(), head)
+
+    def test_400_days_period_reads_only_selected_local_files(self):
+        sync._identity = dict(id=self.a)
+        # Calendar dates at noon avoid DST crossings in the fixture.
+        today = datetime.date.today()
+        for back in range(400):
+            date = today - datetime.timedelta(days=back)
+            stamp = time.mktime((*date.timetuple()[:3], 12, 0, 0, 0, 0, -1))
+            history.record("gpt", "happy", stamp)
+        peer_rows = [dict(e, device=self.b) for e in
+                     (row for path in history.FOLDER.glob("*.jsonl") for row in history.read_events(path))]
+        sync.save_json(sync.folder() / "cache.json", {self.b: dict(name="B", events=peer_rows)})
+        for on in (False, True):
+            sync.save_json(sync.folder() / "settings.json", dict(enabled=on))
+            for kind in history.KINDS:
+                with self.subTest(on=on, kind=kind):
+                    start, end = history.period_range(kind, today.isoformat())
+                    expected = (min(end, today) - start).days + 1
+                    with patch.object(history, "events", wraps=history.events) as reads:
+                        source = sync.aggregate("all", kind, today.isoformat())
+                        if not on:
+                            self.assertIsNone(source)
+                            reads.assert_not_called()
+                        result = history.period(kind, today.isoformat(), [], source=source)
+                    self.assertEqual(reads.call_count, expected)
+                    self.assertEqual(result["total"], expected * (2 if on else 1))
+                    self.assertEqual({c.args[0] for c in reads.call_args_list},
+                                     {(start + datetime.timedelta(days=i)).isoformat() for i in range(expected)})
+        # OFF never decodes the sync cache, even if it is unavailable.
+        sync.save_json(sync.folder() / "settings.json", dict(enabled=False))
+        with patch.object(sync, "cached", side_effect=AssertionError("cache while off")):
+            self.assertIsNone(sync.aggregate("all", "day", today.isoformat()))
+
+    def test_cache_reused_until_atomic_replacement(self):
+        sync.save_json(sync.folder() / "cache.json", {self.b: dict(name="B", events=[])})
+        with patch.object(sync, "read_json", wraps=sync.read_json) as reads:
+            self.assertEqual(sync.cached(), sync.cached())
+            self.assertEqual(reads.call_count, 1)
+            sync.save_json(sync.folder() / "cache.json", {})
+            self.assertEqual(sync.cached(), {})
+            self.assertEqual(reads.call_count, 2)
 
 
 if __name__ == "__main__":
