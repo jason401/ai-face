@@ -129,6 +129,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+// iCloud placeholders need an explicit Foundation download request on some macOS versions.
+// Worker-only helper; limit it to the app's History namespace.
+if let index = CommandLine.arguments.firstIndex(of: "--history-download") {
+    let root = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs/AI Face/history/v1/devices")
+        .resolvingSymlinksInPath().path + "/"
+    for path in CommandLine.arguments.dropFirst(index + 1) {
+        let url = URL(fileURLWithPath: path).standardizedFileURL
+        guard url.resolvingSymlinksInPath().path.hasPrefix(root) else { continue }
+        try? FileManager.default.startDownloadingUbiquitousItem(at: url)
+    }
+    exit(0)
+}
+
+// Developer check using the same signed parent and bundled Python as the app.
+// No server, settings mutation or history upload is started.
+if CommandLine.arguments.contains("--history-icloud-probe") {
+    let task = Process()
+    task.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
+    task.arguments = ["-B", "-m", "aiface.history_sync", "--probe"]
+    task.currentDirectoryURL = Bundle.main.resourceURL?.appendingPathComponent("core")
+    do {
+        try task.run()
+        task.waitUntilExit()
+        exit(task.terminationStatus)
+    } catch {
+        fputs("Could not run History access probe.\n", stderr)
+        exit(1)
+    }
+}
+
 // `AIFace --calendar ...`: answer one calendar question for the server and exit (no menu bar app).
 if let i = CommandLine.arguments.firstIndex(of: "--calendar") {
     exit(CalendarCLI.run(Array(CommandLine.arguments[(i + 1)...])))

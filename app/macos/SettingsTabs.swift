@@ -825,6 +825,33 @@ struct HistoryTab: View {
 
     var body: some View {
         SettingsPage {
+            SettingsCard(title: L("iCloud Drive sync")) {
+                SettingsRow(title: L("Sync history")) {
+                    Toggle(L("Sync history"), isOn: Binding(
+                        get: { store.historySyncOn }, set: { store.setHistorySync($0) }))
+                        .labelsHidden().toggleStyle(.switch).controlSize(.small)
+                }
+                if store.historySyncOn {
+                    SettingsRow(title: L("Status")) {
+                        Text(store.historySyncText).font(.system(size: 11)).foregroundStyle(.secondary)
+                        SettingsAction(title: L("Sync now")) { store.syncHistoryNow() }
+                            .disabled(store.historySyncState == "syncing")
+                    }
+                    if store.historyDevices.count > 1 {
+                        SettingsRow(title: L("Devices")) {
+                            Picker(L("Devices"), selection: Binding(
+                                get: { store.historyDevice }, set: { store.setHistoryDevice($0) })) {
+                                Text(L("All devices")).tag("all")
+                                Text(L("This Mac")).tag("local")
+                                ForEach(Array(store.historyDevices.dropFirst().enumerated()), id: \.offset) { _, device in
+                                    Text(device["name"] ?? "Mac").tag(device["id"] ?? "")
+                                }
+                            }.labelsHidden()
+                        }
+                    }
+                }
+                SettingsNote(text: L("When enabled, existing history is copied to iCloud Drive and history from your other Macs is shown together. Turning this off keeps all saved copies."), lines: 4)
+            }
             SettingsSegments(options: HistoryTab.kinds,
                              selection: Binding(get: { store.historyKind }, set: { store.setHistoryKind($0) }))
             HStack(spacing: 6) {
@@ -854,7 +881,7 @@ struct HistoryTab: View {
             }
             SettingsCard(title: L("Saved history")) {
                 SettingsRow(title: L("Delete")) {
-                    SettingsAction(title: L("Delete all history…")) { store.clearHistory() }
+                    SettingsAction(title: L("Delete this Mac’s history…")) { store.clearHistory() }
                 }
                 SettingsNote(text: L("Each face change is saved on this Mac: only the time, who chose it and the mood. No conversation text is saved."), lines: 3)
             }

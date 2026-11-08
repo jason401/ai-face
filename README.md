@@ -11,7 +11,7 @@
 - 78 animated expressions in 11 groups, from happy and thinking to curious, sleepy and facepalm.
 - Claude-orange / GPT-green / AI Illuminati-gold / manual-white rings; monochrome menu bar mode uses patterns instead.
 - Manual expression picker, timer, clock, photo/slideshow and campfire screen savers.
-- Local expression history and statistics; conversation text is not saved in that history.
+- Local expression history and statistics, with opt-in iCloud Drive sync across Macs; conversation text is not saved in that history.
 - Optional, separately controlled Calendar access and read-only Mail access for connected AIs.
 - Optional read-only shared folders: pick folders once, then any connected chat on this Mac can list, search and read them (PDF, Word, PowerPoint and text).
 - Optional timed keep-awake support, with time, temperature, battery and app-exit safeguards.
@@ -57,6 +57,7 @@ Use Seeed XIAO ESP32S3 and a GC9A01 round SPI LCD (optionally with a CST816 touc
 ## Privacy
 
 - Settings, photos and expression history are stored locally in `~/Library/Application Support/AI Face/`, outside this source repository.
+- History → iCloud Drive sync is off by default. Enabling it copies existing history to `iCloud Drive/AI Face/history/v1/devices/` and combines other Macs’ records using a local cache. Each Mac only changes its own directory. Turning sync off keeps local and cloud copies; deleting this Mac’s records propagates when sync is next enabled. Conversation text and hardware identifiers are never uploaded. Apple iCloud account settings control access to the cloud copies.
 - Calendar, Mail and shared-folder access are optional and controlled per AI. Tool results sent to an AI become part of that provider's conversation; local app storage does not mean the AI provider processes everything locally.
 - The app listens on `127.0.0.1`, not a public network interface. Mutations and Calendar/Mail/shared-folder reads require a runtime token. Some local read routes, including photo and expression-history reads, are not token-protected: other programs on the same Mac may read them. Do not expose this server through a public tunnel.
 - GitHub updates/downloads require network access. Connecting an AI adds its MCP registration; it does not publish local account credentials or user data.
@@ -91,3 +92,13 @@ The Mac retrieves weather every 15 minutes and sends compact parameters to the b
 Weather data: [Open-Meteo](https://open-meteo.com/), [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). City search uses Open-Meteo's [GeoNames-based geocoding](https://open-meteo.com/en/docs/geocoding-api). The free endpoint is for non-commercial use; commercial distribution requires reviewing the provider's terms.
 
 ![Actual firmware weather previews](docs/images/campfire-weather.png)
+
+## History across Macs
+
+In **Settings → History**, enable **iCloud Drive sync** on each Mac using the same iCloud Drive account. Storage remains local first; while offline the app keeps recording and displays the last verified records from other Macs. The status reports the last successful check or an iCloud wait. **Sync now** requests another background attempt.
+
+The first enable asks whether to import existing records. If the same old history was manually copied to multiple Macs before this feature, choose **Import existing** on just one and **New records only** on the others. Skipped old records remain available when sync is off. Later migrations preserve record ownership automatically and give the new Mac a new identity; only its new records are uploaded under that identity.
+
+History defaults to **All devices**; with multiple devices you can select **This Mac** or an individual peer. Dates are calculated in the viewing Mac's time zone. Current expressions, recent manual picks and AI expression tools use local records. Retention remains 400 days. **Delete this Mac’s history…** preserves other devices’ records; with sync off, cloud deletion waits until sync is enabled again.
+
+The replication protocol uses date JSONL files and a versioned per-device manifest with increasing generations and SHA-256 checksums. Readers replace a peer cache only after verifying the complete generation; temporary missing files, older manifests and download failures never imply deletion. All cloud I/O runs in a subprocess with a 30-second deadline. Developer verification: stage a signed build, then run the named `history-icloud-probe` command (temporary probe data is removed).

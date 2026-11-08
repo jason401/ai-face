@@ -3,6 +3,8 @@
   "commands": {
     "test": {"executable": "/usr/bin/env", "args": ["PYTHONDONTWRITEBYTECODE=1", "python3", "-m", "unittest", "discover", "-s", "tests"]},
     "firmware-sim": {"executable": "/bin/bash", "args": ["tools/firmware_sim/run.sh"]},
-    "build": {"executable": "/bin/zsh", "args": ["tools/build_app.sh", "--stage"]}
+    "build": {"executable": "/bin/zsh", "args": ["tools/build_app.sh", "--stage"]},
+    "history-icloud-probe": {"executable": "/usr/bin/python3", "args": ["-B", "tools/test_history_icloud.py"]},
+    "test-history": {"executable": "/usr/bin/env", "args": ["PYTHONDONTWRITEBYTECODE=1", "python3", "-m", "unittest", "discover", "-s", "tests", "-p", "test_history*.py"]}
   }
 }

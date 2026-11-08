@@ -291,6 +291,12 @@ final class SettingsStore: NSObject, ObservableObject {
     @Published var dayStats: [String: OwnerStats] = [:]
     @Published var timeline: [TimelineEvent] = []
     @Published var periodRows: [PeriodRow] = []
+    @Published var historySyncOn = false
+    @Published var historySyncState = "off"
+    @Published var historySyncLast: Double = 0
+    @Published var historyDevices: [[String: String]] = []
+    @Published var historyDevice = "all"
+    private var historyImported = false
     private var historyKey = ""
 
     private var saverLoaded = false
@@ -478,8 +484,8 @@ final class SettingsStore: NSObject, ObservableObject {
 
     func clearHistory() {
         let alert = NSAlert()
-        alert.messageText = L("Delete all history?")
-        alert.informativeText = L("Every recorded face change, from all days, is deleted from this Mac. This cannot be undone.")
+        alert.messageText = L("Delete this Mac’s history?")
+        alert.informativeText = L("This Mac’s records will be deleted locally and from iCloud when sync is on. Other devices’ records are kept. This cannot be undone.")
         alert.alertStyle = .warning
         alert.addButton(withTitle: L("Delete"))
         alert.addButton(withTitle: L("Cancel"))
@@ -498,9 +504,64 @@ final class SettingsStore: NSObject, ObservableObject {
         loadHistory()
     }
 
+    var historySyncText: String {
+        switch historySyncState {
+        case "syncing": return L("Syncing…")
+        case "waiting": return L("Waiting for iCloud. Saved records are still available.")
+        case "ready":
+            let date = Date(timeIntervalSince1970: historySyncLast)
+            return L("Last checked: ") + DateFormatter.localizedString(from: date, dateStyle: .short, timeStyle: .short)
+        default: return L("Off")
+        }
+    }
+
+    func setHistorySync(_ on: Bool) {
+        var include = true
+        if on && !historyImported {
+            let alert = NSAlert()
+            alert.messageText = L("Import existing history?")
+            alert.informativeText = L("If old history was copied to several Macs before this feature, import it on only one Mac. On the other Macs, choose New records only.")
+            alert.addButton(withTitle: L("Import existing"))
+            alert.addButton(withTitle: L("New records only"))
+            alert.addButton(withTitle: L("Cancel"))
+            let result = alert.runModal()
+            if result == .alertThirdButtonReturn { return }
+            include = result == .alertFirstButtonReturn
+        }
+        API.shared.call("history_sync_settings", ["enabled": on, "import_existing": include]) { [weak self] ok, _ in
+            if ok { self?.historyKey = "" }
+            self?.loadHistory()
+        }
+    }
+
+    func syncHistoryNow() {
+        API.shared.call("history_sync_now") { [weak self] _, _ in self?.loadHistory() }
+    }
+
+    func setHistoryDevice(_ value: String) {
+        historyDevice = value
+        historyKey = ""
+        loadHistory()
+    }
+
     func loadHistory() {
+        API.shared.getJSON("history/sync") { [weak self] json in
+            guard let self = self, let s = json as? [String: Any] else { return }
+            self.historySyncOn = s["enabled"] as? Bool ?? false
+            self.historySyncState = s["state"] as? String ?? "off"
+            self.historySyncLast = (s["last"] as? NSNumber)?.doubleValue ?? 0
+            self.historyImported = s["imported"] as? Bool ?? false
+            var devices = s["devices"] as? [[String: String]] ?? []
+            var counts: [String: Int] = [:]
+            for i in devices.indices {
+                let name = devices[i]["name"] ?? "Mac"
+                counts[name, default: 0] += 1
+                if counts[name, default: 0] > 1 { devices[i]["name"] = name + " (\(counts[name]!))" }
+            }
+            self.historyDevices = devices
+        }
         let day = SettingsStore.dayFormat.string(from: historyDay)
-        API.shared.get("history/period?kind=" + historyKind + "&day=" + day) { [weak self] data in
+        API.shared.get("history/period?kind=" + historyKind + "&day=" + day + "&device=" + API.escape(historyDevice)) { [weak self] data in
             guard let self = self, let data = data else { return }
             let key = String(decoding: data, as: UTF8.self)
             if key == self.historyKey { return }

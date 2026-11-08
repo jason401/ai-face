@@ -3,6 +3,9 @@ change in a file per day, and summaries for the app's History tab and the get_ex
 MCP tool. Only the mood is kept, never anything from the conversation.
 Python standard library only."""
 import datetime
+import functools
+import math
+import threading
 import json
 import os
 import time
@@ -14,6 +17,15 @@ OTHER = 'other'   # group of a mood that is not in the catalog any more
 FOLDER = paths.DATA / 'history'
 OWNERS = ('claude', 'gpt', 'illuminati', 'user')
 KEEP_DAYS = 400
+LOCK = threading.RLock()
+
+
+def locked(fn):
+    @functools.wraps(fn)
+    def run(*args, **kwargs):
+        with LOCK:
+            return fn(*args, **kwargs)
+    return run
 
 
 def _day(t):
@@ -24,6 +36,7 @@ def _file(day):
     return FOLDER / f'{day}.jsonl'
 
 
+@locked
 def record(owner, emotion, now=None):
     """Append one face change. Never raises: the log is a nice-to-have."""
     now = time.time() if now is None else now
@@ -31,7 +44,11 @@ def record(owner, emotion, now=None):
         return
     try:
         FOLDER.mkdir(parents=True, exist_ok=True)
-        line = json.dumps(dict(t=round(now, 1), owner=owner, emotion=emotion), ensure_ascii=False)
+        from . import history_sync
+        entry = dict(t=round(now, 1), owner=owner, emotion=emotion)
+        if history_sync.device_id():
+            entry['device'] = history_sync.device_id()
+        line = json.dumps(entry, ensure_ascii=False)
         with open(_file(_day(now)), 'a') as f:
             f.write(line + '\n')
     except OSError:
@@ -45,16 +62,43 @@ def events(day):
         lines = _file(day).read_text().splitlines()
     except (OSError, ValueError, TypeError):
         return []
+    return decode_events('\n'.join(lines))
+
+
+def decode_events(text):
     out = []
-    for line in lines:
+    for line in text.splitlines():
         try:
             e = json.loads(line)
         except ValueError:
             continue
-        if isinstance(e, dict) and e.get('owner') in OWNERS and isinstance(e.get('emotion'), str) \
-                and isinstance(e.get('t'), (int, float)):
+        if (isinstance(e, dict) and e.get('owner') in OWNERS
+                and isinstance(e.get('emotion'), str)
+                and type(e.get('t')) in (int, float) and math.isfinite(e['t'])):
+            try:
+                _day(e['t'])
+            except (ValueError, OverflowError, OSError):
+                continue
             out.append(e)
     return out
+
+
+def read_events(path):
+    return decode_events(path.read_text())
+
+
+@locked
+def assign_legacy(device):
+    from .history_sync import atomic
+    for path in FOLDER.glob('*.jsonl'):
+        rows = read_events(path)
+        changed = False
+        for row in rows:
+            if 'device' not in row:
+                row['device'] = device
+                changed = True
+        if changed:
+            atomic(path, ''.join(json.dumps(e, ensure_ascii=False) + '\n' for e in rows).encode())
 
 
 def recent(n=20, now=None):
@@ -136,7 +180,7 @@ def period_range(kind, day):
     return d, d
 
 
-def period(kind, day, moods):
+def period(kind, day, moods, source=None):
     """Counts for the day, week, month or year holding <day>, plus what its chart needs:
     day -> timeline (every change); week -> rows per day, each with its changes' times;
     month -> rows per day with counts per owner; year -> rows per month with counts."""
@@ -145,9 +189,15 @@ def period(kind, day, moods):
     start, end = period_range(kind, day)
     last = min(end, datetime.date.today())
     days = {}
+    grouped = None
+    if source is not None:
+        grouped = {}
+        for e in source:
+            key = _day(e['t'])
+            grouped.setdefault(key, []).append(e)
     d = start
     while d <= last:
-        days[d.isoformat()] = events(d.isoformat())
+        days[d.isoformat()] = events(d.isoformat()) if grouped is None else grouped.get(d.isoformat(), [])
         d += datetime.timedelta(days=1)
     every = [e for list_ in days.values() for e in list_]
 
@@ -189,23 +239,25 @@ def week(day):
     return out
 
 
+@locked
 def clear():
-    """Delete the whole history. Returns how many changes were removed."""
+    """Delete this Mac's records; preserve migrated records owned by another Mac."""
+    from .history_sync import device_id, atomic, request
+    mine = device_id()
     removed = 0
-    try:
-        names = os.listdir(FOLDER)
-    except OSError:
-        return 0
-    for name in names:
-        if name.endswith('.jsonl'):
-            removed += len(events(name[:-6]))
-            try:
-                (FOLDER / name).unlink()
-            except OSError:
-                pass
+    for path in FOLDER.glob('*.jsonl'):
+        rows = read_events(path)
+        keep = [e for e in rows if e.get('device') and e.get('device') != mine]
+        removed += len(rows) - len(keep)
+        if keep:
+            atomic(path, ''.join(json.dumps(e, ensure_ascii=False) + '\n' for e in keep).encode())
+        else:
+            path.unlink(missing_ok=True)
+    request()
     return removed
 
 
+@locked
 def prune(now=None):
     """Remove day files older than KEEP_DAYS."""
     now = time.time() if now is None else now

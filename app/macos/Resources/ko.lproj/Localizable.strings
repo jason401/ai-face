@@ -391,3 +391,22 @@
 "Ready · waiting to replace app" = "준비 완료 · 앱 교체 대기 중";
 "checking again in %d s" = "%d초 후 다시 확인";
 "Update prepared · waiting for active work to finish" = "업데이트 준비 완료 · 진행 중인 작업이 끝나기를 기다리는 중";
+
+/* History sync */
+"iCloud Drive sync" = "iCloud Drive 동기화";
+"Sync history" = "기록 동기화";
+"Syncing…" = "동기화 중…";
+"Waiting for iCloud. Saved records are still available." = "iCloud 대기 중 · 저장된 기록은 계속 표시돼요.";
+"Last checked: " = "마지막 확인: ";
+"Sync now" = "지금 동기화";
+"Devices" = "기기";
+"All devices" = "모든 기기";
+"This Mac" = "이 Mac";
+"When enabled, existing history is copied to iCloud Drive and history from your other Macs is shown together. Turning this off keeps all saved copies." = "켜면 기존 기록도 iCloud Drive에 복사하고 다른 Mac의 기록을 함께 표시해요. 꺼도 저장된 사본은 유지돼요.";
+"Import existing history?" = "기존 기록을 가져올까요?";
+"If old history was copied to several Macs before this feature, import it on only one Mac. On the other Macs, choose New records only." = "이 기능이 생기기 전에 같은 기록을 여러 Mac에 복사했다면 한 Mac에서만 가져오세요. 나머지 Mac에서는 ‘새 기록만’을 선택하세요.";
+"Import existing" = "기존 기록 가져오기";
+"New records only" = "새 기록만";
+"Delete this Mac’s history?" = "이 Mac의 기록을 지울까요?";
+"Delete this Mac’s history…" = "이 Mac 기록 지우기…";
+"This Mac’s records will be deleted locally and from iCloud when sync is on. Other devices’ records are kept. This cannot be undone." = "이 Mac의 기록을 지워요. iCloud 사본도 동기화를 켜면 삭제가 반영돼요. 다른 기기의 기록은 유지돼요. 되돌릴 수 없어요.";

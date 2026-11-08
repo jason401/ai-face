@@ -18,6 +18,7 @@ from . import awake
 from . import calendar_access
 from . import folder_access
 from . import history
+from . import history_sync
 from . import i18n
 from .i18n import T
 from . import integrations
@@ -163,6 +164,10 @@ def main():
         pass
     device = Device()
     token = secrets.token_urlsafe(32)
+    try:
+        history_sync.initialize()
+    except (OSError, ValueError):
+        pass
     history.prune()
     face_modes.save_settings(language=i18n.lang())   # the MCP server speaks the app's language
     try:
@@ -245,12 +250,16 @@ def main():
                                             update_available=updater.load_state().get('result') == 'available'))
             if self.path == '/status':   # for the settings window; no lock either
                 return self.reply(200, dict(device.status(), version=VERSION, revision=paths.running_revision(), awake=awake.status()))
+            if self.path == '/history/sync':
+                return self.reply(200, history_sync.status())
             if self.path.startswith('/history'):
                 query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
                 day = (query.get('day') or [time.strftime('%Y-%m-%d')])[0]
                 if self.path.startswith('/history/period'):
                     kind = (query.get('kind') or ['day'])[0]
-                    return self.reply(200, history.period(kind, day, face_modes.emotions()))
+                    return self.reply(200, history.period(
+                        kind, day, face_modes.emotions(),
+                        source=history_sync.aggregate((query.get('device') or ['all'])[0])))
                 if self.path.startswith('/history/week'):
                     return self.reply(200, history.week(day))
                 return self.reply(200, history.summary(day, face_modes.emotions()))
@@ -512,6 +521,10 @@ def main():
                     elif action == 'awake_setup':
                         awake.open_setup(remove=data.get('remove') is True)
                         device.message = T('터미널에서 설정을 마쳐 주세요.', 'Finish the setup in Terminal.')
+                    elif action == 'history_sync_settings':
+                        history_sync.configure(data.get('enabled'), data.get('import_existing', True))
+                    elif action == 'history_sync_now':
+                        history_sync.request()
                     elif action == 'history_clear':
                         n = history.clear()
                         device.message = T(f'기록 {n}개를 지웠습니다.', f'Deleted {n} history entries.')
@@ -567,6 +580,7 @@ def main():
     threading.Thread(target=watch_board, args=(device, stop), daemon=True).start()
     threading.Thread(target=updater.watch, args=(device, stop), daemon=True).start()
     threading.Thread(target=weather.watch, args=(device, stop), daemon=True).start()
+    threading.Thread(target=history_sync.watch, args=(stop,), daemon=True).start()
     # The app stops the server with SIGTERM: run the cleanup below (keep awake off) then too.
     def terminated(*_):
         raise KeyboardInterrupt
@@ -577,6 +591,7 @@ def main():
         pass
     finally:
         stop.set()
+        history_sync.shutdown()
         try:
             awake.stop(T('AI Face를 종료했어요', 'AI Face quit'))
         except OSError:
