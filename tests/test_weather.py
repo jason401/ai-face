@@ -101,10 +101,23 @@ class WeatherTests(unittest.TestCase):
             weather.refresh(device)
         self.assertEqual(weather.scene(),result)
         self.assertIn('offline',weather.status()['message'])
-        with patch.object(weather.time,'time',return_value=weather._state['fetched']+weather.STALE+1):
+        with patch.object(weather.time,'time',return_value=weather._state['fetched']+weather.CACHE_TTL+1):
             self.assertFalse(weather.scene()['active'])
         weather.save({'mode':'date','date':'2026-11-03'})
         self.assertFalse(weather.scene()['active'])  # never display the previous selection as the new one
+
+    def test_scene_survives_four_hour_refresh_interval(self):
+        result = weather.parameters(ROW, False, 900)
+        with patch.object(weather, 'fetch', return_value=(result, 'current', 'sample')):
+            weather.refresh(Device())
+        fetched = weather._state['fetched']
+        with patch.object(weather.time, 'time', return_value=fetched + 4 * 3600 + 60):
+            self.assertEqual(weather.scene(), result)
+            with patch.object(weather, 'fetch', side_effect=OSError('offline')):
+                weather.refresh(Device())
+            self.assertEqual(weather.scene(), result)
+        with patch.object(weather.time, 'time', return_value=fetched + 12 * 3600 + 1):
+            self.assertFalse(weather.scene()['active'])
 
     def test_changed_config_during_fetch_is_discarded(self):
         def fetch(c):

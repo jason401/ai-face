@@ -336,11 +336,50 @@ final class Campfire {
     private var heat = [Int](repeating: 0, count: Campfire.H * Campfire.G)
     private var log = [Int](repeating: 0, count: Campfire.G * Campfire.G)   // 0 none, 2 bark, 3 cut end
     private var rng: UInt32 = 0x9E37_79B9
-    private var weather: [String: Any] = [:]
+    private var weatherOn = false
+    private var weatherKind = 0
+    private var weatherWind = 0.0
+    private var weatherCloud = 0.0
+    private var weatherIntensity = 0.0
+    private var sky: [NSColor] = []
+    private var cloudySky: [NSColor] = []
     private var weatherFrame = 0
-    func setWeather(_ value: [String: Any]) { weather = value }
-    private var weatherOn: Bool { weather["active"] as? Bool ?? false }
-    private func weatherValue(_ key: String) -> Double { (weather[key] as? NSNumber)?.doubleValue ?? 0 }
+
+    func setWeather(_ value: [String: Any]) {
+        let active = value["active"] as? Bool ?? false
+        let kind = (value["kind"] as? NSNumber)?.intValue ?? 0
+        let wind = (value["wind"] as? NSNumber)?.doubleValue ?? 0
+        let cloud = (value["cloud"] as? NSNumber)?.doubleValue ?? 0
+        let intensity = (value["intensity"] as? NSNumber)?.doubleValue ?? 0
+        let day = ((value["day"] as? NSNumber)?.doubleValue ?? 0) / 100
+        // Polling returns the same selection every second; rebuild colors only on changes.
+        let key = [active ? 1.0 : 0.0, Double(kind), wind, cloud, intensity, day]
+        guard key != weatherKey else { return }
+        weatherKey = key
+        weatherOn = active
+        weatherKind = kind
+        weatherWind = wind
+        weatherCloud = cloud
+        weatherIntensity = intensity
+        sky.removeAll(keepingCapacity: true)
+        cloudySky.removeAll(keepingCapacity: true)
+        let daylight = rgb(70, 115, 150)
+        let cloudColor = rgb(35 + day * 50, 40 + day * 50, 50 + day * 50)
+        let fog = rgb(90, 95, 105)
+        for cy in 0..<Campfire.H {
+            let night = rgb(Double(10 + cy), Double(12 + cy / 2), Double(30 + cy))
+            let base = night.blended(withFraction: day, of: daylight) ?? night
+            var clear = cloud > 75 ? (base.blended(withFraction: (cloud - 60) / 100, of: cloudColor) ?? base) : base
+            var cloudy = base.blended(withFraction: 0.7, of: cloudColor) ?? base
+            if kind == 5 {
+                clear = clear.blended(withFraction: 0.35 + Double(cy) / 60, of: fog) ?? clear
+                cloudy = cloudy.blended(withFraction: 0.35 + Double(cy) / 60, of: fog) ?? cloudy
+            }
+            sky.append(clear)
+            cloudySky.append(cloudy)
+        }
+    }
+    private var weatherKey: [Double] = []
 
 
     init() {
@@ -383,7 +422,7 @@ final class Campfire {
             for x in 0..<G {
                 let p = heat[y * G + x]
                 let r = rand()
-                let wind = weatherOn ? weatherValue("wind") : 0
+                let wind = weatherOn ? weatherWind : 0
                 let bias = Int((r >> 16) % 100) < Int(abs(wind) * 0.25) ? (wind > 0 ? 1 : -1) : 0
                 let nx = max(0, min(G - 1, x + Int(r % 3) - 1 + bias))
                 let half = 1 + (y * 4) / H, off = abs(nx * 2 - 19) / 2
@@ -422,32 +461,21 @@ final class Campfire {
                     c = rgb(34 + (150 - 34) * g, 22 + (70 - 22) * g, 18 + (24 - 18) * g)
                 }
                 if weatherOn && log[cy * G + cx] == 0 && h < 5 && cy < 15 {
-                    let day = weatherValue("day") / 100
-                    let night = rgb(Double(10 + cy), Double(12 + cy / 2), Double(30 + cy))
-                    c = night.blended(withFraction: day, of: rgb(70, 115, 150)) ?? night
-                    let cloud = weatherValue("cloud")
-                    let shift = weatherFrame / 8
-                    let x = (cx + shift) % 25
-                    let inCloud = cloud > 5 && ((cy >= 3 && cy <= 5 && x < Int(3 + cloud / 10)) ||
-                                                  (cy >= 7 && cy <= 9 && (x + 12) % 25 < Int(3 + cloud / 10)))
-                    if inCloud || cloud > 75 {
-                        let alpha = inCloud ? 0.7 : (cloud - 60) / 100
-                        c = c.blended(withFraction: alpha, of: rgb(35 + day * 50, 40 + day * 50, 50 + day * 50)) ?? c
-                    }
-                    if weatherValue("kind") == 5 {
-                        c = c.blended(withFraction: 0.35 + Double(cy) / 60, of: rgb(90, 95, 105)) ?? c
-                    }
+                    let x = (cx + weatherFrame / 8) % 25
+                    let inCloud = weatherCloud > 5 && ((cy >= 3 && cy <= 5 && x < Int(3 + weatherCloud / 10)) ||
+                                                        (cy >= 7 && cy <= 9 && (x + 12) % 25 < Int(3 + weatherCloud / 10)))
+                    c = inCloud ? cloudySky[cy] : sky[cy]
                 }
                 c.setFill()
                 NSBezierPath.fill(NSRect(x: Double(cx * 12), y: Double(cy * 12), width: 12.4, height: 12.4))
             }
         }
-        let kind = Int(weatherValue("kind"))
+        let kind = weatherKind
         if weatherOn && (kind == 3 || kind == 4) {
-            let count = 3 + Int(weatherValue("intensity") / 15)
+            let count = 3 + Int(weatherIntensity / 15)
             for i in 0..<count {
                 let travel = kind == 4 ? weatherFrame / 3 : weatherFrame
-                let x = (i * 7 + Int(Double(weatherFrame) * weatherValue("wind") / 250) + 100000) % G
+                let x = (i * 7 + Int(Double(weatherFrame) * weatherWind / 250) + 100000) % G
                 let y = (i * 11 + travel) % G
                 (kind == 4 ? rgb(215, 225, 235) : rgb(110, 145, 180)).setFill()
                 NSBezierPath.fill(NSRect(x: x * 12, y: y * 12, width: 8, height: kind == 4 ? 8 : 15))

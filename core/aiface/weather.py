@@ -17,8 +17,9 @@ DEFAULT_LOCATION = dict(name='Palo Alto / Stanford', latitude=37.4275, longitude
                         timezone='America/Los_Angeles')
 DEFAULT = dict(enabled=True, mode='auto', date='', hour=20, location=DEFAULT_LOCATION)
 KINDS = ('clear', 'partly_cloudy', 'overcast', 'rain', 'snow', 'fog')
-INTERVAL = 15 * 60
-STALE = 2 * 3600
+INTERVAL = 4 * 3600  # ambient effects need only a few weather updates per day
+STALE = 2 * 3600  # reject already-old model data when fetching
+CACHE_TTL = 12 * 3600  # retain the last scene through the refresh interval/offline gaps
 CACHE = paths.DATA / 'weather-cache.json'
 _lock = threading.RLock()
 _wake = threading.Event()
@@ -172,7 +173,7 @@ def fetch(c, now=None):
 
 def scene():
     with _lock:
-        if not config()['enabled'] or time.time() - _state['fetched'] > STALE:
+        if not config()['enabled'] or time.time() - _state['fetched'] > CACHE_TTL:
             return {'active': False}
         return dict(_state['scene'])
 
@@ -221,7 +222,7 @@ def refresh(device, stop=None):
 def watch(device, stop):
     try:
         cached = json.loads(CACHE.read_text())
-        if cached.get('config') == config() and time.time() - cached.get('fetched', 0) < STALE:
+        if cached.get('config') == config() and time.time() - cached.get('fetched', 0) < CACHE_TTL:
             with _lock:
                 for key in ('scene', 'source', 'sample', 'fetched'): _state[key] = cached[key]
     except (OSError, ValueError, KeyError, TypeError): pass
