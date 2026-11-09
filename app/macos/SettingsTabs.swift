@@ -837,7 +837,8 @@ struct HistoryTab: View {
                 if !store.isToday {
                     SettingsAction(title: L("Today")) { store.goToday() }.fixedSize()
                 }
-                Text(String(format: L("%d changes"), store.dayTotal)).foregroundStyle(.secondary)
+                Text(String(format: L("%@ changes"), compactCount(store.dayTotal))).foregroundStyle(.secondary)
+                    .lineLimit(1).layoutPriority(1).help(store.dayTotal.formatted())
             }
             .padding(.horizontal, 2)
             SettingsCard(title: L("Who chose which faces")) { owners }
@@ -901,8 +902,7 @@ struct HistoryTab: View {
                         HStack(spacing: 6) {
                             Circle().fill(OWNER_COLOR[owner] ?? .gray).frame(width: 7, height: 7)
                             Text(OWNER_LABEL[owner] ?? owner).frame(width: 58, alignment: .leading).lineLimit(1)
-                            Text("\(s.count)").font(.system(size: 12, weight: .semibold)).monospacedDigit()
-                                .frame(width: 30, alignment: .trailing)
+                            CountText(count: s.count)
                             GroupBar(groups: s.groups, total: s.count)
                         }
                         Text(s.top.joined(separator: " · ")).font(.system(size: 10)).foregroundStyle(.secondary)

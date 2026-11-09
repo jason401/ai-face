@@ -1319,6 +1319,39 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
 // MARK: - History tab
 
+/// A count in at most four characters: 999, 1.0K, 9.9K, 10K, 999K, 1.0M … 999T, then 1e15.
+/// Rounds down so 999,999 never shows as 1000K; the exact number goes in the tooltip.
+func compactCount(_ n: Int) -> String {
+    if n < 0 { return "-" + compactCount(-n) }
+    if n < 1000 { return "\(n)" }
+    for (i, unit) in ["K", "M", "B", "T"].enumerated() {
+        let scale = Int(pow(1000.0, Double(i + 1)))
+        if n < scale * 1000 {
+            let v = n / scale
+            return v < 10 ? "\(v).\(n % scale * 10 / scale)\(unit)" : "\(v)\(unit)"
+        }
+    }
+    var e = Int(log10(Double(n)))
+    if n / Int(pow(10.0, Double(e))) == 0 { e -= 1 }   // log10 of a Double can round up near 10^e
+    return "\(n / Int(pow(10.0, Double(e))))e\(e)"
+}
+
+/// A compact count kept on one line, as wide as the widest compact form so columns don't shift.
+struct CountText: View {
+    let count: Int
+    var font: Font = .system(size: 12, weight: .semibold)
+
+    var body: some View {
+        Text("888M").font(font).monospacedDigit().hidden()
+            .overlay(alignment: .trailing) {
+                Text(compactCount(count)).font(font).monospacedDigit().lineLimit(1).fixedSize()
+            }
+            .help(count.formatted())
+            .accessibilityElement()
+            .accessibilityLabel(count.formatted())
+    }
+}
+
 struct GroupBar: View {
     let groups: [String: Int]
     let total: Int
@@ -1413,14 +1446,14 @@ struct WeekTimeline: View {
                 HStack(spacing: 6) {
                     Text(r.label).font(.system(size: 10)).foregroundStyle(.secondary).frame(width: 24, alignment: .leading)
                     TimelineTicks(events: r.events, day: r.start, height: 14)
-                    Text(r.events.isEmpty ? "" : "\(r.events.count)").font(.system(size: 9)).foregroundStyle(.secondary)
-                        .monospacedDigit().frame(width: 20, alignment: .trailing)
+                    CountText(count: r.events.count, font: .system(size: 9)).foregroundStyle(.secondary)
+                        .opacity(r.events.isEmpty ? 0 : 1)
                 }
             }
             HStack(spacing: 6) {
                 Spacer().frame(width: 24)
                 HourLabels()
-                Spacer().frame(width: 20)
+                CountText(count: 0, font: .system(size: 9)).hidden()
             }
         }
     }
@@ -1439,7 +1472,7 @@ struct BarChart: View {
             ForEach(Array(rows.enumerated()), id: \.element.id) { index, r in
                 VStack(spacing: 3) {
                     if rows.count <= 12 {
-                        Text(totals[index] > 0 ? "\(totals[index])" : "").font(.system(size: 9)).foregroundStyle(.secondary)
+                        Text(totals[index] > 0 ? compactCount(totals[index]) : "").font(.system(size: 9)).foregroundStyle(.secondary)
                             .lineLimit(1).minimumScaleFactor(0.7)
                     }
                     VStack(spacing: 1) {
@@ -1454,7 +1487,7 @@ struct BarChart: View {
                     .frame(maxWidth: .infinity)
                     .frame(height: 70, alignment: .bottom)
                     .background(Rectangle().fill(Color.secondary.opacity(0.06)))
-                    .help("\(r.label): \(totals[index])")
+                    .help("\(r.label): \(totals[index].formatted())")
                     Text(index % labelEvery == 0 || index == rows.count - 1 ? r.label : " ")
                         .font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(1).fixedSize()
                         .frame(width: rows.count > 12 ? 4 : nil)

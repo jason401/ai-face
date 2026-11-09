@@ -1,5 +1,6 @@
 /* AI Face: Korean. Keys are the English texts used in the code. */
 "%d changes" = "총 %d번";
+"%@ changes" = "총 %@번";
 "%d h" = "%d시간";
 "%d h %d min" = "%d시간 %d분";
 "%d min" = "%d분";
