@@ -841,7 +841,6 @@ struct HistoryTab: View {
                     .lineLimit(1).layoutPriority(1).help(store.dayTotal.formatted())
             }
             .padding(.horizontal, 2)
-            SettingsCard(title: L("Who chose which faces")) { owners }
             SettingsCard(title: chartTitle) {
                 Group {
                     switch store.historyKind {
@@ -853,6 +852,7 @@ struct HistoryTab: View {
                 }
                 .padding(10)
             }
+            SettingsCard(title: L("Who chose which faces")) { owners }
             SettingsCard(title: L("Saved history")) {
                 SettingsRow(title: L("Delete")) {
                     SettingsAction(title: L("Delete this Mac’s history…")) { store.clearHistory() }
