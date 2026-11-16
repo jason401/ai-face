@@ -77,8 +77,12 @@ let GROUP_LABEL: [String: String] = [
     "tense": L("Anxiety & tension"), "angry": L("Anger & dislike"), "body": L("Body"), "other": L("Other"),
 ]
 let GROUP_COLOR: [String: Color] = [
-    "joy": .yellow, "love": .pink, "wonder": .orange, "work": .blue, "stance": .teal, "oops": .brown,
-    "rest": .mint, "sad": .indigo, "tense": .purple, "angry": .red, "body": .green,
+    "joy": .yellow, "love": .pink, "wonder": .orange, "work": .blue, "oops": .brown, "rest": .mint,
+    // Neutral silver: teal sat too close to mint ("rest"). Lighter on dark backgrounds, darker on light ones.
+    "stance": Color(nsColor: NSColor(name: nil) { appearance in
+        NSColor(white: appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? 0.80 : 0.45, alpha: 1)
+    }),
+    "sad": .indigo, "tense": .purple, "angry": .red, "body": .green,
 ]
 
 struct CalendarItem: Identifiable, Hashable {
