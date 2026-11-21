@@ -123,6 +123,8 @@ A round GC9A01 module with a CST816 touch chip (S/T/D) adds swipes: swipe left o
 
 Compilation requires Arduino IDE 2 or `arduino-cli`, the ESP32 board package and Adafruit GFX / GC9A01A libraries. Desktop downloads do not include these external tools or precompiled firmware. Close AI Face before uploading directly through Arduino IDE to release its serial connection.
 
+**Streaming test** (Appearance → Board → Details… → Streaming **Test…**) shows pictures drawn on the Mac live on the board: move the mouse over the round pad for an arrow and trail, drag to draw. The number at the bottom is what the board really receives (frames per second, KB/s). Only changed 16×16 tiles go over USB, as raw RGB565 or color runs. Stop streaming, closing the window, a swipe, or 3 s without data returns the board to its previous screen; faces chosen meanwhile show in the menu bar at once and on the board afterwards. Needs a firmware update once.
+
 The current protocol is FACE8; older firmware needs an update before connecting. Use the default partition scheme containing SPIFFS for photo storage. `ESP32_FQBN` can override board configuration. The app retains timer state across board restarts.
 
 See the [English expression preview](faces-en.png). `tools/make_preview.py` regenerates the preview sheets; the Korean preview and UI translations are retained as localization resources.

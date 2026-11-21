@@ -411,3 +411,14 @@
 "Delete this Mac’s history?" = "이 Mac의 기록을 지울까요?";
 "Delete this Mac’s history…" = "이 Mac 기록 지우기…";
 "This Mac’s records will be deleted locally and from iCloud when sync is on. Other devices’ records are kept. This cannot be undone." = "이 Mac의 기록을 지워요. iCloud 사본도 동기화를 켜면 삭제가 반영돼요. 다른 기기의 기록은 유지돼요. 되돌릴 수 없어요.";
+"Streaming" = "스트리밍";
+"Test…" = "시험…";
+"Draw on this Mac and see it on the board as you move the mouse." = "Mac에서 그린 그림이 마우스를 움직이는 대로 보드에 바로 나타나요.";
+"Streaming test" = "스트리밍 시험";
+"Move the mouse over the circle, or drag to draw. The board shows the same picture, drawn on this Mac." = "동그라미 위에서 마우스를 움직이거나 끌어서 그려 보세요. 보드에는 이 Mac이 그린 같은 그림이 나와요.";
+"Preview only: not streaming" = "미리보기만: 스트리밍 안 하는 중";
+"Start streaming" = "스트리밍 시작";
+"Stop streaming" = "스트리밍 끝";
+"Erase" = "지우기";
+"Streaming to the board" = "보드로 스트리밍 중";
+"Connecting to the board…" = "보드에 연결하는 중…";

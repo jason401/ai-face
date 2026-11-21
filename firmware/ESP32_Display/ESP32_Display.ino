@@ -76,8 +76,9 @@ const uint32_t MODE_VERSION=3;
 // Slots 0-7 as before; slot 8 (FACE5) is reserved for the "sleeping" idle face.
 const int SLOTS=9;
 Mode modes[SLOTS], staging;
-// active: face slot 0-8, CLOCK_SCREEN (-1) or PHOTO_SCREEN (-2).
-const int CLOCK_SCREEN=-1, PHOTO_SCREEN=-2, FIRE_SCREEN=-3;
+// active: face slot 0-8, CLOCK_SCREEN (-1), PHOTO_SCREEN (-2), FIRE_SCREEN (-3) or
+// STREAM_SCREEN (-4: pictures drawn on the Mac, see "streaming").
+const int CLOCK_SCREEN=-1, PHOTO_SCREEN=-2, FIRE_SCREEN=-3, STREAM_SCREEN=-4;
 int active=CLOCK_SCREEN, savedActive=-99, uploadSlot=-1, received=0, target=0;
 
 // Continuously interpolated values (frame index for each)
@@ -447,6 +448,96 @@ void photoCommand(char *line) {
     Serial.printf("OK LIST:%lu:%d\r\n",(unsigned long)photoMask(),hasPhoto(currentPhoto)?currentPhoto:-1); return;
   }
   Serial.println("ERR COMMAND");
+}
+
+// ----- streaming: pictures drawn on the Mac, shown as they arrive -----
+// STREAM:ON shows a black screen that only takes pictures; STREAM:OFF (or 3 s without
+// anything from the Mac) goes back to the screen from before. Each picture is one rectangle:
+// STREAM:<x>:<y>:<w>:<h>:<enc>:<n>:<adler32> followed by n raw bytes. enc 0 = RGB565
+// little-endian, enc 1 = runs of <count-1><color lo><color hi>. Nothing is stored in flash.
+// The Mac waits for each "OK STREAM", so the USB line never runs ahead of the board.
+// "ERR STREAM": the stream screen is not showing (a swipe, a face or the timeout left it).
+const uint32_t STREAM_MAX=16384, STREAM_PIXELS=240*32, STREAM_IDLE_MS=3000;
+uint8_t *streamIn=nullptr; uint16_t *streamPx=nullptr;   // allocated on the first STREAM:ON
+int streamBack=CLOCK_SCREEN, streamStage=0;
+bool streamIdle=false;
+uint32_t streamLast=0, streamStart=0, streamFrames=0;
+uint32_t adler32(const uint8_t *p,uint32_t n) {
+  uint32_t a=1,b=0;
+  for(uint32_t i=0;i<n;i++) { a=(a+p[i])%65521u; b=(b+a)%65521u; }
+  return (b<<16)|a;
+}
+// Unpacks n bytes into exactly count pixels; false if they do not match.
+bool streamDecode(int enc,const uint8_t *in,uint32_t n,uint16_t *px,uint32_t count) {
+  if(enc==0) {
+    if(n!=count*2) return false;
+    for(uint32_t i=0;i<count;i++) px[i]=in[2*i]|(in[2*i+1]<<8);
+    return true;
+  }
+  if(enc!=1 || n%3) return false;
+  uint32_t k=0;
+  for(uint32_t i=0;i<n;i+=3) {
+    uint32_t run=in[i]+1u; uint16_t c=in[i+1]|(in[i+2]<<8);
+    if(k+run>count) return false;
+    for(uint32_t j=0;j<run;j++) px[k++]=c;
+  }
+  return k==count;
+}
+bool enterStream() {
+  if(!streamIn) streamIn=(uint8_t*)malloc(STREAM_MAX);
+  if(!streamPx) streamPx=(uint16_t*)malloc(STREAM_PIXELS*2);
+  if(!streamIn || !streamPx) return false;
+  if(active!=STREAM_SCREEN) {
+    // The saver waits while the Mac streams; it goes on counting from where it was.
+    streamBack=active; streamIdle=idleArmed; streamStage=idleStage; streamStart=millis();
+    idleArmed=false;
+  }
+  active=STREAM_SCREEN; sliding=false; streamFrames=0;
+  tft.fillScreen(GC9A01A_BLACK);
+  streamLast=millis();
+  return true;
+}
+// Back to the screen shown before streaming (any other command that changes the screen
+// simply replaces the stream screen instead).
+void leaveStream() {
+  if(active!=STREAM_SCREEN) return;
+  uint32_t now=millis();
+  int back=streamBack;
+  if(back>=0 && validMode(modes[back])) activate(back);
+  else if(back==FIRE_SCREEN) enterFire();
+  else if(back==PHOTO_SCREEN && showPhotoScreen(hasPhoto(shownPhoto)?shownPhoto:currentPhoto,photoOverlay,slideshow)) {}
+  else if(!clockSynced && swipeFace()>=0) activate(swipeFace());   // never show an unset clock
+  else enterClock();
+  idleArmed=streamIdle; idleStage=streamStage; idleStart+=now-streamStart;
+}
+void updateStream(uint32_t now) {
+  if(now-streamLast<STREAM_IDLE_MS) return;
+  leaveStream();   // the Mac went quiet (asleep, app closed, cable out)
+  screenEvent(active==FIRE_SCREEN ? "fire" : active==CLOCK_SCREEN ? "clock" : active==PHOTO_SCREEN ? "photo" : "face");
+}
+void streamCommand(char *line) {
+  if(!strcmp(line,"STREAM:ON")) { Serial.println(enterStream() ? "OK STREAM" : "ERR MEMORY"); return; }
+  if(!strcmp(line,"STREAM:OFF")) { leaveStream(); Serial.println("OK STREAM"); return; }
+  if(!strcmp(line,"STREAM:PING")) {
+    if(active==STREAM_SCREEN) streamLast=millis();
+    Serial.println(active==STREAM_SCREEN ? "OK STREAM" : "ERR STREAM"); return;
+  }
+  int x,y,w,h,enc,used=0; unsigned long n,sum;
+  if(sscanf(line,"STREAM:%d:%d:%d:%d:%d:%lu:%lu%n",&x,&y,&w,&h,&enc,&n,&sum,&used)!=7 || line[used]
+     || x<0 || y<0 || w<1 || h<1 || x+w>240 || y+h>240 || (uint32_t)(w*h)>STREAM_PIXELS
+     || n<1 || n>STREAM_MAX || !streamIn) {
+    drainSerial(); lineLength=0; overflow=false;   // the bytes after the line are not commands
+    Serial.println("ERR COMMAND"); return;
+  }
+  uint32_t got=Serial.readBytes((char*)streamIn,n);
+  if(got!=n || adler32(streamIn,n)!=sum || !streamDecode(enc,streamIn,n,streamPx,w*h)) {
+    drainSerial(); lineLength=0; overflow=false;
+    Serial.println("ERR DATA"); return;
+  }
+  if(active!=STREAM_SCREEN) { Serial.println("ERR STREAM"); return; }
+  tft.drawRGBBitmap(x,y,streamPx,w,h);
+  streamLast=millis(); streamFrames++;
+  Serial.println("OK STREAM");
 }
 
 // ----- campfire -----
@@ -1134,7 +1225,7 @@ void updateTouch(uint32_t now) {
     touchX1=x; touchY1=y;
     if(wakeTouch) return;
     int dx=touchX1-touchX0, dy=touchY1-touchY0;
-    if(!sliding && !slideTried && abs(dx)>12 && abs(dx)>abs(dy) && active!=PHOTO_SCREEN) {
+    if(!sliding && !slideTried && abs(dx)>12 && abs(dx)>abs(dy) && active!=PHOTO_SCREEN && active!=STREAM_SCREEN) {
       slideTried=true; startSlide(dx<0 ? 1 : -1);
     }
     if(sliding && slideTouch) slideOffset=slideDir>0 ? constrain((float)dx,-240.0f,0.0f) : constrain((float)dx,0.0f,240.0f);
@@ -1147,7 +1238,7 @@ void updateTouch(uint32_t now) {
       // Far enough, or a quick flick: finish. Otherwise spring back.
       bool go=fabsf(slideOffset)>=70 || (flick && now-touchStart<400);
       slideTouch=false; slideAnimFrom=slideOffset; slideAnimTo=go ? (slideDir>0 ? -240.0f : 240.0f) : 0.0f; slideAnimStart=now;
-    } else if(!sliding && flick) swipe(dx<0 ? 1 : -1);   // photo screen or no memory: no slide
+    } else if(!sliding && flick) swipe(dx<0 ? 1 : -1);   // photo/stream screen or no memory: no slide
   }
 }
 
@@ -1186,6 +1277,7 @@ void command(char *line) {
     Serial.printf("OK MEM:%lu:%lu\r\n",(unsigned long)ESP.getPsramSize(),(unsigned long)ESP.getFreeHeap()); return;
   }
   if(!strncmp(line,"PHOTO:",6)) { photoCommand(line); return; }
+  if(!strncmp(line,"STREAM:",7)) { streamCommand(line); return; }
   if(!strcmp(line,"FIRE")) {
     // Chosen on purpose, like the clock: no saver until the next face arrives.
     enterFire(); saveActive(FIRE_SCREEN); idleArmed=false;
@@ -1338,6 +1430,7 @@ void loop() {
   if(active>=0) drawFace();
   else if(active==PHOTO_SCREEN) updatePhotoScreen(now);
   else if(active==FIRE_SCREEN) updateFire(now);
+  else if(active==STREAM_SCREEN) updateStream(now);
   else {
     flushCountdown(OWNER_RING);   // no owner ring on the clock, so the timer uses that space
     if(now-lastClockUpdate>=100) {lastClockUpdate=now;drawClock();}

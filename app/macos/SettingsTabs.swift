@@ -496,6 +496,11 @@ struct BoardDetails: View {
                             .help(L("Swipe on the board to go face → campfire → clock → face (the other way swiping right)."))
                     }
                 }
+                Divider()
+                SettingsRow(title: L("Streaming")) {
+                    SettingsAction(title: L("Test…")) { store.openStream?() }
+                        .help(L("Draw on this Mac and see it on the board as you move the mouse."))
+                }
                 if !store.message.isEmpty {
                     SettingsNote(text: store.message, lines: 3).textSelection(.enabled)
                 }

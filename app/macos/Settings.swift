@@ -257,6 +257,7 @@ final class SettingsStore: NSObject, ObservableObject {
     @Published var folderNotice = ""
     var foldersChanged: ((String) -> Void)?   // the menu refreshes its list (and shows errors)
     var openBoard: (() -> Void)?        // opens the board details window
+    var openStream: (() -> Void)?       // opens the streaming test window
     @Published var folderShelfHover = FolderShelf.showOnHover {
         didSet { if !API.preview { UserDefaults.standard.set(folderShelfHover, forKey: FolderShelf.hoverKey) } }
     }
@@ -1279,6 +1280,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             w.center()
             window = w
             store.openBoard = { [weak self] in self?.showBoard() }
+            store.openStream = { StreamTestWindow.shared.show() }
         }
         if clickMonitor == nil, let window { clickMonitor = SettingsTabs.clickMonitor(for: window) }
         store.start()

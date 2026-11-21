@@ -98,6 +98,29 @@ final class API {
         }.resume()
     }
 
+    /// POST raw bytes (e.g. "stream/frame": one picture); `done(ok, reply)` on the main thread.
+    func postBytes(_ path: String, _ data: Data, timeout: TimeInterval = 10,
+                   done: @escaping (Bool, [String: Any]) -> Void) {
+        guard ready, let u = url(path) else {
+            done(false, ["message": L("AI Face is still starting. Try again in a moment.")])
+            return
+        }
+        var req = URLRequest(url: u, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: timeout)
+        req.httpMethod = "POST"
+        req.setValue(token, forHTTPHeaderField: "X-ESP-Token")
+        req.setValue("application/octet-stream", forHTTPHeaderField: "Content-Type")
+        req.httpBody = data
+        URLSession.shared.dataTask(with: req) { body, resp, err in
+            let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+            var reply: [String: Any] = [:]
+            if let body = body, let json = try? JSONSerialization.jsonObject(with: body, options: []) as? [String: Any] {
+                reply = json
+            }
+            if code == 0 { reply["message"] = err?.localizedDescription ?? L("Could not reach the AI Face server.") }
+            DispatchQueue.main.async { done(code == 200, reply) }
+        }.resume()
+    }
+
     /// Adds an original picture to the photo library (POST /library).
     func addToLibrary(name: String, data: Data, done: @escaping (Bool, String) -> Void) {
         guard ready, let u = url("library") else { done(false, L("AI Face is still starting.")); return }

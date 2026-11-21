@@ -28,6 +28,7 @@ from . import weather
 from . import library as photo_library
 from . import moods as face_modes
 from . import paths
+from . import stream
 from .board import Device, ports
 
 # Lets the MCP server (ai_face_mcp.py, started by each chat app) find this app.
@@ -419,6 +420,34 @@ def main():
                     return self.reply(200, folder_access.handle(data))
                 except (ValueError, OSError) as exc:
                     return self.reply(400, {'message': str(exc), 'status': folder_access.status()})
+            if self.path in ('/stream/start', '/stream/frame', '/stream/stop'):
+                # Streaming: start / stop, or one whole picture (raw RGB565 bytes) of which only
+                # the changed parts go to the board. The app sends the next one after the reply.
+                with device.lock:
+                    try:
+                        length = int(self.headers.get('Content-Length', 0))
+                        if not 0 <= length <= stream.FRAME_BYTES:
+                            raise ValueError(T('잘못된 요청입니다.', 'Bad request.'))
+                        body = self.rfile.read(length)
+                        if self.path == '/stream/start':
+                            if device.fd is None and not device.paused and ports():
+                                try:
+                                    device.connect(ports()[0])
+                                except (OSError, ValueError, TimeoutError):
+                                    device.close()
+                            device.stream_start()
+                            result = dict(streaming=True)
+                        elif self.path == '/stream/frame':
+                            result = device.stream_frame(body)
+                        else:
+                            device.stream_stop()
+                            result = dict(streaming=False)
+                        return self.reply(200, dict(result, message=device.message))
+                    except (OSError, ValueError, TimeoutError) as exc:
+                        if isinstance(exc, OSError):
+                            device.close()
+                        device.streaming = False
+                        return self.reply(400, {'message': str(exc), 'streaming': False})
             if self.path != '/api':
                 return self.reply(404, {})
             with device.lock:
