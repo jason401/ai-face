@@ -187,6 +187,13 @@ class UpdaterTests(unittest.TestCase):
         self.assertEqual(self.installs, [])
         self.assertEqual(updater.request_install(device)['result'], 'installing')
 
+    def test_waits_while_streaming(self):
+        device = FakeDevice()
+        device.streaming = True
+        self.assertIn('스트리밍', updater.busy(device, manual=True))
+        device.streaming = False
+        self.assertEqual(updater.busy(device, manual=True), '')
+
     def test_waits_for_a_timer(self):
         self.commit('b.txt', 'two', 'Add b')
         face_modes.save_settings(timer={'end': time.time() + 60, 'total': 60, 'color': 'blue'})

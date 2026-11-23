@@ -309,6 +309,8 @@ def busy(device, now=None, manual=False):
         return T('캘린더 확인을 기다리는 중', 'a calendar question is waiting')
     if device is not None and device.flashing:
         return T('보드 펌웨어를 올리는 중', 'the board firmware is being updated')
+    if device is not None and getattr(device, 'streaming', False):
+        return T('보드에 스트리밍 중', 'streaming to the board')   # a restart would cut it off
     if not manual and device is not None and device.owner not in ('', 'user') and now - device.changed < AI_QUIET:
         return T('AI와 대화 중', 'an AI is chatting')
     return ''

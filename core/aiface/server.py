@@ -118,16 +118,26 @@ def auto_connect(device, stop, interval=3, retry=30):
 
 
 def watch_board(device, stop, interval=0.25):
-    """Follow screens the board changed by itself (touch swipes)."""
+    """Follow screens the board changed by itself (touch swipes), keep a stream alive while its
+    app's lease runs (and end it after), and show a face that waited for the stream to end."""
+    streamed = False
     while not stop.wait(interval):
         if device.fd is None or not device.lock.acquire(blocking=False):
             continue
         try:
             device.poll_events()
+            device.stream_tick()
+            device.catch_up()
         except OSError:
             device.close()   # unplugged: auto_connect takes over
+        except (ValueError, TimeoutError) as exc:
+            device.streaming = False
+            device.message = str(exc)
         finally:
             device.lock.release()
+        if streamed and not device.streaming:
+            updater.notify_idle(device)   # an update may have waited for the stream
+        streamed = device.streaming
 
 
 def watch_awake(device, stop, interval=5):
@@ -204,7 +214,7 @@ def main():
             return self.headers.get('Host') == '127.0.0.1:' + str(self.server.server_port)
 
         def do_GET(self):
-            if self.path in ('/', '/view', '/status', '/update', '/emotions', '/recent', '/awake', '/expression'):
+            if self.path in ('/', '/view', '/status', '/update', '/emotions', '/recent', '/awake', '/expression', '/stream/info'):
                 return self.handle_get()
             self.tracked(self.handle_get)
 
@@ -249,6 +259,8 @@ def main():
                 return self.reply(200, dict(device.view(), awake=awake.status(),
                                             calendar_pending=calendar_access.pending(), weather=weather.scene(),
                                             update_available=updater.load_state().get('result') == 'available'))
+            if self.path == '/stream/info':   # can an app stream now? No token, no lock
+                return self.reply(200, device.stream_info())
             if self.path == '/status':   # for the settings window; no lock either
                 return self.reply(200, dict(device.status(), version=VERSION, revision=paths.running_revision(), awake=awake.status()))
             if self.path == '/history/sync':
@@ -420,9 +432,12 @@ def main():
                     return self.reply(200, folder_access.handle(data))
                 except (ValueError, OSError) as exc:
                     return self.reply(400, {'message': str(exc), 'status': folder_access.status()})
-            if self.path in ('/stream/start', '/stream/frame', '/stream/stop'):
-                # Streaming: start / stop, or one whole picture (raw RGB565 bytes) of which only
-                # the changed parts go to the board. The app sends the next one after the reply.
+            if self.path in ('/stream/start', '/stream/frame', '/stream/keepalive', '/stream/stop'):
+                # Streaming (docs/STREAMING_API.md): start / keep alive / stop, or one whole
+                # picture (raw RGB565 bytes) of which only the changed parts go to the board. The
+                # app sends the next one after the reply. Apps name themselves in "start" and send
+                # the session they got back with X-Stream-Session; AI Face's own window sends none.
+                session = self.headers.get('X-Stream-Session') or None
                 with device.lock:
                     try:
                         length = int(self.headers.get('Content-Length', 0))
@@ -430,24 +445,33 @@ def main():
                             raise ValueError(T('잘못된 요청입니다.', 'Bad request.'))
                         body = self.rfile.read(length)
                         if self.path == '/stream/start':
+                            request = json.loads(body) if body.strip() else {}
+                            if not isinstance(request, dict):
+                                raise ValueError(T('잘못된 요청입니다.', 'Bad request.'))
                             if device.fd is None and not device.paused and ports():
                                 try:
                                     device.connect(ports()[0])
                                 except (OSError, ValueError, TimeoutError):
                                     device.close()
-                            device.stream_start()
-                            result = dict(streaming=True)
+                            result = device.stream_start(request.get('app'), request.get('lease'))
                         elif self.path == '/stream/frame':
-                            result = device.stream_frame(body)
+                            result = device.stream_frame(body, session)
+                        elif self.path == '/stream/keepalive':
+                            result = device.stream_keepalive(session)
                         else:
-                            device.stream_stop()
+                            device.stream_stop(session)
                             result = dict(streaming=False)
                         return self.reply(200, dict(result, message=device.message))
+                    except stream.StreamBusy as exc:
+                        return self.reply(409, {'message': T(f'{exc.app}이(가) 보드에 스트리밍 중이에요.', f'{exc.app} is streaming to the board.'),
+                                                'streaming': False, 'busy_by': exc.app})
                     except (OSError, ValueError, TimeoutError) as exc:
+                        # A bad request (wrong picture size, bad JSON) leaves a running stream alone.
                         if isinstance(exc, OSError):
                             device.close()
-                        device.streaming = False
-                        return self.reply(400, {'message': str(exc), 'streaming': False})
+                        mine = device.streaming and (session == device.stream_session if session
+                                                     else device.stream_app == stream.USER_APP)
+                        return self.reply(400, {'message': str(exc), 'streaming': mine})
             if self.path != '/api':
                 return self.reply(404, {})
             with device.lock:

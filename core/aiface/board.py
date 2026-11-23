@@ -56,6 +56,11 @@ class Device:
         self.stream_last = None
         self.stream_sent = 0.0
         self.stream_missed = False
+        self.face_due = False          # that face, once the board is back on the face screen
+        # Who streams: the app's name, its session, and its lease (seconds after its last request).
+        self.stream_app, self.stream_session = None, None
+        self.stream_lease, self.stream_until = stream.LEASE, 0.0
+        self.stream_supported = None   # the firmware's answer to STREAM:ON (None: not asked yet)
 
     def close(self):
         if self.fd is not None:
@@ -119,6 +124,10 @@ class Device:
         (or when the stream screen ends by itself)."""
         screen = line[len('EVT SCREEN:'):] if line.startswith('EVT SCREEN:') else ''
         if screen:
+            if self.streaming and self.stream_missed and screen == 'face':
+                self.face_due = True   # shown by catch_up() (no command can go out from here)
+            if self.streaming:
+                self.stream_missed = False
             self.streaming = False
         if screen == 'face':
             self.mode, self.screen, self.changed = '', 'face', time.time()   # saver countdown restarts
@@ -255,27 +264,77 @@ class Device:
         termios.tcflush(self.fd, termios.TCIOFLUSH)
         self.buffer = b''
 
-    def stream_start(self):
-        """Show the stream screen on the board; pictures follow with stream_frame()."""
+    def stream_start(self, app=None, lease=None):
+        """Give the board's screen to `app` (None: AI Face itself, i.e. the user) and show the
+        stream screen; pictures follow with stream_frame(). One app streams at a time: another
+        app gets StreamBusy, except AI Face itself, which always takes over. The same app
+        starting again takes over its own stream (e.g. after it restarted). The stream lives
+        `lease` seconds after the owner's last request (see stream_tick)."""
+        app = stream.app_name(app)
+        lease = stream.lease_seconds(lease)
         if self.fd is None:
             raise ValueError(T('먼저 보드를 USB로 연결해 주세요.', 'Connect the board over USB first.'))
+        if self.streaming and app not in (self.stream_app, stream.USER_APP) and time.monotonic() < self.stream_until:
+            raise stream.StreamBusy(self.stream_app)
         try:
-            self.exchange('STREAM:ON', 'OK STREAM')
+            on = False
+            if self.streaming:   # still on the stream screen? Then keep it (STREAM:ON clears it to black)
+                try:
+                    self.exchange('STREAM:PING', 'OK STREAM')
+                    on = True
+                except ValueError as exc:
+                    if 'ERR STREAM' not in str(exc):
+                        raise
+            if not on:
+                self.exchange('STREAM:ON', 'OK STREAM')
         except ValueError as exc:
             if 'ERR COMMAND' in str(exc):
+                self.stream_supported = False
                 raise ValueError(T('보드 펌웨어가 이전 버전이라 스트리밍을 못 해요. 설정 → 보드 → 자세히에서 펌웨어를 업데이트해 주세요.',
                                    'The board firmware is too old for streaming. Update it in Settings → Board → Details.'))
             raise
-        self.streaming, self.stream_last, self.stream_missed = True, None, False
+        if not self.streaming:
+            self.stream_missed = False
+        self.stream_supported = True
+        self.streaming, self.stream_last = True, None   # the first picture goes whole
+        self.stream_app, self.stream_lease, self.stream_session = app, lease, stream.new_session()
         self.stream_sent = time.monotonic()
-        self.message = T('스트리밍 중 · 맥에서 그린 그림을 보드에 보내고 있어요.', 'Streaming: the board shows pictures drawn on the Mac.')
+        self.stream_until = self.stream_sent + lease
+        self.message = (T('스트리밍 중 · 맥에서 그린 그림을 보드에 보내고 있어요.', 'Streaming: the board shows pictures drawn on the Mac.')
+                        if app == stream.USER_APP else
+                        T(f'스트리밍 중 · {app}', f'Streaming: {app}'))
+        return self.stream_info(self.stream_session)
 
-    def stream_frame(self, frame):
-        """Send what changed since the last picture. Returns how much went over USB, and
-        streaming=False when the board left the stream screen (swipe, timeout, another screen)."""
-        if len(frame) != stream.FRAME_BYTES:
-            raise ValueError(T('그림 크기가 올바르지 않습니다.', 'The picture has the wrong size.'))
+    def stream_info(self, session=None):
+        """What an app needs to know before (or while) streaming. Read-only, no lock needed."""
+        on = self.streaming and self.fd is not None
+        info = dict(api=stream.API, board=self.fd is not None, supported=self.stream_supported,
+                    streaming=on, busy_by=self.stream_app if on else None,
+                    lease_left=round(max(0.0, self.stream_until - time.monotonic()), 1) if on else 0,
+                    size=stream.SIZE, format='rgb565le', shape='circle', frame_bytes=stream.FRAME_BYTES)
+        if session is not None and on and session == self.stream_session:
+            info.update(session=session, app=self.stream_app, lease=self.stream_lease)
+        return info
+
+    def _stream_owner(self, session):
+        """True when `session` holds the running stream (no session: AI Face's own requests),
+        False when nothing streams; StreamBusy when another app holds it."""
         if not self.streaming or self.fd is None:
+            return False
+        mine = session == self.stream_session if session is not None else self.stream_app == stream.USER_APP
+        if mine:
+            self.stream_until = time.monotonic() + self.stream_lease
+            return True
+        raise stream.StreamBusy(self.stream_app)
+
+    def stream_frame(self, frame, session=None):
+        """Send what changed since the last picture. Returns how much went over USB, and
+        streaming=False when the board left the stream screen (swipe, timeout, another screen).
+        A picture of the wrong size is refused without ending the stream."""
+        if len(frame) != stream.FRAME_BYTES:
+            raise ValueError(T('그림 크기가 올바르지 않습니다 (240×240 RGB565, 115200바이트).',
+                               'The picture has the wrong size (240×240 RGB565, 115200 bytes).'))
+        if not self._stream_owner(session):
             return dict(streaming=False, bytes=0, pieces=0)
         sent = count = 0
         try:
@@ -287,10 +346,10 @@ class Device:
                 self.stream_sent = time.monotonic()
         except (ValueError, TimeoutError) as exc:
             if 'ERR STREAM' in str(exc):
-                self.streaming = False
-                self.message = T('보드가 스트리밍 화면을 떠났어요.', 'The board left the stream screen.')
+                self.stream_left()
                 return dict(streaming=False, bytes=sent, pieces=count)
             if not (isinstance(exc, TimeoutError) or 'ERR DATA' in str(exc)):
+                self.streaming = False   # the board answered something unexpected
                 raise
             # Bytes lost on the line: the next picture goes whole.
             self.resync()
@@ -301,8 +360,15 @@ class Device:
         self.stream_last = frame
         return dict(streaming=True, bytes=sent, pieces=count)
 
-    def stream_stop(self):
-        """Back to the screen from before streaming, and the face that came meanwhile."""
+    def stream_keepalive(self, session=None):
+        """The owner is still there: renew its lease without sending a picture."""
+        return dict(streaming=self._stream_owner(session))
+
+    def stream_stop(self, session=None, force=False):
+        """Back to the screen from before streaming, and the face that came meanwhile.
+        Only the owner stops a stream (or `force`, e.g. when its lease ran out)."""
+        if not force and not self._stream_owner(session):
+            return
         was, self.streaming = self.streaming, False
         self.stream_last = None
         if self.fd is None or not was:
@@ -310,10 +376,47 @@ class Device:
         self.exchange('STREAM:OFF', 'OK STREAM')
         self.message = T('스트리밍을 끝냈어요.', 'Streaming stopped.')
         if self.stream_missed and self.screen == 'face':
-            preset = next((m for m in face_modes.emotions() if m['id'] == self.emotion), None)
-            if preset:
-                self.upload(preset, self.owner or 'user')
+            self.face_due = True
         self.stream_missed = False
+        self.catch_up()
+
+    def stream_left(self):
+        """The board left the stream screen by itself (a swipe, or 3 s without data)."""
+        self.streaming = False
+        self.stream_last = None
+        self.message = T('보드가 스트리밍 화면을 떠났어요.', 'The board left the stream screen.')
+        self.catch_up()
+
+    def stream_tick(self, now=None):
+        """Called often by the server: keep the stream screen while its owner's lease runs (so
+        an app may show one picture and only renew the lease), end it when the lease is over."""
+        if not self.streaming or self.fd is None:
+            return
+        now = time.monotonic() if now is None else now
+        if now >= self.stream_until:
+            self.stream_stop(force=True)
+            self.message = T('스트리밍 앱이 응답하지 않아 스트리밍을 끝냈어요.', 'The streaming app went quiet, so streaming ended.')
+            return
+        if now - self.stream_sent >= stream.PING_EVERY:
+            try:
+                self.exchange('STREAM:PING', 'OK STREAM')
+                self.stream_sent = now
+            except ValueError as exc:
+                if 'ERR STREAM' not in str(exc):
+                    raise
+                self.stream_left()
+
+    def catch_up(self):
+        """Show the face that an AI chose while the board was streaming, once the board is
+        back on the face screen (the menu bar already shows it)."""
+        if not self.face_due or self.fd is None or self.streaming:
+            return
+        self.face_due = False
+        if self.screen != 'face':
+            return
+        preset = next((m for m in face_modes.emotions() if m['id'] == self.emotion), None)
+        if preset:
+            self.upload(preset, self.owner or 'user')
 
     def refresh_photos(self):
         self.photos, self.current_photo = face_modes.parse_photo_list(self.exchange('PHOTO:LIST', 'OK LIST:'))
@@ -552,7 +655,7 @@ class Device:
             self.lock.release()
         return dict(ports=available, connected=self.fd is not None and self.port in available,
                     port=self.port, message=self.message, busy=busy, flashing=self.flashing,
-                    paused=self.paused, streaming=self.streaming, touch=self.touch if self.fd is not None else 0, clock_style=settings['clock_style'], light=settings['light'], saver=settings['saver'], mono=settings['mono'], photos=list(self.photos),
+                    paused=self.paused, streaming=self.streaming, stream_app=self.stream_app if self.streaming else None, touch=self.touch if self.fd is not None else 0, clock_style=settings['clock_style'], light=settings['light'], saver=settings['saver'], mono=settings['mono'], photos=list(self.photos),
                     current_photo=self.current_photo, owner=self.owner or 'user',
                     timer=dict(left=left, total=timer['total'], color=timer['color']) if left else None)
 
