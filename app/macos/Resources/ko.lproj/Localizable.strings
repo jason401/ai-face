@@ -422,3 +422,10 @@
 "Erase" = "지우기";
 "Streaming to the board" = "보드로 스트리밍 중";
 "Connecting to the board…" = "보드에 연결하는 중…";
+"Draw" = "그리기";
+"Screen" = "화면";
+"Follow the mouse" = "마우스 따라가기";
+"Drag the pink ring anywhere on the screen; scroll on it or use Size to resize it. What is inside it goes to the board." = "분홍 고리를 화면 어디로든 끌어 옮기고, 고리 위에서 스크롤하거나 크기 막대로 크기를 바꿔요. 고리 안에 보이는 것이 보드로 가요.";
+"Size" = "크기";
+"Allow AI Face in System Settings → Privacy & Security → Screen & System Audio Recording, then quit and reopen AI Face." = "시스템 설정 → 개인정보 보호 및 보안 → 화면 및 시스템 오디오 녹음에서 AI Face를 허용한 뒤, AI Face를 껐다 다시 켜 주세요.";
+"Could not find this screen." = "이 화면을 찾지 못했어요.";

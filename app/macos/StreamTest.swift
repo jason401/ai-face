@@ -1,6 +1,7 @@
 // Streaming test: a round pad drawn on this Mac and sent to the board picture by picture.
 // The pad shows exactly the picture that goes out; the server sends only what changed
-// (core/aiface/stream.py), and the board shows it as it arrives.
+// (core/aiface/stream.py), and the board shows it as it arrives. "Screen" mode sends what is
+// inside a ring on the real screen instead (ScreenLens.swift).
 import Cocoa
 
 /// The 240x240 picture: background, what the mouse drew, a fading trail and the mouse arrow,
@@ -111,6 +112,7 @@ final class StreamCanvas {
 final class StreamPadView: NSView {
     let canvas: StreamCanvas
     var image: CGImage? { didSet { needsDisplay = true } }
+    var drawing = true { didSet { if !drawing { canvas.cursor = nil; last = nil } } }
     private var last: CGPoint?
 
     init(canvas: StreamCanvas, frame: NSRect) {
@@ -147,6 +149,7 @@ final class StreamPadView: NSView {
     }
 
     private func move(_ event: NSEvent) {
+        guard drawing else { return }
         let p = point(event)
         canvas.cursor = p
         canvas.trail.append((p, CACurrentMediaTime()))
@@ -156,11 +159,13 @@ final class StreamPadView: NSView {
     override func mouseEntered(with event: NSEvent) { move(event) }
     override func mouseExited(with event: NSEvent) { canvas.cursor = nil; last = nil }
     override func mouseDown(with event: NSEvent) {
+        guard drawing else { return }
         move(event)
         last = point(event)
         if let p = last { canvas.stroke(from: p, to: p) }
     }
     override func mouseDragged(with event: NSEvent) {
+        guard drawing else { return }
         move(event)
         let p = point(event)
         canvas.stroke(from: last ?? p, to: p)
@@ -176,8 +181,17 @@ final class StreamTestWindow: NSObject, NSWindowDelegate {
     private var window: NSWindow?
     private let canvas = StreamCanvas()
     private var pad: StreamPadView?
+    private var note: NSTextField?
     private var status: NSTextField?
     private var button: NSButton?
+    private var mode: NSSegmentedControl?
+    private var erase: NSButton?
+    private var followBox: NSButton?
+    private var sizeRow: [NSView] = []
+    private var sizeSlider: NSSlider?
+    private var sizeValue: NSTextField?
+    private let lens = ScreenLens()
+    private var screenMode: Bool { mode?.selectedSegment == 1 }
     private var timer: Timer?
     private var streaming = false, waiting = false
     private var frames = 0, bytes = 0, since = CACurrentMediaTime()
@@ -194,21 +208,25 @@ final class StreamTestWindow: NSObject, NSWindowDelegate {
     }
 
     private func build() {
-        let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 300, height: 392),
+        let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 300, height: 452),
                          styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
         w.title = L("Streaming test")
         w.isReleasedWhenClosed = false
         w.delegate = self
-        let root = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 392))
-        let pad = StreamPadView(canvas: canvas, frame: NSRect(x: 30, y: 132, width: 240, height: 240))   // from the bottom up
-        let note = NSTextField(wrappingLabelWithString: L("Move the mouse over the circle, or drag to draw. The board shows the same picture, drawn on this Mac."))
+        let root = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 452))
+        let mode = NSSegmentedControl(labels: [L("Draw"), L("Screen")], trackingMode: .selectOne,
+                                      target: self, action: #selector(modeChanged))
+        mode.selectedSegment = 0
+        mode.frame = NSRect(x: 60, y: 414, width: 180, height: 24)
+        let pad = StreamPadView(canvas: canvas, frame: NSRect(x: 30, y: 160, width: 240, height: 240))   // from the bottom up
+        let note = NSTextField(wrappingLabelWithString: StreamTestWindow.drawNote)
         note.font = .systemFont(ofSize: 11)
         note.textColor = .secondaryLabelColor
-        note.frame = NSRect(x: 20, y: 76, width: 260, height: 44)
+        note.frame = NSRect(x: 20, y: 104, width: 260, height: 44)
         let status = NSTextField(labelWithString: L("Preview only: not streaming"))
         status.font = .systemFont(ofSize: 11)
         status.lineBreakMode = .byTruncatingTail
-        status.frame = NSRect(x: 20, y: 52, width: 260, height: 16)
+        status.frame = NSRect(x: 20, y: 80, width: 260, height: 16)
         let button = NSButton(title: L("Start streaming"), target: self, action: #selector(toggle))
         button.bezelStyle = .rounded
         button.keyEquivalent = "\r"
@@ -216,13 +234,88 @@ final class StreamTestWindow: NSObject, NSWindowDelegate {
         let clear = NSButton(title: L("Erase"), target: self, action: #selector(clearPad))
         clear.bezelStyle = .rounded
         clear.frame = NSRect(x: 18, y: 12, width: 90, height: 32)
-        [pad, note, status, button, clear].forEach(root.addSubview)
+        let follow = NSButton(checkboxWithTitle: L("Follow the mouse"), target: self, action: #selector(followChanged))
+        follow.frame = NSRect(x: 20, y: 18, width: 128, height: 20)
+        follow.isHidden = true
+        let sizeLabel = NSTextField(labelWithString: L("Size"))
+        sizeLabel.font = .systemFont(ofSize: 11)
+        sizeLabel.frame = NSRect(x: 20, y: 54, width: 44, height: 16)
+        let slider = NSSlider(value: Double(lens.pixels), minValue: Double(ScreenLens.sizes.lowerBound),
+                              maxValue: Double(ScreenLens.sizes.upperBound), target: self, action: #selector(sizeChanged))
+        slider.isContinuous = true
+        slider.frame = NSRect(x: 64, y: 50, width: 136, height: 24)
+        let value = NSTextField(labelWithString: "")
+        value.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+        value.textColor = .secondaryLabelColor
+        value.frame = NSRect(x: 204, y: 54, width: 80, height: 16)
+        sizeRow = [sizeLabel, slider, value]
+        sizeRow.forEach { $0.isHidden = true }
+        [mode, pad, note, status, button, clear, follow, sizeLabel, slider, value].forEach(root.addSubview)
         w.contentView = root
         w.center()
         window = w
         self.pad = pad
+        self.note = note
         self.status = status
         self.button = button
+        self.mode = mode
+        self.erase = clear
+        self.followBox = follow
+        self.sizeSlider = slider
+        self.sizeValue = value
+        lens.onError = { [weak self] message in self?.lensFailed(message) }
+        lens.onResize = { [weak self] _ in self?.showSize() }
+        showSize()
+    }
+
+    @objc private func sizeChanged() {
+        lens.pixels = Int(sizeSlider?.doubleValue ?? 240)
+        showSize()
+        lens.update()
+    }
+
+    /// The slider and its text: how much bigger the board shows it (1:1 at 240 screen pixels).
+    private func showSize() {
+        sizeSlider?.doubleValue = Double(lens.pixels)
+        let zoom = Double(ScreenLens.n) / Double(lens.pixels)
+        sizeValue?.stringValue = abs(zoom - 1) < 0.04 ? "1:1" : String(format: "×%.1f", zoom)
+    }
+
+    private static var drawNote: String {
+        L("Move the mouse over the circle, or drag to draw. The board shows the same picture, drawn on this Mac.")
+    }
+
+    @objc private func modeChanged() {
+        if screenMode {
+            guard ScreenLens.permitted() else {
+                lensFailed(ScreenLens.permissionText)
+                return
+            }
+            lens.start()
+            note?.stringValue = L("Drag the pink ring anywhere on the screen; scroll on it or use Size to resize it. What is inside it goes to the board.")
+        } else {
+            lens.stop()
+            note?.stringValue = StreamTestWindow.drawNote
+        }
+        pad?.drawing = !screenMode
+        erase?.isHidden = screenMode
+        followBox?.isHidden = !screenMode
+        sizeRow.forEach { $0.isHidden = !screenMode }
+        if streaming { status?.stringValue = L("Streaming to the board") }
+    }
+
+    @objc private func followChanged() { lens.follow = followBox?.state == .on }
+
+    /// Back to drawing, with the reason (no permission, screen not found, capture stopped).
+    private func lensFailed(_ message: String) {
+        lens.stop()
+        mode?.selectedSegment = 0
+        pad?.drawing = true
+        erase?.isHidden = false
+        followBox?.isHidden = true
+        sizeRow.forEach { $0.isHidden = true }
+        if streaming { status?.stringValue = L("Streaming to the board") }
+        note?.stringValue = message
     }
 
     private func tick() {
@@ -234,10 +327,19 @@ final class StreamTestWindow: NSObject, NSWindowDelegate {
             bytes = 0
             since = now
         }
-        pad?.image = canvas.render(now)
-        guard streaming, !waiting else { return }
+        let frame: Data?
+        if screenMode {
+            lens.update()
+            if let image = lens.preview() { pad?.image = image }
+            frame = lens.rgb565()
+            if streaming, !canvas.stats.isEmpty { status?.stringValue = L("Streaming to the board") + " · " + canvas.stats }
+        } else {
+            pad?.image = canvas.render(now)
+            frame = canvas.rgb565()
+        }
+        guard streaming, !waiting, let frame else { return }
         waiting = true
-        API.shared.postBytes("stream/frame", canvas.rgb565()) { [weak self] ok, reply in
+        API.shared.postBytes("stream/frame", frame) { [weak self] ok, reply in
             guard let self else { return }
             self.waiting = false
             guard self.streaming else { return }
@@ -280,6 +382,7 @@ final class StreamTestWindow: NSObject, NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         timer?.invalidate()
         timer = nil
+        if screenMode { lensFailed(StreamTestWindow.drawNote) }
         if streaming {
             setStreaming(false)
             API.shared.postBytes("stream/stop", Data()) { _, _ in }
