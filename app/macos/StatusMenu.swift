@@ -557,7 +557,7 @@ final class StatusController: NSObject, NSMenuDelegate, FacePanelActions {
                 self?.panel.backToMain()
                 API.shared.call("emotion", ["id": id]) { [weak self] ok, reply in self?.report(ok, reply) }
             },
-            columns: 6, maxHeight: 340)
+            columns: 5, maxHeight: 340)
     }
 
     // MARK: - Panel buttons

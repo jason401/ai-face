@@ -435,3 +435,5 @@
 "Off: no AI can read or change the calendar. Your choices below are kept for when you turn it back on." = "끄면 어떤 AI도 캘린더를 읽거나 바꿀 수 없어요. 아래 선택은 그대로 두었다가 다시 켜면 돌아와요.";
 "Off: no AI can read mail. Your choices below are kept for when you turn it back on." = "끄면 어떤 AI도 메일을 읽을 수 없어요. 아래 선택은 그대로 두었다가 다시 켜면 돌아와요.";
 "Off: no AI can read shared folders. Your choices below are kept for when you turn it back on." = "끄면 어떤 AI도 공유 폴더를 읽을 수 없어요. 아래 선택은 그대로 두었다가 다시 켜면 돌아와요.";
+"Settings" = "설정";
+"Quit" = "종료";

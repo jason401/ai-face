@@ -20,7 +20,7 @@ The interface follows the Mac's preferred language: Korean on Korean systems and
 
 Everything is in one panel under the menu bar face.
 
-- **Peek.** Rest the pointer on the face for half a second: the panel appears without taking the keyboard from the app you are typing in, and hides when the pointer leaves. **Quit** and **Install new version** stay dim until the panel is pinned.
+- **Peek.** Rest the pointer on the face for half a second: the panel appears without taking the keyboard from the app you are typing in, and hides when the pointer leaves. **Quit** and **Update** stay dim until the panel is pinned.
 - **Pinned.** Click the face, or anywhere in a peek, to pin it. It stays until you click the face again, press Esc or click outside. Tab, Esc, ⌘, and ⌘Q work.
 - **Folder drag.** While you drag a folder anywhere, a small panel with only the drop zone and the folder list appears.
 - **Right-click** the face for the classic short menu.
@@ -33,7 +33,7 @@ Inside the panel:
 - **Timer** offers 5, 25 or 50 minutes; **Custom…** asks for the minutes right in the panel. **Cancel timer** appears while one runs.
 - **Keep awake** offers 1, 2 or 4 hours. Active sessions show remaining time and a small sun above the face. It appears only after keep awake is set up in Settings.
 - **Shared folders**: drop folders on the dashed line, click a folder to open it in Finder, use its switch to pause it, or right-click for more.
-- **Settings…**, **Install new version** (when one is found) and **Quit AI Face**.
+- A row of buttons at the bottom: **Settings**, **Update** (when a new version is found) and **Quit**.
 
 Ring colors identify the selecting agent: orange for Claude, green for GPT, gold for AI Illuminati and white for manual selection. A board with firmware older than the gold shows AI Illuminati's faces with a white ring until its firmware is updated. Timers use a progress ring. Expression changes can bounce or shake. Working expressions such as processing and reading return to calm after three minutes without a new expression.
 
@@ -49,7 +49,7 @@ The four tabs are **General** (login, updates, folders, keep awake), **Appearanc
 
 **Open at login** launches the menu bar app at sign-in. Folder controls open the app and local data locations in Finder.
 
-Downloaded-app users should update manually through GitHub Releases. The in-app updater checks the stable source branch at startup and every three hours, but installs only after **Update now** or **Install new version** is selected. Source updates require a local signing identity, Python and Command Line Tools.
+Downloaded-app users should update manually through GitHub Releases. The in-app updater checks the stable source branch at startup and every three hours, but installs only after **Update now** (Settings) or **Update** (menu bar panel) is selected. Source updates require a local signing identity, Python and Command Line Tools.
 
 The source updater uses its own checkout under Application Support, runs tests, builds a signed candidate and installs transactionally. Preparation (fetching, tests and building) continues while a timer, keep-awake lease, Calendar approval or firmware operation is active. Only app replacement and restart wait for that work to finish. The prepared candidate is reused while waiting; work-completion signals wake the installer promptly, with a ten-second fallback check and a visible countdown. Changing the update channel or changing/deleting the staged candidate invalidates reuse. A failed install rolls back. It does not modify the developer checkout. Turn off **Auto check** if you do not use source updates.
 

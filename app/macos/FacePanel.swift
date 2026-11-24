@@ -94,7 +94,7 @@ final class FacePanel: NSObject {
         if API.preview { return true }
         return UserDefaults.standard.object(forKey: hoverKey) as? Bool ?? true
     }
-    static let width: CGFloat = 308
+    static let width: CGFloat = 268   // the face grid (5 columns) fits inside the 12 pt margins
 
     enum Reason { case peek, pinned, drag }
 
@@ -513,21 +513,39 @@ struct FacePanelView: View {
                 Text(model.updateSummary).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            HStack {
-                Button(L("Settings…")) { panel.settings() }
-                Spacer()
+            // One row of equal pills with icons, like Cats in Menubar's panel.
+            HStack(spacing: 4) {
+                footerButton("gearshape", L("Settings"), help: L("Settings…")) { panel.settings() }
                 if model.updateAvailable {
-                    Button(L("Install new version")) { panel.actions?.panelInstall() }
-                        .disabled(!model.pinned)
-                        .help(model.pinned ? "" : L("Click the panel once to pin it, then press this."))
-                    Spacer()
+                    footerButton("arrow.down.circle", L("Update"), help: L("Install new version"), pinnedOnly: true, accent: true) {
+                        panel.actions?.panelInstall()
+                    }
                 }
-                Button(L("Quit AI Face")) { panel.actions?.panelQuit() }
-                    .disabled(!model.pinned)
-                    .help(model.pinned ? "" : L("Click the panel once to pin it, then press this."))
+                footerButton("power", L("Quit"), help: L("Quit AI Face"), pinnedOnly: true) { panel.actions?.panelQuit() }
             }
-            .buttonStyle(.link)
         }
+    }
+
+    /// Quit and Install work only once the panel is pinned (a passing peek must not quit the app).
+    private func footerButton(_ symbol: String, _ title: String, help: String, pinnedOnly: Bool = false,
+                              accent: Bool = false, _ action: @escaping () -> Void) -> some View {
+        let enabled = !pinnedOnly || model.pinned
+        return Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: symbol).font(.system(size: 10, weight: .medium))
+                Text(title).font(.system(size: 11)).lineLimit(1)
+            }
+            .foregroundStyle(accent ? Color.accentColor : Color.primary)
+            .frame(maxWidth: .infinity).frame(height: 22)
+            .background(RoundedRectangle(cornerRadius: 6)
+                .fill(accent ? Color.accentColor.opacity(0.15) : Color.primary.opacity(0.06)))
+            .contentShape(RoundedRectangle(cornerRadius: 6))   // the whole pill takes the click
+            .opacity(enabled ? 1 : 0.6)   // a disabled plain button dims a little more by itself
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        .help(enabled ? help : L("Click the panel once to pin it, then press this."))
+        .accessibilityLabel(help)
     }
 
     private func faces(_ picker: NSViewController) -> some View {
