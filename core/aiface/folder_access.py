@@ -28,7 +28,7 @@ from . import moods as settings_store
 from . import paths
 from .i18n import T
 
-DEFAULTS = dict(apps=dict(claude=True, gpt=False, illuminati=False), list=[])
+DEFAULTS = dict(on=True, apps=dict(claude=True, gpt=False, illuminati=False), list=[])
 MAX_FOLDERS = 30
 BIG = 5000                 # adding a folder with more files than this asks first
 MAX_LIST = 300             # entries per folder_files answer
@@ -67,6 +67,7 @@ def settings():
     data = settings_store.load_settings().get('folders')
     out = json.loads(json.dumps(DEFAULTS))
     if isinstance(data, dict):
+        out['on'] = data.get('on') is not False   # one switch for all AIs; the choices below are kept
         if isinstance(data.get('apps'), dict):
             out['apps'].update({k: v is True for k, v in data['apps'].items() if k in out['apps']})
         for f in data.get('list') or []:
@@ -84,7 +85,8 @@ def _save(conf):
 
 
 def allowed(agent):
-    return settings()['apps'].get(agent, False) is True
+    conf = settings()
+    return conf['on'] and conf['apps'].get(agent, False) is True
 
 
 def _require(agent):
@@ -229,8 +231,15 @@ def save_apps(apps):
         _save(conf)
 
 
+def save_on(on):
+    with _lock:
+        conf = settings()
+        conf['on'] = on is not False
+        _save(conf)
+
+
 def handle(data):
-    """POST /folders from the app: {op: add | remove | on | relocate | apps, ...}."""
+    """POST /folders from the app: {op: add | remove | on | relocate | apps | all, ...}."""
     op = data.get('op')
     result = {}
     if op == 'add':
@@ -243,6 +252,8 @@ def handle(data):
         relocate(data.get('id'), data.get('path'), data.get('bookmark'))
     elif op == 'apps':
         save_apps(data.get('apps'))
+    elif op == 'all':
+        save_on(data.get('on'))
     else:
         raise ValueError(T('알 수 없는 요청입니다.', 'Unknown request.'))
     return dict(result, status=status())
@@ -287,7 +298,7 @@ def status():
             who = paths.AGENT_NAMES.get(agent, agent)
             item['last'] = T(f'{who} · {ago(t)} 읽음', f'Read by {who} · {ago(t)}')
         folders.append(item)
-    return dict(apps=conf['apps'], folders=folders)
+    return dict(on=conf['on'], apps=conf['apps'], folders=folders)
 
 
 def _log(agent, folder, op, rel):

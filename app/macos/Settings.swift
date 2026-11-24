@@ -252,6 +252,7 @@ final class SettingsStore: NSObject, ObservableObject {
     @Published var mailAsking = false
     // Shared folders (read only): which folders, which AIs may read them
     @Published var folders: [SharedFolder] = []
+    @Published var folderOn = true
     @Published var folderClaude = true
     @Published var folderGPT = false
     @Published var folderIlluminati = false
@@ -895,6 +896,7 @@ final class SettingsStore: NSObject, ObservableObject {
     // MARK: Shared folders
 
     func applyFolders(_ s: [String: Any]) {
+        folderOn = (s["on"] as? Bool) ?? true
         let apps = (s["apps"] as? [String: Any]) ?? [:]
         folderClaude = (apps["claude"] as? Bool) ?? true
         folderGPT = (apps["gpt"] as? Bool) ?? false
@@ -967,6 +969,11 @@ final class SettingsStore: NSObject, ObservableObject {
 
     func setFolderOn(_ folder: SharedFolder, _ on: Bool) { postFolders(["op": "on", "id": folder.id, "on": on]) }
     func removeFolder(_ folder: SharedFolder) { postFolders(["op": "remove", "id": folder.id]) }
+    func setFolderAccess(_ on: Bool) {
+        postFolders(["op": "all", "on": on]) { [weak self] _ in
+            self?.aiNotice = L("Saved. Quit that AI app (⌘Q) and open it again for the change to apply.")
+        }
+    }
     func setFolderApps(_ ai: String, _ on: Bool) {
         postFolders(["op": "apps", "apps": [ai: on]]) { [weak self] _ in
             self?.aiNotice = L("Saved. Quit that AI app (⌘Q) and open it again for the change to apply.")

@@ -60,7 +60,7 @@ def agent():
 
 
 def _section_on(name):
-    """The one switch for all AIs in the app's Calendar / Mail card (default: on)."""
+    """The one switch for all AIs in the app's Calendar / Mail / Shared folders card (default: on)."""
     try:
         return json.loads(SETTINGS.read_text()).get(name, {}).get('on') is not False
     except (OSError, ValueError, AttributeError):
@@ -100,7 +100,7 @@ def folders_allowed():
         apps = json.loads(SETTINGS.read_text()).get('folders', {}).get('apps', {})
     except (OSError, ValueError, AttributeError):
         apps = {}
-    return apps.get(agent(), agent() == 'claude') is True
+    return _section_on('folders') and apps.get(agent(), agent() == 'claude') is True
 
 
 def moods():

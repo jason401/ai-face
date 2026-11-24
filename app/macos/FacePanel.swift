@@ -140,7 +140,7 @@ final class FacePanel: NSObject {
                 dragChecked = drag.changeCount
                 dragHasFolder = FacePanel.folders(in: drag)
             }
-            if dragHasFolder && reason != .drag && reason != .pinned { show(.drag) }
+            if dragHasFolder && store.folderOn && reason != .drag && reason != .pinned { show(.drag) }
             return
         }
 
@@ -403,8 +403,10 @@ struct FacePanelView: View {
                 Divider()
                 awake
             }
-            Divider()
-            FolderShelfView(store: store, panel: panel, compact: false)
+            if store.folderOn {   // AI access to shared folders turned off in Settings: nothing to drop here
+                Divider()
+                FolderShelfView(store: store, panel: panel, compact: false)
+            }
             Divider()
             footer
         }

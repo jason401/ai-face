@@ -186,6 +186,7 @@ final class StatusController: NSObject, NSMenuDelegate, FacePanelActions {
         API.shared.getJSON("folders/status") { [weak self] json in
             guard let self = self, let s = json as? [String: Any] else { return }
             self.folders = ((s["folders"] as? [[String: Any]]) ?? []).compactMap(SharedFolder.init)
+            self.folderAdder.folderOn = (s["on"] as? Bool) ?? true   // the panel hides folders while off
             FolderBookmarks.relocateMoved(self.folders) { [weak self] in self?.loadFolders() }
         }
     }

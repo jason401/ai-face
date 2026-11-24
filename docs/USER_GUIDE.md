@@ -109,7 +109,7 @@ The integration reads inbox messages only. It never sends, moves, deletes or mar
 
 ### Shared folders (read only)
 
-Share folders with the connected AIs in **Settings → AI → Shared folders**: click **Add folders…**, or drop folders from Finder onto the card or the folder list. The menu bar panel also adds folders and pauses or resumes each one with its switch. Claude may read them by default; turn GPT on separately. Restart the AI app after changing which AIs may read them.
+Share folders with the connected AIs in **Settings → AI → Shared folders**: click **Add folders…**, or drop folders from Finder onto the card or the folder list. The menu bar panel also adds folders and pauses or resumes each one with its switch. Claude may read them by default; turn GPT on separately. **AI access** turns shared folders off for every AI at once; the list and choices are kept, and the menu bar panel hides its folder section while it is off. Restart the AI app after changing which AIs may read them.
 
 - **Quick panel.** While you drag a folder anywhere, a small panel slides in under the menu bar face: drop the folder there to share it. The same list is in the full panel (rest the pointer on the face or click it). Click a folder to open it in Finder, use its switch to pause it, or right-click for more.
 - **Read only.** AIs can list, search (names, and the text of plain-text files) and read files: text and code, PDF (10 pages at a time), Word (.docx) and PowerPoint (.pptx). Nothing is changed, moved or deleted.

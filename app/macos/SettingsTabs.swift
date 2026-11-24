@@ -354,18 +354,25 @@ struct AITab: View {
             }
 
             SettingsCard(title: L("Shared folders")) {
-                SettingsRow(title: L("Can read")) {
-                    perAI(store.folderClaude, store.folderGPT, store.folderIlluminati) { ai, on in store.setFolderApps(ai, on) }
+                SettingsRow(title: L("AI access")) {
+                    SettingsSwitch(title: L("AI access"), isOn: Binding(get: { store.folderOn }, set: { store.setFolderAccess($0) }))
+                        .help(L("Off: no AI can read shared folders. Your choices below are kept for when you turn it back on."))
                 }
                 Divider()
-                SettingsRow(title: L("Folder list")) {
-                    SettingsAction(title: store.folders.isEmpty ? L("Add folders…")
-                                   : String(format: L("%d of %d on…"), store.folders.filter { $0.on }.count, store.folders.count)) {
-                        if store.folders.isEmpty { store.chooseFolders() } else { store.showFolders = true }
+                if store.folderOn {   // the quick panel row below is about the whole panel, so it stays
+                    SettingsRow(title: L("Can read")) {
+                        perAI(store.folderClaude, store.folderGPT, store.folderIlluminati) { ai, on in store.setFolderApps(ai, on) }
                     }
-                    .popover(isPresented: $store.showFolders, arrowEdge: .bottom) { FolderList(store: store) }
+                    Divider()
+                    SettingsRow(title: L("Folder list")) {
+                        SettingsAction(title: store.folders.isEmpty ? L("Add folders…")
+                                       : String(format: L("%d of %d on…"), store.folders.filter { $0.on }.count, store.folders.count)) {
+                            if store.folders.isEmpty { store.chooseFolders() } else { store.showFolders = true }
+                        }
+                        .popover(isPresented: $store.showFolders, arrowEdge: .bottom) { FolderList(store: store) }
+                    }
+                    Divider()
                 }
-                Divider()
                 SettingsRow(title: L("Quick panel")) {
                     Toggle(L("Show on hover over the face"), isOn: $store.folderShelfHover).toggleStyle(.checkbox)
                         .help(L("Resting the pointer on the menu bar face shows its panel (face, timer, keep awake, shared folders). Off: only a click opens it. While you drag a folder it appears by itself: drop it there to share it."))

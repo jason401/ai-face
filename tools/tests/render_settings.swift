@@ -105,7 +105,7 @@ import SwiftUI
         }
         let noAwakeStore = SettingsStore()
         noAwakeStore.awakeSupported = true
-        noAwakeStore.calOn = false; noAwakeStore.mailOn = false
+        noAwakeStore.calOn = false; noAwakeStore.mailOn = false; noAwakeStore.folderOn = false
         let views: [(String, () -> AnyView)] = [
             ("1general-waiting", { AnyView(GeneralTab(store: waitingStore)) }),
             ("1general", { AnyView(GeneralTab(store: store)) }), ("1appearance", { AnyView(AppearanceTab(store: store)) }), ("1appearance-noboard", { AnyView(SettingsPage { BoardCard(store: SettingsStore()) }) }),

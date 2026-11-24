@@ -125,6 +125,18 @@ class Reading(Base):
         with self.assertRaises(PermissionError):
             folders.files('gpt', 'papers')
 
+    def test_one_switch_turns_off_every_ai_and_keeps_the_choices(self):
+        folders.save_apps({'gpt': True})
+        out = folders.handle({'op': 'all', 'on': False})
+        self.assertFalse(out['status']['on'])
+        for agent in ('claude', 'gpt'):
+            with self.assertRaises(PermissionError):
+                folders.files(agent, 'papers')
+        self.assertEqual(len(folders.settings()['list']), 1)            # folders stay shared
+        folders.handle({'op': 'all', 'on': True})
+        self.assertTrue(folders.allowed('gpt'))
+        folders.files('claude', 'papers')
+
     def test_listing_hides_secrets_links_and_shows_icloud(self):
         text = folders.files('claude', 'papers')
         for shown in ('papers/notes.md', 'papers/data.csv', 'papers/sub/', 'papers/Report.pdf'):
@@ -217,6 +229,8 @@ class Tools(Base):
             self.assertNotIn('folders_list', names())
             folders.save_apps({'gpt': True})
             self.assertIn('folders_list', names())
+            folders.save_on(False)
+            self.assertNotIn('folders_list', names())
 
     def test_tool_call_builds_the_query(self):
         with patch.dict(os.environ, {'AIFACE_AGENT': 'claude'}), \
