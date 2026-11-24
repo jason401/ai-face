@@ -1,13 +1,14 @@
 // The panel under the menu bar face: the face, timer, keep awake, shared folders, Settings and Quit
 // in one place (it replaces the old click menu; right-click on the face still opens that menu).
-// - Peek: resting the pointer on the face for half a second shows it without taking the keyboard
+// - Peek: resting the pointer on the face for 0.15 s shows it without taking the keyboard
 //   from the app you are typing in; it hides when the pointer leaves. Quit and Install wait for a click.
 // - Pinned: clicking the face, or anywhere in a peek, pins it. It stays until the face is clicked
 //   again, Esc is pressed or something outside is clicked. Tab, Esc, ⌘, and ⌘Q work.
 // - Drag: while a folder is dragged anywhere, a small panel with the drop zone slides in.
 //
 // The face's 12 fps timer calls `tick`, which looks at the pointer (NSEvent.mouseLocation) and at the
-// system drag pasteboard. Only while pinned, mouse-button monitors notice clicks outside (mouse
+// system drag pasteboard. As in Cats in Menubar, a tracking area on the face starts a 30 Hz check while
+// the pointer is on the face or a peek is open, so opening and closing respond quickly. Only while pinned, mouse-button monitors notice clicks outside (mouse
 // buttons only, never keys, so no extra permission); they are removed as soon as the panel closes.
 import Cocoa
 import SwiftUI
@@ -115,7 +116,11 @@ final class FacePanel: NSObject {
     private var outsideSince = 0.0
     private var dropUntil = 0.0                 // stay a moment after a drop
     private var face = NSRect.zero
+    private var menuOpen = false
     private var monitors: [Any] = []
+    private var fastTimer: Timer?
+    static let openDelay = 0.15                 // resting this long opens a peek; passing over the face does not
+    static let closeDelay = 0.35                // away from the face and the peek this long closes it
 
     init(store: SettingsStore) {
         self.store = store
@@ -128,7 +133,9 @@ final class FacePanel: NSObject {
     /// Called about 12 times a second with the face's frame on screen.
     func tick(face: NSRect, menuOpen: Bool, now: Double) {
         self.face = face
+        self.menuOpen = menuOpen
         let mouse = NSEvent.mouseLocation
+        if fastTimer == nil && face.insetBy(dx: -2, dy: -2).contains(mouse) { startFast() }   // missed the tracking area
         let down = NSEvent.pressedMouseButtons & 1 != 0
         let drag = NSPasteboard(name: .drag)
         if !down { dragCount = drag.changeCount }
@@ -147,10 +154,10 @@ final class FacePanel: NSObject {
         let onFace = face.insetBy(dx: -2, dy: -2).contains(mouse)
         if !onFace { hoverArmed = true }
         guard let p = panel, visible else {
-            // Resting on the face (not pressing it) for half a second.
+            // Resting on the face (not pressing it) for a moment.
             if FacePanel.showOnHover && hoverArmed && !down && face.contains(mouse) {
                 if hoverSince == 0 { hoverSince = now }
-                if now - hoverSince > 0.5 { show(.peek) }
+                if now - hoverSince >= FacePanel.openDelay { show(.peek) }
             } else {
                 hoverSince = 0
             }
@@ -162,10 +169,39 @@ final class FacePanel: NSObject {
             outsideSince = 0
         } else if outsideSince == 0 {
             outsideSince = now
-        } else if now - outsideSince > (reason == .drag ? 0.3 : 0.5) {
+        } else if now - outsideSince >= (reason == .drag ? 0.3 : FacePanel.closeDelay) {
             hide()
         }
         if reason == .drag && !down && inside { reason = .peek }   // dropped here: stay while pointed at
+    }
+
+    /// A tracking area on the menu bar face: the pointer arriving starts the quick check at once.
+    func watch(_ button: NSView) {
+        button.addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                              owner: self, userInfo: nil))
+    }
+
+    @objc func mouseEntered(with event: NSEvent) { startFast() }
+    @objc func mouseExited(with event: NSEvent) {}
+
+    private func startFast() {
+        guard fastTimer == nil else { return }
+        let timer = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self] _ in self?.fastTick() }
+        timer.tolerance = 0.01
+        RunLoop.main.add(timer, forMode: .common)
+        fastTimer = timer
+    }
+
+    /// 30 times a second, only while it matters: on the face, or a peek that may close.
+    private func fastTick() {
+        let onFace = face.insetBy(dx: -2, dy: -2).contains(NSEvent.mouseLocation)
+        let peeking = visible && reason != .pinned
+        guard onFace || peeking, face != .zero else {
+            fastTimer?.invalidate()
+            fastTimer = nil
+            return
+        }
+        tick(face: face, menuOpen: menuOpen, now: Date.timeIntervalSinceReferenceDate)
     }
 
     static func folders(in pasteboard: NSPasteboard) -> Bool {
@@ -199,7 +235,7 @@ final class FacePanel: NSObject {
         if !p.isVisible || p.alphaValue < 1 {
             if !p.isVisible { p.alphaValue = 0 }
             p.orderFrontRegardless()   // a peek does not take the keyboard
-            NSAnimationContext.runAnimationGroup { $0.duration = 0.15; p.animator().alphaValue = 1 }
+            NSAnimationContext.runAnimationGroup { $0.duration = 0.08; p.animator().alphaValue = 1 }
         }
         if why == .pinned {
             p.makeKey()
@@ -226,7 +262,7 @@ final class FacePanel: NSObject {
         outsideSince = 0
         model.set(\.pinned, false)
         guard let p = panel, p.isVisible else { reset(); return }
-        NSAnimationContext.runAnimationGroup({ $0.duration = 0.12; p.animator().alphaValue = 0 }) {
+        NSAnimationContext.runAnimationGroup({ $0.duration = 0.08; p.animator().alphaValue = 0 }) {
             if self.reason == nil {
                 p.orderOut(nil)
                 self.reset()

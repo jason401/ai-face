@@ -20,7 +20,7 @@ The interface follows the Mac's preferred language: Korean on Korean systems and
 
 Everything is in one panel under the menu bar face.
 
-- **Peek.** Rest the pointer on the face for half a second: the panel appears without taking the keyboard from the app you are typing in, and hides when the pointer leaves. **Quit** and **Update** stay dim until the panel is pinned.
+- **Peek.** Rest the pointer on the face for a moment (0.15 s): the panel appears without taking the keyboard from the app you are typing in, and hides when the pointer leaves. **Quit** and **Update** stay dim until the panel is pinned.
 - **Pinned.** Click the face, or anywhere in a peek, to pin it. It stays until you click the face again, press Esc or click outside. Tab, Esc, ⌘, and ⌘Q work.
 - **Folder drag.** While you drag a folder anywhere, a small panel with only the drop zone and the folder list appears.
 - **Right-click** the face for the classic short menu.

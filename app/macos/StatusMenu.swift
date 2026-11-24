@@ -76,6 +76,7 @@ final class StatusController: NSObject, NSMenuDelegate, FacePanelActions {
         panel.openSettings = { [weak self] in self?.openSettings?() }
         panel.willShow = { [weak self] in self?.syncPanel(Date.timeIntervalSinceReferenceDate) }
         panel.statusWindow = { [weak self] in self?.item.button?.window }
+        if let button = item.button { panel.watch(button) }
         panel.highlight = { [weak self] on in   // after the button's own click tracking
             DispatchQueue.main.async { self?.item.button?.highlight(on) }
         }
