@@ -1,5 +1,6 @@
-// The menu bar face and its menu (like RunCat: click the icon, a short menu with a
-// bigger face on top, quick actions, Settings…, Quit).
+// The menu bar face. Click it (or rest the pointer on it) for the panel with everything
+// (FacePanel.swift); right-click opens the classic short menu: a bigger face on top, quick
+// actions, Settings…, Quit.
 import Cocoa
 
 /// Top of the menu: a bigger animated face (click it to pick a face), the mood name, who
@@ -48,7 +49,7 @@ final class MenuHeader: NSView {
     }
 }
 
-final class StatusController: NSObject, NSMenuDelegate {
+final class StatusController: NSObject, NSMenuDelegate, FacePanelActions {
     let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     let animator = FaceAnimator()
     let fire = Campfire()
@@ -69,14 +70,20 @@ final class StatusController: NSObject, NSMenuDelegate {
     var folders: [SharedFolder] = []        // shared folders, for the menu (refreshed every 15 s)
     private var folderPolls = 0
     private let folderAdder = SettingsStore()
-    private lazy var shelf: FolderShelf = {
-        let shelf = FolderShelf(store: folderAdder)
-        shelf.openSettings = { [weak self] in self?.openSettings?() }
+    private lazy var panel: FacePanel = {
+        let panel = FacePanel(store: folderAdder)
+        panel.actions = self
+        panel.openSettings = { [weak self] in self?.openSettings?() }
+        panel.willShow = { [weak self] in self?.syncPanel(Date.timeIntervalSinceReferenceDate) }
+        panel.statusWindow = { [weak self] in self?.item.button?.window }
+        panel.highlight = { [weak self] on in   // after the button's own click tracking
+            DispatchQueue.main.async { self?.item.button?.highlight(on) }
+        }
         folderAdder.foldersChanged = { [weak self] notice in   // the menu's list, and errors the panel does not show
             self?.loadFolders()
-            if !notice.isEmpty && !shelf.visible { self?.showNotice(notice) }
+            if !notice.isEmpty && !panel.visible { self?.showNotice(notice) }
         }
-        return shelf
+        return panel
     }()
     private var heatSent = false
     private var confirming = false           // a calendar confirmation window is open
@@ -85,7 +92,6 @@ final class StatusController: NSObject, NSMenuDelegate {
     private var icons: [String: NSImage] = [:]
 
     private let menu = NSMenu()
-    private let picker = NSPopover()
     private let header = MenuHeader()
     private let headerItem = NSMenuItem()
     private var menuOpen = false
@@ -109,7 +115,11 @@ final class StatusController: NSObject, NSMenuDelegate {
         item.button?.toolTip = "AI Face"
         menu.delegate = self
         menu.autoenablesItems = false
-        item.menu = menu
+        // No item.menu: a click opens the panel; the menu is lent to the item only for a right-click.
+        item.button?.target = self
+        item.button?.action = #selector(clicked)
+        item.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        item.button?.setAccessibilityLabel("AI Face")
         headerItem.view = header
         header.faceButton.target = self
         header.faceButton.action = #selector(showPicker)
@@ -117,7 +127,6 @@ final class StatusController: NSObject, NSMenuDelegate {
         header.fireButton.action = #selector(campfire)
         header.clockButton.target = self
         header.clockButton.action = #selector(clock)
-        picker.behavior = .transient
         rebuildMenu()
         // .common: keep animating while the menu is open (event tracking run loop mode).
         let draw = Timer(timeInterval: 1.0 / 12, target: self, selector: #selector(tick), userInfo: nil, repeats: true)
@@ -155,7 +164,7 @@ final class StatusController: NSObject, NSMenuDelegate {
                 self.applyEmotion(self.pendingEmotion)
             }
         }
-        if menuOpen {
+        if menuOpen || panel.visible {
             API.shared.getJSON("update") { [weak self] json in
                 guard let self = self, let data = json as? [String: Any] else { return }
                 self.updateProgress = (data["progress"] as? [String: Any]).flatMap(UpdateProgress.init)
@@ -346,8 +355,46 @@ final class StatusController: NSObject, NSMenuDelegate {
             if let progress = updateProgress { updateProgressItem.title = progress.summary(at: Date()) }
         }
         if let face = item.button?.window?.frame, API.shared.ready {
-            shelf.tick(face: face, menuOpen: menuOpen, now: now)
+            panel.tick(face: face, menuOpen: menuOpen, now: now)
         }
+        if panel.visible { syncPanel(now) }
+    }
+
+    /// The panel's model: set only what changed, so SwiftUI redraws little (the face is drawn directly).
+    private func syncPanel(_ now: Double) {
+        let m = panel.model
+        m.face.image = renderFace(side: 56, inset: 1, view: view, pose: animator.pose, fire: fire, now: now,
+                                  offset: bounce(now))
+        m.set(\.title, name.isEmpty ? "AI Face" : name)
+        m.set(\.detail, view.kind == "face" ? ownerName(view.owner) : (board ? L("Showing on the board") : L("Showing in the menu bar")))
+        m.set(\.extra, timerText(now) ?? awakeText(now) ?? (board ? L("● Board connected") : L("○ No board")))
+        m.set(\.kind, view.kind)
+        m.set(\.timerOn, view.timerEnd > 0)
+        m.set(\.awakeSupported, awakeSupported)
+        m.set(\.awakeReady, awakeReady)
+        m.set(\.awakeOn, view.awake)
+        m.set(\.awakeLines, awakeLeases.map { lease in   // who keeps it awake, and for how long
+            let label = (lease["label"] as? String) ?? ""
+            let left = (lease["left"] as? NSNumber)?.intValue ?? 0
+            return (lease["job"] as? Bool) ?? false ? String(format: L("%@ · while it runs"), label)
+                : String(format: L("%@ · %ld min"), label, (left + 59) / 60)
+        })
+        m.set(\.awakePausedMinutes, awakePaused > 0 ? (awakePaused + 59) / 60 : 0)
+        m.set(\.updateAvailable, updateAvailable)
+        m.set(\.updateSummary, updateProgress?.summary(at: Date()) ?? "")
+    }
+
+    /// Left click: the panel. Right-click (or control-click): the classic menu.
+    @objc func clicked() {
+        let event = NSApp.currentEvent
+        if event?.type == .rightMouseUp || event?.modifierFlags.contains(.control) == true {
+            panel.hide()
+            item.menu = menu
+            item.button?.performClick(nil)   // opens the menu and returns when it closes
+            item.menu = nil
+            return
+        }
+        panel.toggle()
     }
 
     func timerText(_ now: Double) -> String? {
@@ -490,23 +537,51 @@ final class StatusController: NSObject, NSMenuDelegate {
         return sections
     }
 
-    /// Clicking the big face: close the menu and open the face picker under the menu bar face.
+    /// Clicking the big face in the menu: close the menu and open the panel at the face picker.
     @objc func showPicker() {
         menu.cancelTracking()
-        guard !moodList.isEmpty else { return }
         DispatchQueue.main.async { [weak self] in
-            guard let self = self, let button = self.item.button else { return }
-            self.picker.contentViewController = FacePicker(
-                sections: self.pickerSections(), current: self.view.kind == "face" ? self.animator.emotion : "",
-                icon: { [weak self] mood in self?.icon(mood) },
-                choose: { [weak self] id in
-                    self?.picker.performClose(nil)
-                    API.shared.call("emotion", ["id": id]) { [weak self] ok, reply in self?.report(ok, reply) }
-                })
-            NSApp.activate(ignoringOtherApps: true)
-            self.picker.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            guard let self = self else { return }
+            self.panel.show(.pinned)
+            self.panel.pickFaces()
         }
     }
+
+    func panelFaces() -> NSViewController? {
+        guard !moodList.isEmpty else { return nil }
+        return FacePicker(
+            sections: pickerSections(), current: view.kind == "face" ? animator.emotion : "",
+            icon: { [weak self] mood in self?.icon(mood) },
+            choose: { [weak self] id in
+                self?.panel.backToMain()
+                API.shared.call("emotion", ["id": id]) { [weak self] ok, reply in self?.report(ok, reply) }
+            },
+            columns: 6, maxHeight: 340)
+    }
+
+    // MARK: - Panel buttons
+
+    func panelMode(_ mode: String) {
+        API.shared.call("mode", ["mode": mode]) { [weak self] ok, reply in self?.report(ok, reply) }
+    }
+
+    func panelTimer(_ seconds: Int) {
+        API.shared.call("timer", ["seconds": seconds]) { [weak self] ok, reply in self?.report(ok, reply) }
+    }
+
+    func panelAwake(_ minutes: Int) {
+        API.shared.call("awake", ["minutes": minutes]) { [weak self] ok, reply in self?.report(ok, reply) }
+    }
+
+    func panelResumeAwake() { resumeAwake() }
+    func panelSetUpAwake() { setUpAwake() }
+
+    func panelInstall() {
+        panel.hide()
+        installUpdate()
+    }
+
+    func panelQuit() { quit() }
 
     private func report(_ ok: Bool, _ reply: [String: Any]) {
         if !ok {
@@ -595,7 +670,7 @@ final class StatusController: NSObject, NSMenuDelegate {
         NSApp.activate(ignoringOtherApps: true)
         guard panel.runModal() == .OK else { return }
         // The same steps as the settings window (it asks before a big folder).
-        shelf.store.addFolders(panel.urls)
+        self.panel.store.addFolders(panel.urls)
     }
 
     private func showNotice(_ text: String) {

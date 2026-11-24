@@ -1,5 +1,5 @@
-// The face picker: a grid of every mood (recent picks first, then the groups), opened by
-// clicking the big face at the top of the menu. The hovered face's name shows at the bottom.
+// The face picker: a grid of every mood (recent picks first, then the groups), shown inside the
+// menu bar panel after clicking its big face. The hovered face's name shows at the bottom.
 import Cocoa
 
 /// A face in the grid; tells the picker when the mouse is over it.
@@ -24,16 +24,21 @@ final class FlippedView: NSView {
 }
 
 final class FacePicker: NSViewController {
-    static let cell: CGFloat = 40, gap: CGFloat = 4, columns = 7, margin: CGFloat = 12
+    static let cell: CGFloat = 40, gap: CGFloat = 4, margin: CGFloat = 12
 
     let sections: [(String, [[String: Any]])]
     let current: String
     let icon: ([String: Any]) -> NSImage?
     let choose: (String) -> Void
+    let columns: Int
+    let maxHeight: CGFloat
     private let hint = NSTextField(labelWithString: "")
 
     init(sections: [(String, [[String: Any]])], current: String,
-         icon: @escaping ([String: Any]) -> NSImage?, choose: @escaping (String) -> Void) {
+         icon: @escaping ([String: Any]) -> NSImage?, choose: @escaping (String) -> Void,
+         columns: Int = 7, maxHeight: CGFloat = 380) {
+        self.columns = columns
+        self.maxHeight = maxHeight
         self.sections = sections
         self.current = current
         self.icon = icon
@@ -46,7 +51,7 @@ final class FacePicker: NSViewController {
     }
 
     override func loadView() {
-        let C = FacePicker.cell, G = FacePicker.gap, M = FacePicker.margin, N = FacePicker.columns
+        let C = FacePicker.cell, G = FacePicker.gap, M = FacePicker.margin, N = columns
         let width = M * 2 + CGFloat(N) * C + CGFloat(N - 1) * G
         let doc = FlippedView()
         var y = M
@@ -89,7 +94,7 @@ final class FacePicker: NSViewController {
         scroll.hasVerticalScroller = true
         scroll.drawsBackground = false
         scroll.autohidesScrollers = true
-        let visible = min(doc.frame.height, 380)
+        let visible = min(doc.frame.height, maxHeight)
         scroll.frame = NSRect(x: 0, y: 28, width: width, height: visible)
         hint.font = NSFont.systemFont(ofSize: 12)
         hint.textColor = .secondaryLabelColor

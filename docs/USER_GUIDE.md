@@ -16,16 +16,24 @@ The installed app is `/Applications/AI Face.app`. Python runtime files and firmw
 
 The interface follows the Mac's preferred language: Korean on Korean systems and English otherwise. Use **System Settings → General → Language & Region → Applications** to override it for AI Face. Tool descriptions use concise English; localized UI messages and mood names remain available in both languages.
 
-## Menu bar menu
+## Menu bar panel
 
-Click the menu bar face to open the menu.
+Everything is in one panel under the menu bar face.
 
-- Click the large face for all 78 expressions. Recent manual picks appear first; a manual selection uses a white ring.
+- **Peek.** Rest the pointer on the face for half a second: the panel appears without taking the keyboard from the app you are typing in, and hides when the pointer leaves. **Quit** and **Install new version** stay dim until the panel is pinned.
+- **Pinned.** Click the face, or anywhere in a peek, to pin it. It stays until you click the face again, press Esc or click outside. Tab, Esc, ⌘, and ⌘Q work.
+- **Folder drag.** While you drag a folder anywhere, a small panel with only the drop zone and the folder list appears.
+- **Right-click** the face for the classic short menu.
+- Turn off **Settings → AI → Shared folders → Show on hover over the face** to open the panel only by clicking (folder drags still show it).
+
+Inside the panel:
+
+- Click the large face for all 78 expressions (the panel switches to a grid; **← Back** returns). Recent manual picks appear first; a manual selection uses a white ring.
 - The **Campfire** and **Clock** buttons stay active until another expression arrives.
-- **Timer** offers 5, 25 or 50 minutes and a custom duration. Cancel an active timer from the same menu.
+- **Timer** offers 5, 25 or 50 minutes; **Custom…** asks for the minutes right in the panel. **Cancel timer** appears while one runs.
 - **Keep awake** offers 1, 2 or 4 hours. Active sessions show remaining time and a small sun above the face.
-- **Shared folders** lists the folders shared with the AIs; click one to pause or resume it, or add a folder.
-- **Settings…** uses ⌘, and **Quit AI Face** uses ⌘Q.
+- **Shared folders**: drop folders on the dashed line, click a folder to open it in Finder, use its switch to pause it, or right-click for more.
+- **Settings…**, **Install new version** (when one is found) and **Quit AI Face**.
 
 Ring colors identify the selecting agent: orange for Claude, green for GPT, gold for AI Illuminati and white for manual selection. A board with firmware older than the gold shows AI Illuminati's faces with a white ring until its firmware is updated. Timers use a progress ring. Expression changes can bounce or shake. Working expressions such as processing and reading return to calm after three minutes without a new expression.
 
@@ -101,9 +109,9 @@ The integration reads inbox messages only. It never sends, moves, deletes or mar
 
 ### Shared folders (read only)
 
-Share folders with the connected AIs in **Settings → AI → Shared folders**: click **Add folders…**, or drop folders from Finder onto the card or the folder list. The menu bar menu's **Shared folders** submenu also adds folders and pauses or resumes each one with a click. Claude may read them by default; turn GPT on separately. Restart the AI app after changing which AIs may read them.
+Share folders with the connected AIs in **Settings → AI → Shared folders**: click **Add folders…**, or drop folders from Finder onto the card or the folder list. The menu bar panel also adds folders and pauses or resumes each one with its switch. Claude may read them by default; turn GPT on separately. Restart the AI app after changing which AIs may read them.
 
-- **Quick panel.** While you drag a folder anywhere, a panel slides in under the menu bar face: drop the folder there to share it. Resting the pointer on the face also shows the panel (turn this off with **Show on hover over the face**). Click a folder to open it in Finder, use its switch to pause it, or right-click for more.
+- **Quick panel.** While you drag a folder anywhere, a small panel slides in under the menu bar face: drop the folder there to share it. The same list is in the full panel (rest the pointer on the face or click it). Click a folder to open it in Finder, use its switch to pause it, or right-click for more.
 - **Read only.** AIs can list, search (names, and the text of plain-text files) and read files: text and code, PDF (10 pages at a time), Word (.docx) and PowerPoint (.pptx). Nothing is changed, moved or deleted.
 - **Pause or stop.** A folder's switch pauses it; **−** stops sharing it. Neither touches the folder itself.
 - **Stays inside.** Paths cannot leave a shared folder, also not through symbolic links. Hidden files and folders (such as `.env`, `.git`, `.ssh`) and key or credential files are never listed or read.

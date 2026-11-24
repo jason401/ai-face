@@ -258,8 +258,8 @@ final class SettingsStore: NSObject, ObservableObject {
     var foldersChanged: ((String) -> Void)?   // the menu refreshes its list (and shows errors)
     var openBoard: (() -> Void)?        // opens the board details window
     var openStream: (() -> Void)?       // opens the streaming test window
-    @Published var folderShelfHover = FolderShelf.showOnHover {
-        didSet { if !API.preview { UserDefaults.standard.set(folderShelfHover, forKey: FolderShelf.hoverKey) } }
+    @Published var folderShelfHover = FacePanel.showOnHover {
+        didSet { if !API.preview { UserDefaults.standard.set(folderShelfHover, forKey: FacePanel.hoverKey) } }
     }
     @Published var hooks = "off"
     @Published var aiNotice = ""
