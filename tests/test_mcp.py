@@ -199,6 +199,16 @@ class ForwardingTests(Base):
             mcp.SETTINGS.write_text(json.dumps({'calendar': {'apps': {'claude': False}, 'write_apps': {'claude': True}}}))
             self.assertNotIn('calendar_add_event', names())          # no writing without reading
 
+    def test_one_switch_hides_calendar_and_mail_tools(self):
+        names = lambda: {t['name'] for t in call('tools/list')['result']['tools']}
+        with patch.object(mcp, 'CLIENT_NAME', 'claude-ai'):
+            mcp.SETTINGS.write_text(json.dumps({'calendar': {'on': False, 'write_apps': {'claude': True}},
+                                                'mail': {'on': False, 'apps': {'claude': True}}}))
+            self.assertFalse({n for n in names() if n.startswith(('calendar_', 'mail_'))})
+            mcp.SETTINGS.write_text(json.dumps({'calendar': {'on': True, 'write_apps': {'claude': True}},
+                                                'mail': {'on': True}}))
+            self.assertTrue({'calendar_events', 'calendar_add_event', 'mail_read'} <= names())
+
     def test_app_error_is_reported(self):
         self.run_app()
         r = tool('update_firmware')

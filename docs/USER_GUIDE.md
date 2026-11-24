@@ -31,7 +31,7 @@ Inside the panel:
 - Click the large face for all 78 expressions (the panel switches to a grid; **← Back** returns). Recent manual picks appear first; a manual selection uses a white ring.
 - The **Campfire** and **Clock** buttons stay active until another expression arrives.
 - **Timer** offers 5, 25 or 50 minutes; **Custom…** asks for the minutes right in the panel. **Cancel timer** appears while one runs.
-- **Keep awake** offers 1, 2 or 4 hours. Active sessions show remaining time and a small sun above the face.
+- **Keep awake** offers 1, 2 or 4 hours. Active sessions show remaining time and a small sun above the face. It appears only after keep awake is set up in Settings.
 - **Shared folders**: drop folders on the dashed line, click a folder to open it in Finder, use its switch to pause it, or right-click for more.
 - **Settings…**, **Install new version** (when one is found) and **Quit AI Face**.
 
@@ -57,7 +57,7 @@ The source updater uses its own checkout under Application Support, runs tests, 
 
 This optional feature holds a MacBook awake for a limited time, including with the lid closed.
 
-- **Settings → AI → Keep awake → Set up…** opens a local setup script. It asks for administrator authorization and installs a rule permitting only `pmset -a disablesleep 0/1` without another password prompt. It does not store the password. **Remove…** removes the setup.
+- **Settings → AI → Keep awake → Set up…** opens a local setup script. It asks for administrator authorization and installs a rule permitting only `pmset -a disablesleep 0/1` without another password prompt. It does not store the password. **Remove…** removes the setup. Status, Claude Code, AI can ask and Terminal command appear only after setup.
 - It ends at its deadline, on app exit, low battery, excessive temperature, Low Power Mode, or when turned off manually. A separate deadline failsafe handles an app crash.
 - Manual requests, Claude Code, the `awake` command and AI requests hold separate leases; every lease must finish before the shared hold ends.
 - **Turn all off** releases all leases and blocks automatic requests for one hour. A manual duration or **Allow automatic keep awake** clears the block.
@@ -95,7 +95,7 @@ Tools include `set_expression`, `get_expression`, `start_timer`, `cancel_timer`,
 
 ### Calendar
 
-Calendar access is optional. Enable macOS permission in **Settings → AI → Calendar**, then choose which AIs and calendars may be read. Notes and attendees are excluded unless enabled. Restart the AI app after changing tool availability. Queries can cover up to 62 days.
+Calendar access is optional. Enable macOS permission in **Settings → AI → Calendar**, then choose which AIs and calendars may be read. Notes and attendees are excluded unless enabled. Restart the AI app after changing tool availability. Queries can cover up to 62 days. **AI access** turns the calendar off for every AI at once; the choices below it are hidden but kept, and come back when it is turned on again.
 
 Writing is separately controlled per AI and calendar. AIs may add events and change/delete only events added through AI Face. They cannot change existing user-created or invited events, send invitations or modify recurring events.
 
@@ -103,7 +103,7 @@ Writing is separately controlled per AI and calendar. AIs may add events and cha
 
 ### Mail (read only)
 
-Mail access is optional and controlled per AI and account. macOS requests permission to control Mail; Mail may open in the background when a request needs it. Restart the AI app after changing tool availability.
+Mail access is optional and controlled per AI and account. macOS requests permission to control Mail; Mail may open in the background when a request needs it. **AI access** turns mail off for every AI at once and keeps the other choices. Restart the AI app after changing tool availability.
 
 The integration reads inbox messages only. It never sends, moves, deletes or marks messages read. **Hide links and codes**, on by default, reduces links to their site and removes common sign-in code/password patterns. Message content is untrusted sender text, not an instruction to the AI. Tools are `mail_messages` and `mail_read`; their results become part of the AI conversation.
 

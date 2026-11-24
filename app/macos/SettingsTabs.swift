@@ -320,11 +320,11 @@ struct AITab: View {
                     }
                     .help(store.awakeReady ? L("Removes the permission and the awake command (in Terminal, with your Mac password).")
                           : L("Asks for your Mac password once, in Terminal, and allows only this one setting."))
-                    Divider()
-                    SettingsRow(title: L("Status")) {
-                        SettingsStatus(text: store.awakeStatus, ok: store.awakeOn)
-                    }
-                    Group {
+                    if store.awakeReady {   // the rest only matters once the permission is set up
+                        Divider()
+                        SettingsRow(title: L("Status")) {
+                            SettingsStatus(text: store.awakeStatus, ok: store.awakeOn)
+                        }
                         Divider()
                         SettingsRow(title: "Claude Code") {
                             Toggle(L("While it works"), isOn: Binding(get: { store.hooks == "on" },
@@ -347,7 +347,6 @@ struct AITab: View {
                         }
                         .help(L("In Terminal, awake COMMAND keeps the Mac awake while COMMAND runs (for example: awake python train.py)."))
                     }
-                    .disabled(!store.awakeReady)
                     SettingsNote(text: store.awakeNotice.isEmpty
                                  ? L("Lid closed, 1–4 hours from the menu. Turns off by itself.") : store.awakeNotice, lines: 3)
                         .help(L("Keeps the MacBook awake even with the lid closed, for 1, 2 or 4 hours (menu → Keep awake). It turns off at the end, at 20% battery, when the Mac gets hot, in Low Power Mode and when AI Face quits. Setting it up asks for your Mac password once, in Terminal, and allows only this one setting."))
@@ -383,31 +382,38 @@ struct AITab: View {
             SettingsCard(title: L("Calendar")) {
                 accessRow(store.calAccessText, ok: store.calAccess == "full", button: calendarButton) { store.requestCalendarAccess() }
                 Divider()
-                SettingsRow(title: L("Can read")) {
-                    perAI(store.calClaude, store.calGPT, store.calIlluminati) { ai, on in store.setCalendar(["apps": [ai: on]]) }
+                SettingsRow(title: L("AI access")) {
+                    SettingsSwitch(title: L("AI access"), isOn: Binding(get: { store.calOn }, set: { store.setCalendar(["on": $0]) }))
+                        .help(L("Off: no AI can read or change the calendar. Your choices below are kept for when you turn it back on."))
                 }
-                Divider()
-                SettingsRow(title: L("Can change")) {
-                    perAI(store.calWriteClaude, store.calWriteGPT, store.calWriteIlluminati) { ai, on in store.setCalendar(["write_apps": [ai: on]]) }
-                }
-                Divider()
-                SettingsRow(title: L("Details")) {
-                    Toggle(L("Notes and attendees"), isOn: Binding(get: { store.calDetails }, set: { store.setCalendar(["details": $0]) }))
-                        .toggleStyle(.checkbox)
-                        .help(L("Include notes and attendees"))
-                }
-                Divider()
-                SettingsRow(title: L("Ask first")) {
-                    SettingsSwitch(title: L("Ask me before every change"), isOn: Binding(get: { store.calConfirm }, set: { store.setCalendar(["confirm": $0]) }))
-                        .help(L("Ask me before every change"))
-                }
-                Divider()
-                SettingsRow(title: L("Calendars")) {
-                    SettingsAction(title: String(format: L("%d of %d on…"), store.calendars.filter { $0.shown }.count, store.calendars.count)) {
-                        store.showCalendars = true
+                if store.calOn {   // the details only matter while AIs may use the calendar
+                    Divider()
+                    SettingsRow(title: L("Can read")) {
+                        perAI(store.calClaude, store.calGPT, store.calIlluminati) { ai, on in store.setCalendar(["apps": [ai: on]]) }
                     }
-                    .disabled(store.calendars.isEmpty)
-                    .popover(isPresented: $store.showCalendars, arrowEdge: .bottom) { CalendarList(store: store) }
+                    Divider()
+                    SettingsRow(title: L("Can change")) {
+                        perAI(store.calWriteClaude, store.calWriteGPT, store.calWriteIlluminati) { ai, on in store.setCalendar(["write_apps": [ai: on]]) }
+                    }
+                    Divider()
+                    SettingsRow(title: L("Details")) {
+                        Toggle(L("Notes and attendees"), isOn: Binding(get: { store.calDetails }, set: { store.setCalendar(["details": $0]) }))
+                            .toggleStyle(.checkbox)
+                            .help(L("Include notes and attendees"))
+                    }
+                    Divider()
+                    SettingsRow(title: L("Ask first")) {
+                        SettingsSwitch(title: L("Ask me before every change"), isOn: Binding(get: { store.calConfirm }, set: { store.setCalendar(["confirm": $0]) }))
+                            .help(L("Ask me before every change"))
+                    }
+                    Divider()
+                    SettingsRow(title: L("Calendars")) {
+                        SettingsAction(title: String(format: L("%d of %d on…"), store.calendars.filter { $0.shown }.count, store.calendars.count)) {
+                            store.showCalendars = true
+                        }
+                        .disabled(store.calendars.isEmpty)
+                        .popover(isPresented: $store.showCalendars, arrowEdge: .bottom) { CalendarList(store: store) }
+                    }
                 }
                 if !store.calChanges.isEmpty {
                     Divider()
@@ -425,21 +431,28 @@ struct AITab: View {
                 accessRow(store.mailAccessText, ok: store.mailAccess == "allowed", busy: store.mailAsking,
                           button: mailButton) { store.requestMailAccess() }
                 Divider()
-                SettingsRow(title: L("Can read")) {
-                    perAI(store.mailClaude, store.mailGPT, store.mailIlluminati) { ai, on in store.setMail(["apps": [ai: on]]) }
+                SettingsRow(title: L("AI access")) {
+                    SettingsSwitch(title: L("AI access"), isOn: Binding(get: { store.mailOn }, set: { store.setMail(["on": $0]) }))
+                        .help(L("Off: no AI can read mail. Your choices below are kept for when you turn it back on."))
                 }
-                Divider()
-                SettingsRow(title: L("Links")) {
-                    Toggle(L("Hide links and codes"), isOn: Binding(get: { store.mailHideLinks }, set: { store.setMail(["hide_links": $0]) }))
-                        .toggleStyle(.checkbox)
-                }
-                Divider()
-                SettingsRow(title: L("Accounts")) {
-                    SettingsAction(title: String(format: L("%d of %d on…"), store.mailAccounts.filter { $0.shown }.count, store.mailAccounts.count)) {
-                        store.showMailAccounts = true
+                if store.mailOn {
+                    Divider()
+                    SettingsRow(title: L("Can read")) {
+                        perAI(store.mailClaude, store.mailGPT, store.mailIlluminati) { ai, on in store.setMail(["apps": [ai: on]]) }
                     }
-                    .disabled(store.mailAccounts.isEmpty)
-                    .popover(isPresented: $store.showMailAccounts, arrowEdge: .bottom) { MailAccountList(store: store) }
+                    Divider()
+                    SettingsRow(title: L("Links")) {
+                        Toggle(L("Hide links and codes"), isOn: Binding(get: { store.mailHideLinks }, set: { store.setMail(["hide_links": $0]) }))
+                            .toggleStyle(.checkbox)
+                    }
+                    Divider()
+                    SettingsRow(title: L("Accounts")) {
+                        SettingsAction(title: String(format: L("%d of %d on…"), store.mailAccounts.filter { $0.shown }.count, store.mailAccounts.count)) {
+                            store.showMailAccounts = true
+                        }
+                        .disabled(store.mailAccounts.isEmpty)
+                        .popover(isPresented: $store.showMailAccounts, arrowEdge: .bottom) { MailAccountList(store: store) }
+                    }
                 }
                 SettingsNote(text: L("Read only: never sends, moves, deletes or marks mail as read."), lines: 2)
                     .help(L("AI Face reads the Mail app's inboxes. It never sends, moves or deletes mail, and does not mark it as read.")

@@ -91,24 +91,27 @@ import SwiftUI
         let waitingStore = SettingsStore()
         waitingStore.updateProgress = progress
         waitingStore.updateText = L("Update prepared · waiting for active work to finish")
-        func panelView(pinned: Bool, compact: Bool = false) -> AnyView {
+        func panelView(pinned: Bool, compact: Bool = false, awake: Bool = true) -> AnyView {
             let panel = FacePanel(store: store)
             let m = panel.model
             m.pinned = pinned; m.compact = compact
             m.title = "Happy"; m.detail = L("Chosen by Claude"); m.extra = String(format: L("⏱ %ld:%02ld left"), 12, 5)
             m.timerOn = true; m.customTimer = pinned
-            m.awakeSupported = true; m.awakeReady = true; m.awakeOn = true
+            m.awakeSupported = true; m.awakeReady = awake; m.awakeOn = awake
             m.awakeLines = [String(format: L("%@ · %ld min"), "Claude Code", 42)]
             m.updateAvailable = true
             m.face.image = NSImage(systemSymbolName: "face.smiling", accessibilityDescription: nil)
             return AnyView(FacePanelView(model: m, store: store, panel: panel).background(Color(nsColor: .windowBackgroundColor)))
         }
+        let noAwakeStore = SettingsStore()
+        noAwakeStore.awakeSupported = true
+        noAwakeStore.calOn = false; noAwakeStore.mailOn = false
         let views: [(String, () -> AnyView)] = [
             ("1general-waiting", { AnyView(GeneralTab(store: waitingStore)) }),
             ("1general", { AnyView(GeneralTab(store: store)) }), ("1appearance", { AnyView(AppearanceTab(store: store)) }), ("1appearance-noboard", { AnyView(SettingsPage { BoardCard(store: SettingsStore()) }) }),
             ("1weather-date", { AnyView(SettingsPage { CampfireWeatherCard(store: weatherStore) }) }), ("2ai", { AnyView(AITab(store: store)) }),
             ("2ai-shelf", { AnyView(FolderShelfView(store: store, panel: FacePanel(store: store)).padding(12).frame(width: FacePanel.width).background(Color(nsColor: .windowBackgroundColor))) }),
-            ("5panel-peek", { panelView(pinned: false) }), ("5panel-pinned", { panelView(pinned: true) }), ("5panel-drag", { panelView(pinned: false, compact: true) }), ("2ai-folders", { AnyView(FolderList(store: store).background(Color(nsColor: .windowBackgroundColor))) }), ("2ai-calendars", { AnyView(CalendarList(store: store).background(Color(nsColor: .windowBackgroundColor))) }), ("2ai-changes", { AnyView(CalendarChanges(store: store).background(Color(nsColor: .windowBackgroundColor))) }),
+            ("5panel-peek", { panelView(pinned: false) }), ("5panel-noawake", { panelView(pinned: false, awake: false) }), ("6ai-off", { AnyView(AITab(store: noAwakeStore)) }), ("5panel-pinned", { panelView(pinned: true) }), ("5panel-drag", { panelView(pinned: false, compact: true) }), ("2ai-folders", { AnyView(FolderList(store: store).background(Color(nsColor: .windowBackgroundColor))) }), ("2ai-calendars", { AnyView(CalendarList(store: store).background(Color(nsColor: .windowBackgroundColor))) }), ("2ai-changes", { AnyView(CalendarChanges(store: store).background(Color(nsColor: .windowBackgroundColor))) }),
             ("2ai-mail", { AnyView(MailAccountList(store: store).background(Color(nsColor: .windowBackgroundColor))) }),
             ("3board", { AnyView(BoardDetails(store: store)) }),
             ("4history-day", { history("day") }), ("4history-week", { history("week") }),

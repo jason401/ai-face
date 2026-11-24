@@ -230,6 +230,7 @@ final class SettingsStore: NSObject, ObservableObject {
     @Published var helperPath = ""
     // Calendar (read only): macOS permission, which AIs may read it, which calendars, details
     @Published var calAccess = ""
+    @Published var calOn = true   // one switch for all AIs; the choices below are kept while off
     @Published var calendars: [CalendarItem] = []
     @Published var calClaude = true
     @Published var calGPT = false
@@ -242,6 +243,7 @@ final class SettingsStore: NSObject, ObservableObject {
     @Published var calChanges: [CalendarChange] = []
     // Mail (read only): macOS permission, which AIs may read it, which accounts, links hidden
     @Published var mailAccess = ""
+    @Published var mailOn = true
     @Published var mailAccounts: [MailAccount] = []
     @Published var mailClaude = true
     @Published var mailGPT = false
@@ -767,6 +769,7 @@ final class SettingsStore: NSObject, ObservableObject {
         API.shared.getJSON("calendar/status") { [weak self] json in
             guard let self = self, let s = json as? [String: Any] else { return }
             self.calAccess = (s["access"] as? String) ?? ""
+            self.calOn = (s["on"] as? Bool) ?? true
             let apps = (s["apps"] as? [String: Any]) ?? [:]
             self.calClaude = (apps["claude"] as? Bool) ?? true
             self.calGPT = (apps["gpt"] as? Bool) ?? false
@@ -843,6 +846,7 @@ final class SettingsStore: NSObject, ObservableObject {
             self.mailClaude = (apps["claude"] as? Bool) ?? true
             self.mailGPT = (apps["gpt"] as? Bool) ?? false
             self.mailIlluminati = (apps["illuminati"] as? Bool) ?? false
+            self.mailOn = (s["on"] as? Bool) ?? true
             self.mailHideLinks = (s["hide_links"] as? Bool) ?? true
             self.mailAccounts = ((s["accounts"] as? [[String: Any]]) ?? []).compactMap { a in
                 guard let name = a["name"] as? String else { return nil }

@@ -68,6 +68,16 @@ class MailTests(unittest.TestCase):
         mail.save({'apps': {'gpt': True}})
         self.assertIn('Lab meeting', mail.messages('gpt'))
 
+    def test_one_switch_turns_off_every_ai_and_keeps_the_choices(self):
+        mail.save({'apps': {'gpt': True}})
+        mail.save({'on': False})
+        for agent in ('claude', 'gpt'):
+            with self.assertRaises(PermissionError):
+                mail.messages(agent)
+        self.assertFalse(mail.status()['on'])
+        mail.save({'on': True})
+        self.assertIn('Lab meeting', mail.messages('gpt'))
+
     def test_filters_and_hidden_accounts(self):
         self.assertIn('1 message(s)', mail.messages('claude', unread=True))
         self.assertIn('No messages.', mail.messages('claude', query='dentist'))

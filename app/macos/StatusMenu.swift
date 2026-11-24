@@ -574,7 +574,6 @@ final class StatusController: NSObject, NSMenuDelegate, FacePanelActions {
     }
 
     func panelResumeAwake() { resumeAwake() }
-    func panelSetUpAwake() { setUpAwake() }
 
     func panelInstall() {
         panel.hide()

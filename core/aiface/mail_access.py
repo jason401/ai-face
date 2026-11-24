@@ -20,7 +20,7 @@ from . import paths
 from .calendar_access import SECRET, URL
 from .i18n import T
 
-DEFAULTS = dict(apps=dict(claude=True, gpt=False, illuminati=False), hidden=[], hide_links=True)
+DEFAULTS = dict(on=True, apps=dict(claude=True, gpt=False, illuminati=False), hidden=[], hide_links=True)
 MAX_DAYS = 60
 MAX_TEXT = 8000
 # Match code labels in English and Korean, followed by a verification code.
@@ -60,6 +60,7 @@ def settings():
     data = settings_store.load_settings().get('mail')
     out = json.loads(json.dumps(DEFAULTS))
     if isinstance(data, dict):
+        out['on'] = data.get('on') is not False   # one switch for all AIs; the choices below are kept
         if isinstance(data.get('apps'), dict):
             out['apps'].update({k: v is True for k, v in data['apps'].items() if k in out['apps']})
         if isinstance(data.get('hidden'), list):
@@ -69,10 +70,12 @@ def settings():
 
 
 def save(changes):
-    """changes: any of apps {claude, gpt: bool}, hidden [account names], hide_links bool."""
+    """changes: any of on bool, apps {claude, gpt: bool}, hidden [account names], hide_links bool."""
     current = settings()
     if not isinstance(changes, dict):
         raise ValueError(T('잘못된 요청입니다.', 'Bad request.'))
+    if 'on' in changes:
+        current['on'] = changes['on'] is not False
     if isinstance(changes.get('apps'), dict):
         current['apps'].update({k: v is True for k, v in changes['apps'].items() if k in current['apps']})
     if isinstance(changes.get('hidden'), list):
@@ -102,7 +105,8 @@ def status():
 
 
 def allowed(agent):
-    return settings()['apps'].get(agent, False) is True
+    conf = settings()
+    return conf['on'] and conf['apps'].get(agent, False) is True
 
 
 def _require(agent):

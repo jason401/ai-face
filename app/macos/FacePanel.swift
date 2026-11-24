@@ -44,7 +44,6 @@ protocol FacePanelActions: AnyObject {
     func panelTimer(_ seconds: Int)
     func panelAwake(_ minutes: Int)
     func panelResumeAwake()
-    func panelSetUpAwake()
     func panelInstall()
     func panelQuit()
     func panelFaces() -> NSViewController?
@@ -400,7 +399,7 @@ struct FacePanelView: View {
             header
             Divider()
             timer
-            if model.awakeSupported {
+            if model.awakeSupported && model.awakeReady {   // not set up: Settings → AI → Keep awake
                 Divider()
                 awake
             }
@@ -486,26 +485,22 @@ struct FacePanelView: View {
             HStack {
                 sectionTitle(L("Keep awake"))
                 Spacer()
-                if model.awakeOn && model.awakeReady {
+                if model.awakeOn {
                     Button(L("Turn off all")) { panel.actions?.panelAwake(0) }.buttonStyle(.link)
                 }
             }
-            if model.awakeReady {
-                HStack(spacing: 6) {
-                    ForEach([60, 120, 240], id: \.self) { minutes in
-                        chip(minutesText(minutes)) { panel.actions?.panelAwake(minutes) }
-                    }
+            HStack(spacing: 6) {
+                ForEach([60, 120, 240], id: \.self) { minutes in
+                    chip(minutesText(minutes)) { panel.actions?.panelAwake(minutes) }
                 }
-                ForEach(model.awakeLines, id: \.self) { line in
-                    Text(line).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
-                }
-                if model.awakePausedMinutes > 0 {
-                    Text(String(format: L("Automatic keep awake paused · %ld min"), model.awakePausedMinutes))
-                        .font(.system(size: 11)).foregroundStyle(.secondary)
-                    Button(L("Resume automatic keep awake")) { panel.actions?.panelResumeAwake() }.buttonStyle(.link)
-                }
-            } else {
-                Button(L("Set up…")) { panel.actions?.panelSetUpAwake() }.buttonStyle(.link)
+            }
+            ForEach(model.awakeLines, id: \.self) { line in
+                Text(line).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+            }
+            if model.awakePausedMinutes > 0 {
+                Text(String(format: L("Automatic keep awake paused · %ld min"), model.awakePausedMinutes))
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                Button(L("Resume automatic keep awake")) { panel.actions?.panelResumeAwake() }.buttonStyle(.link)
             }
         }
     }

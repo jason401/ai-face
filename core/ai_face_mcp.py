@@ -59,6 +59,14 @@ def agent():
     return 'claude' if 'claude' in name else 'gpt'
 
 
+def _section_on(name):
+    """The one switch for all AIs in the app's Calendar / Mail card (default: on)."""
+    try:
+        return json.loads(SETTINGS.read_text()).get(name, {}).get('on') is not False
+    except (OSError, ValueError, AttributeError):
+        return True
+
+
 def _calendar_setting(key, default):
     try:
         apps = json.loads(SETTINGS.read_text()).get('calendar', {}).get(key, {})
@@ -69,7 +77,7 @@ def _calendar_setting(key, default):
 
 def calendar_allowed():
     """The user allows each AI separately in the app (default: Claude yes, GPT and AI Illuminati no)."""
-    return _calendar_setting('apps', agent() == 'claude')
+    return _section_on('calendar') and _calendar_setting('apps', agent() == 'claude')
 
 
 def calendar_writer():
@@ -83,7 +91,7 @@ def mail_allowed():
         apps = json.loads(SETTINGS.read_text()).get('mail', {}).get('apps', {})
     except (OSError, ValueError, AttributeError):
         apps = {}
-    return apps.get(agent(), agent() == 'claude') is True
+    return _section_on('mail') and apps.get(agent(), agent() == 'claude') is True
 
 
 def folders_allowed():

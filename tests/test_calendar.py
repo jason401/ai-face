@@ -123,6 +123,19 @@ class CalendarTests(unittest.TestCase):
         self.assertEqual(cal.place('P083 Lucas Center', False), 'P083 Lucas Center')
         self.assertIn('pwd=abc.1 Password: 42571540', cal.place(loc, True))
 
+    def test_one_switch_turns_off_every_ai_and_keeps_the_choices(self):
+        cal.save({'apps': {'gpt': True}, 'write_apps': {'claude': True}, 'confirm': False})
+        cal.save({'on': False})
+        for agent in ('claude', 'gpt'):
+            with self.assertRaises(PermissionError):
+                cal.events(agent, now=self.now)
+        with self.assertRaises(PermissionError):
+            cal.add('claude', {'title': 'x', 'start': '2026-10-15T15:00'})
+        self.assertFalse(cal.status()['on'])
+        cal.save({'on': True})
+        self.assertTrue(cal.settings()['apps']['gpt'] and cal.can_write('claude'))
+        self.assertIn('Meeting', cal.events('gpt', now=self.now))
+
     def test_writing_is_off_until_allowed(self):
         with self.assertRaises(PermissionError):
             cal.add('claude', {'title': 'x', 'start': '2026-10-15T15:00'})

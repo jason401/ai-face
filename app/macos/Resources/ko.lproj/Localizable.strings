@@ -431,3 +431,6 @@
 "Could not find this screen." = "이 화면을 찾지 못했어요.";
 "Back" = "뒤로";
 "Click the panel once to pin it, then press this." = "패널을 한 번 클릭해 고정한 뒤 눌러 주세요.";
+"AI access" = "AI 사용";
+"Off: no AI can read or change the calendar. Your choices below are kept for when you turn it back on." = "끄면 어떤 AI도 캘린더를 읽거나 바꿀 수 없어요. 아래 선택은 그대로 두었다가 다시 켜면 돌아와요.";
+"Off: no AI can read mail. Your choices below are kept for when you turn it back on." = "끄면 어떤 AI도 메일을 읽을 수 없어요. 아래 선택은 그대로 두었다가 다시 켜면 돌아와요.";
