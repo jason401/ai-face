@@ -437,3 +437,24 @@
 "Off: no AI can read shared folders. Your choices below are kept for when you turn it back on." = "끄면 어떤 AI도 공유 폴더를 읽을 수 없어요. 아래 선택은 그대로 두었다가 다시 켜면 돌아와요.";
 "Settings" = "설정";
 "Quit" = "종료";
+
+/* Transcribe (AI Face Listener) */
+"Transcribe" = "받아쓰기";
+"Start transcribing…" = "받아쓰기 시작…";
+"Stop transcribing" = "받아쓰기 멈추기";
+"Open transcript" = "기록 열기";
+"Starting Whisper…" = "Whisper 준비 중…";
+"Finishing the last lines…" = "마지막 줄 정리 중…";
+"Transcription stopped: %@" = "받아쓰기가 멈췄어요: %@";
+"● Transcribing · %ld min · %ld lines" = "● 받아쓰는 중 · %ld분 · %ld줄";
+"Transcription needs whisper.cpp and a Whisper model" = "받아쓰기에는 whisper.cpp와 Whisper 모델이 필요해요";
+"Set Up opens a Terminal window that installs whisper.cpp with Homebrew and downloads the Whisper model (about 600 MB) to this Mac. Transcribing then runs only on this Mac." = "설정을 누르면 터미널 창이 열려 Homebrew로 whisper.cpp를 설치하고 Whisper 모델(약 600 MB)을 이 Mac에 받아요. 받아쓰기는 그 뒤로 이 Mac 안에서만 돌아가요.";
+"Set Up…" = "설정…";
+"Start transcribing?" = "받아쓰기를 시작할까요?";
+"AI Face Listener writes down what this Mac plays (every app) and what your microphone hears, as text only: no audio is kept. Transcripts go to Documents/Meetings; share that folder with the AIs to let them read them.\n\nIn California everyone in a conversation must agree before it is recorded or listened to. Ask first." = "AI Face Listener가 이 Mac에서 나오는 소리(모든 앱)와 마이크로 들어오는 소리를 글로만 받아 적어요. 소리는 남기지 않아요. 기록은 문서/Meetings에 저장돼요. 그 폴더를 AI와 공유하면 AI가 읽을 수 있어요.\n\n캘리포니아에서는 대화하는 모든 사람이 동의해야 녹음하거나 들을 수 있어요. 먼저 물어보세요.";
+"Everyone in the conversation agreed" = "대화하는 모든 사람이 동의했어요";
+"Title (optional)" = "제목 (선택)";
+"Automatic (each line)" = "자동 (줄마다)";
+"Korean" = "한국어";
+"English" = "영어";
+"Language" = "언어";

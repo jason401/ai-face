@@ -32,6 +32,7 @@ Inside the panel:
 - The **Campfire** and **Clock** buttons stay active until another expression arrives.
 - **Timer** offers 5, 25 or 50 minutes; **Custom…** asks for the minutes right in the panel. **Cancel timer** appears while one runs.
 - **Keep awake** offers 1, 2 or 4 hours. Active sessions show remaining time and a small sun above the face. It appears only after keep awake is set up in Settings.
+- **Transcribe** (macOS 14.2+) writes down what this Mac plays and what the microphone hears, as text only. See [Transcribe](#transcribe-text-only).
 - **Shared folders**: drop folders on the dashed line, click a folder to open it in Finder, use its switch to pause it, or right-click for more.
 - A row of buttons at the bottom: **Settings**, **Update** (when a new version is found) and **Quit**.
 
@@ -120,6 +121,19 @@ Share folders with the connected AIs in **Settings → AI → Shared folders**: 
 - Each list shows who read it last. AI Face logs which AI read which file and when (never the content) in `folder-access.jsonl` in its data folder.
 
 Tools are `folders_list`, `folder_files`, `folder_search` and `folder_read`. File text sent to an AI becomes part of that conversation and is treated as data, not instructions.
+
+### Transcribe (text only)
+
+**Transcribe** in the menu bar panel writes down a meeting, a call or a talk: what this Mac plays (every app: Zoom, Meet in a browser, FaceTime, a video) and what your microphone hears. It keeps text only. The sound lives in memory until its line is written and is then dropped; no audio file is made.
+
+- **Set up once.** The first **Start transcribing…** offers **Set Up…**, which opens Terminal: it installs whisper.cpp with Homebrew and downloads the Whisper large-v3-turbo model (about 550 MB) and a small voice detector into `~/Library/Application Support/AI Face/Listener/models`. Speech is turned into text on this Mac only.
+- **Start.** Give an optional title and the language (**Automatic** decides per line; pick **Korean** or **English** when you know it), and tick **Everyone in the conversation agreed**: Start stays off until then. In California every person in a conversation must agree before it is recorded or listened to, also when only text is kept.
+- **While it runs** the menu bar face has a red dot, macOS shows its orange microphone dot, and the panel shows minutes and lines. **Stop transcribing** writes the last lines and ends.
+- **Where.** `Documents/Meetings/<date>_<time>_<title>/transcript.md`. Share `Documents/Meetings` as a folder to let the AIs read transcripts.
+- **What a line looks like.** `[00:12:05] **Them:** …` for what the Mac played, `**Me:**` for the microphone. **⚑** marks a line with a number (check it: a misheard number reads as well as a right one); **(?)** follows a word Whisper was unsure of. With speakers instead of headphones the microphone hears the other side too; such repeated lines are left out.
+- **Names and terms.** Put names and terms Whisper should spell right, one per line, in `~/Library/Application Support/AI Face/Listener/glossary.txt`. It helps but does not force a spelling.
+- **Permissions.** Only the helper **AI Face Listener** asks for the microphone and for system audio (**Privacy & Security → Microphone** and **Screen & System Audio Recording**); AI Face itself never gets them. Without the system audio permission the Mac's sound is silence: the panel then says nothing was heard.
+- If AI Face quits, transcribing stops a minute later.
 
 ### Optional board and firmware
 

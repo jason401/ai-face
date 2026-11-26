@@ -350,8 +350,9 @@ final class StatusController: NSObject, NSMenuDelegate, FacePanelActions {
         animator.step(now)
         if view.kind == "fire" { fire.step() }
         let side = NSStatusBar.system.thickness
-        item.button?.image = renderFace(side: side, inset: 2, view: view, pose: animator.pose, fire: fire, now: now,
-                                        offset: bounce(now))
+        let face = renderFace(side: side, inset: 2, view: view, pose: animator.pose, fire: fire, now: now,
+                              offset: bounce(now))
+        item.button?.image = Transcriber.shared.on ? Self.recDot(face) : face
         if menuOpen {
             updateHeader(now)
             if let progress = updateProgress { updateProgressItem.title = progress.summary(at: Date()) }
@@ -382,8 +383,30 @@ final class StatusController: NSObject, NSMenuDelegate, FacePanelActions {
                 : String(format: L("%@ · %ld min"), label, (left + 59) / 60)
         })
         m.set(\.awakePausedMinutes, awakePaused > 0 ? (awakePaused + 59) / 60 : 0)
+        let transcriber = Transcriber.shared
+        m.set(\.transcribeSupported, transcriber.supported)
+        m.set(\.transcribeOn, transcriber.on)
+        m.set(\.transcribeLine, transcriber.statusLine())
+        m.set(\.transcribeWarning, transcriber.on ? transcriber.warning : "")
         m.set(\.updateAvailable, updateAvailable)
         m.set(\.updateSummary, updateProgress?.summary(at: Date()) ?? "")
+    }
+
+    /// The face with a small red dot while AI Face Listener transcribes (macOS's orange microphone dot
+    /// shows too; this one says it is ours).
+    static func recDot(_ face: NSImage?) -> NSImage? {
+        guard let face = face else { return nil }
+        let size = face.size
+        return NSImage(size: size, flipped: false) { rect in
+            face.draw(in: rect)
+            let d = max(5, size.width * 0.28)
+            let dot = NSRect(x: size.width - d, y: size.height - d, width: d, height: d)
+            NSColor.white.setFill()
+            NSBezierPath(ovalIn: dot.insetBy(dx: -1, dy: -1)).fill()
+            NSColor.systemRed.setFill()
+            NSBezierPath(ovalIn: dot).fill()
+            return true
+        }
     }
 
     /// Left click: the panel. Right-click (or control-click): the classic menu.
@@ -576,6 +599,16 @@ final class StatusController: NSObject, NSMenuDelegate, FacePanelActions {
     }
 
     func panelResumeAwake() { resumeAwake() }
+
+    func panelTranscribe() {
+        if !Transcriber.shared.on { panel.hide() }   // starting asks first, in a window of its own
+        Transcriber.shared.toggle()
+    }
+
+    func panelOpenTranscript() {
+        panel.hide()
+        Transcriber.shared.openTranscript()
+    }
 
     func panelInstall() {
         panel.hide()

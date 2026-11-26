@@ -45,6 +45,8 @@ protocol FacePanelActions: AnyObject {
     func panelTimer(_ seconds: Int)
     func panelAwake(_ minutes: Int)
     func panelResumeAwake()
+    func panelTranscribe()
+    func panelOpenTranscript()
     func panelInstall()
     func panelQuit()
     func panelFaces() -> NSViewController?
@@ -69,6 +71,10 @@ final class PanelModel: ObservableObject {
     @Published var awakeOn = false
     @Published var awakeLines: [String] = []
     @Published var awakePausedMinutes = 0
+    @Published var transcribeSupported = false
+    @Published var transcribeOn = false
+    @Published var transcribeLine = ""
+    @Published var transcribeWarning = ""
     @Published var updateAvailable = false
     @Published var updateSummary = ""
     /// Drawn by the 12 fps timer directly, so the face moving does not redraw the whole panel.
@@ -439,6 +445,10 @@ struct FacePanelView: View {
                 Divider()
                 awake
             }
+            if model.transcribeSupported {   // macOS 14.2+ (the system audio tap)
+                Divider()
+                transcribe
+            }
             if store.folderOn {   // AI access to shared folders turned off in Settings: nothing to drop here
                 Divider()
                 FolderShelfView(store: store, panel: panel, compact: false)
@@ -539,6 +549,30 @@ struct FacePanelView: View {
                 Text(String(format: L("Automatic keep awake paused · %ld min"), model.awakePausedMinutes))
                     .font(.system(size: 11)).foregroundStyle(.secondary)
                 Button(L("Resume automatic keep awake")) { panel.actions?.panelResumeAwake() }.buttonStyle(.link)
+            }
+        }
+    }
+
+    private var transcribe: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                sectionTitle(L("Transcribe"))
+                Spacer()
+                if model.transcribeOn {
+                    Button(L("Open transcript")) { panel.actions?.panelOpenTranscript() }.buttonStyle(.link)
+                }
+            }
+            chip(model.transcribeOn ? L("Stop transcribing") : L("Start transcribing…"), on: model.transcribeOn) {
+                panel.actions?.panelTranscribe()
+            }
+            if !model.transcribeLine.isEmpty {
+                Text(model.transcribeLine).font(.system(size: 11).monospacedDigit())
+                    .foregroundStyle(model.transcribeOn ? Color.red : Color.secondary).lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if !model.transcribeWarning.isEmpty {
+                Text(model.transcribeWarning).font(.system(size: 11)).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }

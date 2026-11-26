@@ -27,6 +27,12 @@ xcrun swiftc -swift-version 5 -O -target "$ARCH-apple-macos13.0" \
   -o "$CANDIDATE/Contents/MacOS/AIFace" app/macos/*.swift >"$LOG" 2>&1
 xcrun swiftc -swift-version 5 -O -target "$ARCH-apple-macos13.0" -framework Cocoa tools/install_bridge.swift \
   -o "$CANDIDATE/Contents/Helpers/InstallBridge" >>"$LOG" 2>&1
+# AI Face Listener (Transcribe): an app of its own so that only it holds the microphone and system
+# audio permissions. The process tap needs macOS 14.2.
+LISTENER="$CANDIDATE/Contents/Helpers/AI Face Listener.app"
+mkdir -p "$LISTENER/Contents/MacOS"
+xcrun swiftc -swift-version 5 -O -target "$ARCH-apple-macos14.2" -framework Cocoa -framework AVFoundation -framework CoreAudio \
+  -o "$LISTENER/Contents/MacOS/AIFaceListener" app/listener/*.swift >>"$LOG" 2>&1
 cp -R app/macos/Resources/*.lproj "$CANDIDATE/Contents/Resources/"
 # Copy only runtime resources, never the developer git checkout or tests.
 mkdir -p "$CANDIDATE/Contents/Resources/core" "$CANDIDATE/Contents/Resources/tools"
@@ -36,7 +42,7 @@ find "$CANDIDATE" -name __pycache__ -type d -prune -exec rm -rf {} +
 cp LICENSE THIRD_PARTY_NOTICES.md "$CANDIDATE/Contents/Resources/"
 mkdir -p "$CANDIDATE/Contents/Resources/firmware"
 cp -R firmware/ESP32_Display "$CANDIDATE/Contents/Resources/firmware/"
-cp 'tools/Set up Keep Awake.command' 'tools/Remove Keep Awake.command' "$CANDIDATE/Contents/Resources/tools/"
+cp 'tools/Set up Keep Awake.command' 'tools/Remove Keep Awake.command' 'tools/Set up Transcription.command' "$CANDIDATE/Contents/Resources/tools/"
 cp tools/install_app.py tools/deploy_app.py "$CANDIDATE/Contents/Resources/"
 ICONSET="$STAGING/AppIcon.iconset"
 mkdir -p "$ICONSET"
@@ -67,12 +73,31 @@ cat > "$CANDIDATE/Contents/Info.plist" <<'PLIST'
 <key>NSCalendarsUsageDescription</key><string>AI Face reads your calendar so the AI apps you allow (Settings → AI) can answer questions about your schedule. It never changes events.</string>
 </dict></plist>
 PLIST
+cat > "$LISTENER/Contents/Info.plist" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleExecutable</key><string>AIFaceListener</string>
+<key>CFBundleIdentifier</key><string>local.aiface.listener</string>
+<key>CFBundleName</key><string>AI Face Listener</string>
+<key>CFBundleDisplayName</key><string>AI Face Listener</string>
+<key>CFBundlePackageType</key><string>APPL</string>
+<key>LSMinimumSystemVersion</key><string>14.2</string>
+<key>LSUIElement</key><true/>
+<key>NSMicrophoneUsageDescription</key><string>AI Face Listener writes down what you say, as text only, while you have Transcribe on in AI Face. No audio is kept.</string>
+<key>NSAudioCaptureUsageDescription</key><string>AI Face Listener writes down what this Mac plays, as text only, while you have Transcribe on in AI Face. No audio is kept.</string>
+</dict></plist>
+PLIST
 REVISION="$(git rev-parse HEAD)"
 BUILD="$(git rev-list --count HEAD)"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD" "$CANDIDATE/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Add :AISourceRevision string $REVISION" "$CANDIDATE/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Add :AISourceChannel string $(git rev-parse --abbrev-ref HEAD)" "$CANDIDATE/Contents/Info.plist"
+# The Listener carries AI Face's version.
+/usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $BUILD" "$LISTENER/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string $(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$CANDIDATE/Contents/Info.plist")" "$LISTENER/Contents/Info.plist"
 codesign --force --sign "$IDENTITY" "$CANDIDATE/Contents/Helpers/InstallBridge" >>"$LOG" 2>&1
+codesign --force --sign "$IDENTITY" "$LISTENER" >>"$LOG" 2>&1
 codesign --force --sign "$IDENTITY" "$CANDIDATE" >>"$LOG" 2>&1
 codesign --verify --deep --strict "$CANDIDATE" >>"$LOG" 2>&1
 # Only the inactive candidate is replaced.
