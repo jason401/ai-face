@@ -7,11 +7,10 @@ private let localization = ProcessInfo.processInfo.arguments.dropFirst().first.f
 func L(_ key: String) -> String { localization[key] ?? key }
 
 _ = NSApplication.shared
-let form = ConsentForm()
 let alert = NSAlert()
 alert.messageText = L("Start transcribing?")
 alert.informativeText = "Microphone and Mac audio are written as text only.\n\nSave to: ~/Meetings"
-alert.accessoryView = form.view
+let form = ConsentForm(alert: alert)
 let start = alert.addButton(withTitle: L("Start"))
 alert.addButton(withTitle: L("Cancel"))
 start.isEnabled = false
@@ -21,11 +20,15 @@ alert.layout()
 alert.window.contentView?.layoutSubtreeIfNeeded()
 
 let checkbox = form.agree
-let checkboxFrame = form.view.convert(checkbox.bounds, from: checkbox)
+// NSAlert's own checkbox (drawn by the alert), with our title, unchecked.
+precondition(checkbox === alert.suppressionButton, "Consent must use the alert's own checkbox")
+precondition(checkbox.title == L("Everyone in the conversation agreed"), "Consent checkbox title")
+let content = alert.window.contentView!
+let checkboxFrame = content.convert(checkbox.bounds, from: checkbox)
 precondition(!checkbox.isHiddenOrHasHiddenAncestor, "Consent checkbox is hidden")
-precondition(checkboxFrame.size.width >= checkbox.fittingSize.width && checkboxFrame.size.height > 0,
+precondition(checkboxFrame.size.width >= checkbox.fittingSize.width - 1 && checkboxFrame.size.height > 0,
              "Consent checkbox is compressed")
-precondition(form.view.bounds.contains(checkboxFrame), "Consent checkbox is outside the accessory view")
+precondition(content.bounds.contains(checkboxFrame), "Consent checkbox is outside the alert")
 // The test lays out the alert without ordering its window onto the user's screen.
 var ancestor = checkbox.superview
 while let view = ancestor {

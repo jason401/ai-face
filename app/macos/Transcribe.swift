@@ -201,11 +201,10 @@ final class Transcriber {
             showFolderError(outputFolder)
             return
         }
-        let form = ConsentForm()
         let alert = NSAlert()
         alert.messageText = L("Start transcribing?")
         alert.informativeText = String(format: L("AI Face Listener writes down what this Mac plays (every app, also videos and notifications) and what your microphone hears (also people near you), as text only: no audio is kept.\n\nSave to: %@\n\nIn California everyone in a conversation must agree before it is recorded or listened to. Ask first, and if someone joins later, stop until they agree too."), outputFolder.path)
-        alert.accessoryView = form.view
+        let form = ConsentForm(alert: alert)
         let start = alert.addButton(withTitle: L("Start"))
         alert.addButton(withTitle: L("Cancel"))
         start.isEnabled = false
@@ -253,23 +252,24 @@ final class ConsentForm: NSObject {
     let view = NSView()
     let title = NSTextField()
     let language = NSPopUpButton()
-    let agree = NSButton(checkboxWithTitle: L("Everyone in the conversation agreed"), target: nil, action: nil)
+    /// The "everyone agreed" box is NSAlert's own checkbox (its suppression button), which the alert
+    /// lays out and draws itself. A checkbox of ours in the accessory view had the right frame but
+    /// was not drawn on macOS 27, so Start could not be enabled.
+    private(set) var agree = NSButton()
     var agreed: ((Bool) -> Void)?
 
-    override init() {
+    /// Title and language go in the alert's accessory view; the agreement box is the alert's.
+    init(alert: NSAlert) {
         super.init()
         title.placeholderString = L("Title (optional)")
         title.translatesAutoresizingMaskIntoConstraints = false
         title.widthAnchor.constraint(equalToConstant: 260).isActive = true
         language.addItems(withTitles: [L("Automatic (each line)"), L("Korean"), L("English")])
         let languageRow = NSStackView(views: [NSTextField(labelWithString: L("Language")), language])
-        agree.target = self
-        agree.action = #selector(toggled)
-        let controls = NSStackView(views: [title, languageRow, agree])
+        let controls = NSStackView(views: [title, languageRow])
         controls.orientation = .vertical
         controls.alignment = .leading
         controls.spacing = 8
-        controls.setVisibilityPriority(.mustHold, for: agree)
         controls.translatesAutoresizingMaskIntoConstraints = false
         view.setFrameSize(controls.fittingSize)
         view.addSubview(controls)
@@ -279,6 +279,15 @@ final class ConsentForm: NSObject {
             controls.topAnchor.constraint(equalTo: view.topAnchor),
             controls.bottomAnchor.constraint(equalTo: view.bottomAnchor),
         ])
+        alert.accessoryView = view
+        alert.showsSuppressionButton = true
+        if let box = alert.suppressionButton {
+            box.title = L("Everyone in the conversation agreed")
+            box.state = .off
+            box.target = self
+            box.action = #selector(toggled)
+            agree = box
+        }
     }
 
     @objc private func toggled() {
