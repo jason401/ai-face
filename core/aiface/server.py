@@ -23,6 +23,7 @@ from . import i18n
 from .i18n import T
 from . import integrations
 from . import mail_access
+from . import transcript_access
 from . import updater
 from . import weather
 from . import library as photo_library
@@ -349,6 +350,29 @@ def main():
                 except (ValueError, OSError) as exc:
                     return self.reply(400, {'message': str(exc)})
                 return self.reply(404, {})
+            if self.path.startswith('/transcripts/'):   # meeting transcripts: token needed (personal data)
+                if self.headers.get('X-ESP-Token') != token:
+                    return self.reply(403, {'message': 'Invalid token'})
+                query = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                arg = lambda k: (query.get(k) or [None])[0]
+                route = urllib.parse.urlparse(self.path).path
+                try:
+                    if route == '/transcripts/status':
+                        return self.reply(200, transcript_access.status())
+                    if route == '/transcripts/list':
+                        return self.reply(200, {'text': transcript_access.listing(
+                            arg('agent'), arg('days'), arg('q'), arg('limit'))})
+                    if route == '/transcripts/search':
+                        return self.reply(200, {'text': transcript_access.search(
+                            arg('agent'), arg('q'), arg('limit'))})
+                    if route == '/transcripts/read':
+                        return self.reply(200, {'text': transcript_access.read(
+                            arg('agent'), arg('id'), arg('offset'))})
+                except PermissionError as exc:
+                    return self.reply(403, {'message': str(exc)})
+                except (ValueError, OSError) as exc:
+                    return self.reply(400, {'message': str(exc)})
+                return self.reply(404, {})
             if self.path == '/awake':   # keep awake, for the helper and the MCP server
                 return self.reply(200, {'text': awake.describe(), 'status': awake.status()})
             if self.path == '/mcp':
@@ -488,7 +512,7 @@ def main():
                     # A board that was plugged in after the app started is picked up here.
                     if action not in ('connect', 'disconnect', 'quit', 'firmware', 'mcp_install', 'mcp_remove',
                                       'awake_acquire', 'awake_release', 'awake_resume', 'awake_settings', 'calendar_settings',
-                                      'calendar_decide', 'calendar_undo', 'mail_settings', 'update_settings',
+                                      'calendar_decide', 'calendar_undo', 'mail_settings', 'transcript_settings', 'update_settings',
                                       'update_channel', 'update_check', 'update_install') \
                             and device.fd is None and not device.paused and ports():
                         try:
@@ -562,6 +586,8 @@ def main():
                         calendar_access.save(data.get('changes'))
                     elif action == 'mail_settings':
                         mail_access.save(data.get('changes'))
+                    elif action == 'transcript_settings':
+                        transcript_access.save(data.get('changes'))
                     elif action == 'update_settings':
                         updater.set_enabled(data.get('enabled'))
                     elif action == 'update_channel':   # Stable / Beta (main), then look right away

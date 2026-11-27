@@ -85,10 +85,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         API.shared.base = url
         API.shared.token = lines[1].trimmingCharacters(in: .whitespaces)
         handle.readabilityHandler = nil
+        syncTranscriptFolder()
         status?.start()
         Deployment.acknowledge { [weak self] in
             guard let self else { return }
             if !self.background { self.settings.show() }
+        }
+    }
+
+    /// Keeps a previously chosen transcript folder synced with the Python server for MCP reads.
+    private func syncTranscriptFolder() {
+        let localFolder = UserDefaults.standard.string(forKey: Transcriber.outputFolderKey) ?? ""
+        guard !localFolder.isEmpty else { return }
+        API.shared.getJSON("transcripts/status") { json in
+            guard let s = json as? [String: Any], (s["custom"] as? Bool) != true else { return }
+            API.shared.call("transcript_settings", ["changes": ["folder": localFolder]])
         }
     }
 

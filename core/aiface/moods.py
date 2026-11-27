@@ -601,6 +601,8 @@ def load_settings():
         out['mail']=data['mail']   # which AIs may read mail (mail_access.py)
     if isinstance(data.get('folders'),dict):
         out['folders']=data['folders']   # shared folders and which AIs may read them (folder_access.py)
+    if isinstance(data.get('transcripts'),dict):
+        out['transcripts']=data['transcripts']   # meeting transcripts AI access (transcript_access.py)
     if isinstance(data.get('awake'),dict):
         out['awake']=data['awake']   # which AIs may keep the Mac awake through MCP (awake.py)
     if isinstance(data.get('weather'),dict):

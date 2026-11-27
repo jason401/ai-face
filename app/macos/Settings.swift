@@ -276,6 +276,15 @@ final class SettingsStore: NSObject, ObservableObject {
     @Published var folderIlluminati = false
     @Published var folderDropping = false
     @Published var folderNotice = ""
+    // Transcribe (read only for AIs): which AIs may read saved transcripts
+    @Published var transcriptOn = true
+    @Published var transcriptClaude = true
+    @Published var transcriptGPT = false
+    @Published var transcriptIlluminati = false
+    @Published var transcriptCount = 0
+    @Published var transcriptLast = ""
+    @Published var transcriptBlocked = ""
+    @Published var transcriptMissing = false
     var foldersChanged: ((String) -> Void)?   // the menu refreshes its list (and shows errors)
     var openBoard: (() -> Void)?        // opens the board details window
     var openStream: (() -> Void)?       // opens the streaming test window
@@ -1010,8 +1019,52 @@ final class SettingsStore: NSObject, ObservableObject {
         postFolders(body)
     }
 
+    // MARK: Transcripts (read only for AIs)
+
+    func loadTranscripts() {
+        API.shared.getJSON("transcripts/status") { [weak self] json in
+            guard let self = self, let s = json as? [String: Any] else { return }
+            self.transcriptOn = (s["on"] as? Bool) ?? true
+            let apps = (s["apps"] as? [String: Any]) ?? [:]
+            self.transcriptClaude = (apps["claude"] as? Bool) ?? true
+            self.transcriptGPT = (apps["gpt"] as? Bool) ?? false
+            self.transcriptIlluminati = (apps["illuminati"] as? Bool) ?? false
+            self.transcriptCount = (s["count"] as? NSNumber)?.intValue ?? 0
+            self.transcriptLast = (s["last"] as? String) ?? ""
+            self.transcriptBlocked = (s["blocked"] as? String) ?? ""
+            self.transcriptMissing = (s["missing"] as? Bool) ?? false
+            let serverCustom = (s["custom"] as? Bool) ?? false
+            let localFolder = UserDefaults.standard.string(forKey: Transcriber.outputFolderKey) ?? ""
+            if !serverCustom && !localFolder.isEmpty {
+                self.setTranscripts(["folder": localFolder], notifyRestart: false)
+            }
+        }
+    }
+
+    func setTranscripts(_ changes: [String: Any], notifyRestart: Bool = true) {
+        if let on = changes["on"] as? Bool { transcriptOn = on }
+        if let apps = changes["apps"] as? [String: Bool] {
+            if let v = apps["claude"] { transcriptClaude = v }
+            if let v = apps["gpt"] { transcriptGPT = v }
+            if let v = apps["illuminati"] { transcriptIlluminati = v }
+        }
+        API.shared.call("transcript_settings", ["changes": changes]) { [weak self] ok, reply in
+            if !ok {
+                self?.aiNotice = (reply["message"] as? String) ?? ""
+            } else if notifyRestart {
+                self?.aiNotice = L("Saved. Quit that AI app (⌘Q) and open it again for the change to apply.")
+            }
+            self?.loadTranscripts()
+        }
+    }
+
+    func setTranscriptFolder(_ path: String) {
+        setTranscripts(["folder": path], notifyRestart: false)
+    }
+
     func refreshAI() {
         loadCalendar()
+        loadTranscripts()
         API.shared.getJSON("mcp") { [weak self] json in
             guard let self = self, let s = json as? [String: Any] else { return }
             self.claude = (s["claude"] as? String) ?? "off"
@@ -1363,7 +1416,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         case .calendar: store.loadCalendar()
         case .mail: store.loadMail()
         case .keepAwake: store.refresh(); store.refreshAI()
-        case .transcribe: break
+        case .transcribe: store.loadTranscripts()
         }
         if aiDetailWindow == nil {
             let size = SettingsWindowController.aiDetailSize

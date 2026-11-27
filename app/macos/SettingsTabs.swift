@@ -285,7 +285,6 @@ private struct AIFeatureRow: View {
 
 struct AITab: View {
     @ObservedObject var store: SettingsStore
-    @AppStorage(Transcriber.outputFolderKey) private var transcriptFolderPath = ""
 
     func statusText(_ s: String) -> String {
         switch s {
@@ -339,10 +338,17 @@ struct AITab: View {
     }
 
     private var transcribeSummary: (String, Bool) {
-        let folder = Transcriber.outputFolder(for: transcriptFolderPath)
-        let short = (folder.path as NSString).abbreviatingWithTildeInPath
+        if !store.transcriptBlocked.isEmpty { return (L("Folder blocked"), false) }
+        if !store.transcriptOn { return (L("Off"), false) }
+        if store.transcriptMissing { return (L("Folder not found"), false) }
+        if store.transcriptCount > 0 {
+            let text = store.transcriptCount == 1
+                ? L("1 transcript")
+                : String(format: L("%ld transcripts"), store.transcriptCount)
+            return (text, true)
+        }
         let ready = Transcriber.shared.setUp || API.preview
-        return (ready ? short : short + " · " + L("Not set up"), ready)
+        return ready ? (L("Allowed"), true) : (L("Not set up"), false)
     }
 
     var body: some View {
@@ -421,19 +427,19 @@ struct AITab: View {
                         active: store.activeAIDetail == .keepAwake
                     ) { store.openAIDetail?(.keepAwake) }
                 }
-                SettingsNote(text: L("Turn AI access on or off here, or click ⋯ for per-AI and item settings."), lines: 2)
-            }
-
-            if Transcriber.shared.supported || API.preview {
-                SettingsCard(title: L("Local tools")) {
+                if Transcriber.shared.supported || API.preview {
+                    Divider()
                     AIFeatureRow(
                         title: L("Transcribe"),
                         subtitle: transcribeInfo.0,
                         ok: transcribeInfo.1,
+                        switchTitle: L("Transcribe") + " · " + L("AI access"),
+                        isOn: Binding(get: { store.transcriptOn }, set: { store.setTranscripts(["on": $0]) }),
+                        switchHelp: L("Off: no AI can read saved transcripts. Your choices below are kept for when you turn it back on."),
                         active: store.activeAIDetail == .transcribe
                     ) { store.openAIDetail?(.transcribe) }
-                    SettingsNote(text: L("Runs locally on this Mac. AIs cannot start or control it."), lines: 2)
                 }
+                SettingsNote(text: L("Turn AI access on or off here, or click ⋯ for per-AI and item settings."), lines: 2)
             }
 
             SettingsCard(title: L("Other apps")) {
@@ -448,7 +454,7 @@ struct AITab: View {
                     .textSelection(.enabled)
             }
         }
-        .onAppear { store.loadCalendar(); store.loadMail(); store.loadFolders() }
+        .onAppear { store.loadCalendar(); store.loadMail(); store.loadFolders(); store.loadTranscripts() }
     }
 }
 
@@ -1030,6 +1036,32 @@ struct TranscribeDetailView: View {
         let folder = Transcriber.outputFolder(for: transcriptFolderPath)
         let ready = Transcriber.shared.setUp || API.preview
         return SettingsPage {
+            SettingsCard(title: L("AI access")) {
+                SettingsRow(title: L("AI access")) {
+                    SettingsSwitch(title: L("AI access"), isOn: Binding(get: { store.transcriptOn }, set: { store.setTranscripts(["on": $0]) }))
+                        .help(L("Off: no AI can read saved transcripts. Your choices below are kept for when you turn it back on."))
+                }
+                if store.transcriptOn {
+                    Divider()
+                    SettingsRow(title: L("Can read")) {
+                        perAICheckboxes(store, store.transcriptClaude, store.transcriptGPT, store.transcriptIlluminati) { ai, on in
+                            store.setTranscripts(["apps": [ai: on]])
+                        }
+                    }
+                    if !store.transcriptLast.isEmpty {
+                        Divider()
+                        SettingsRow(title: L("Last read")) {
+                            Text(store.transcriptLast).foregroundStyle(.secondary).lineLimit(1)
+                        }
+                    }
+                    if !store.transcriptBlocked.isEmpty {
+                        SettingsNote(text: store.transcriptBlocked, lines: 3)
+                    }
+                }
+                SettingsNote(text: L("Read only: AIs can list, search and read saved transcripts, but cannot start or control transcription."), lines: 3)
+                    .help(L("Only the AIs you allow can read text transcripts saved in the folder below. AIs never start, stop or change transcription, and hidden or secret files are never shown. After a change, quit that AI app (⌘Q) and open it again."))
+            }
+
             SettingsCard(title: L("Storage")) {
                 SettingsRow(title: L("Save transcripts to")) {
                     Text((folder.path as NSString).abbreviatingWithTildeInPath)
@@ -1042,10 +1074,13 @@ struct TranscribeDetailView: View {
                 SettingsRow(title: L("Folder")) {
                     SettingsAction(title: L("Open")) { Transcriber.shared.openTranscriptFolder() }
                     SettingsAction(title: L("Change…")) { chooseTranscriptFolder(current: folder) }
-                    SettingsAction(title: L("Use Default")) { transcriptFolderPath = "" }
-                        .disabled(transcriptFolderPath.isEmpty)
+                    SettingsAction(title: L("Use Default")) {
+                        transcriptFolderPath = ""
+                        store.setTranscriptFolder("")
+                    }
+                    .disabled(transcriptFolderPath.isEmpty)
                 }
-                SettingsNote(text: L("The new folder applies to future transcripts."), lines: 2)
+                SettingsNote(text: L("The new folder applies to future transcripts and AI reading."), lines: 2)
             }
 
             SettingsCard(title: L("Setup & glossary")) {
@@ -1061,7 +1096,7 @@ struct TranscribeDetailView: View {
                     SettingsAction(title: L("Open")) { Transcriber.shared.openGlossary() }.fixedSize()
                 }
                 .help(L("Names and terms Whisper should spell right (one per line)."))
-                SettingsNote(text: L("Runs locally on this Mac and keeps text only (no audio files). AIs cannot start or control it; add the folder in Shared folders if you want AIs to read transcripts."), lines: 4)
+                SettingsNote(text: L("Runs locally on this Mac and keeps text only (no audio files)."), lines: 2)
             }
         }
     }
@@ -1076,7 +1111,9 @@ struct TranscribeDetailView: View {
         panel.directoryURL = FileManager.default.fileExists(atPath: current.path)
             ? current : FileManager.default.homeDirectoryForCurrentUser
         guard panel.runModal() == .OK, let folder = panel.url else { return }
-        transcriptFolderPath = folder.path == Transcriber.defaultOutputFolder.path ? "" : folder.path
+        let next = folder.path == Transcriber.defaultOutputFolder.path ? "" : folder.path
+        transcriptFolderPath = next
+        store.setTranscriptFolder(next)
     }
 }
 

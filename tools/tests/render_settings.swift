@@ -53,6 +53,8 @@ import SwiftUI
         store.folders = [SharedFolder(id: "f1", name: "Papers", path: "/Users/example/Documents/Papers", last: "Read by Claude · 5 min ago"),
                          SharedFolder(id: "f2", name: "Lab data", path: "/Users/example/Documents/Lab data", on: false),
                          SharedFolder(id: "f3", name: "Old notes", path: "/Volumes/Backup/Old notes", missing: true)]
+        store.transcriptCount = 4
+        store.transcriptLast = "Read by Claude · 12 min ago"
         store.serverPath = "/Users/me/Library/Application Support/AI Face/ai_face_mcp.py"
         store.lightNight = true; store.lightOffSleeping = true; store.lightBright = 70; store.lightFrom = 23; store.lightTo = 7
         store.connected = true; store.port = "/dev/cu.usbmodem14101"; store.ports = ["/dev/cu.usbmodem14101"]
@@ -106,7 +108,7 @@ import SwiftUI
         let noAwakeStore = SettingsStore()
         noAwakeStore.awakeSupported = true
         noAwakeStore.awakeAIOn = false
-        noAwakeStore.calOn = false; noAwakeStore.mailOn = false; noAwakeStore.folderOn = false
+        noAwakeStore.calOn = false; noAwakeStore.mailOn = false; noAwakeStore.folderOn = false; noAwakeStore.transcriptOn = false
         func aiDetail(_ section: AIDetailSection) -> AnyView {
             store.activeAIDetail = section
             return AnyView(AIDetailWindowView(store: store))
