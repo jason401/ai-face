@@ -1,7 +1,7 @@
 // "Transcribe" in the panel: starts and stops AI Face Listener (Contents/Helpers/AI Face Listener.app),
 // which writes what this Mac plays and what the microphone hears to transcript.md,
-// as text only. AI Face itself never gets the microphone or system audio permission: it only launches
-// the helper, asks it to stop, and shows the status it posts (app/listener/main.swift).
+// as text only. Only the helper opens the audio inputs. macOS may attribute its permission requests
+// to the enclosing AI Face bundle. The main app only controls and displays the session.
 import Cocoa
 
 final class Transcriber {
@@ -31,6 +31,7 @@ final class Transcriber {
     private(set) var warning = ""
     private(set) var error = ""
     private var runningCache = false
+    private var launching = false
     private var stopAsked: Date?
     private var confirmedStopping = false   // the Listener itself said "stopping": its inputs are closed
     private var runningChecked = 0.0
@@ -41,6 +42,7 @@ final class Transcriber {
             self.state = (info["state"] as? String) ?? ""
             self.confirmedStopping = self.state == "stopping" || self.state == "stopped" || self.state == "error"
             self.folder = (info["folder"] as? String) ?? self.folder
+            if self.confirmedStopping { self.stopAsked = nil }
             self.since = (info["since"] as? NSNumber)?.doubleValue ?? 0
             self.lines = (info["lines"] as? NSNumber)?.intValue ?? 0
             self.warning = (info["warning"] as? String) ?? ""
@@ -68,19 +70,31 @@ final class Transcriber {
 
     /// Is the Listener running (checked at most once a second; the 12 fps panel asks often).
     var on: Bool {
+        if launching { return true }
         let now = Date.timeIntervalSinceReferenceDate
         if now - runningChecked > 1 {
-            runningCache = !NSRunningApplication.runningApplications(withBundleIdentifier: Self.bundleID).isEmpty
+            let running = !NSRunningApplication.runningApplications(withBundleIdentifier: Self.bundleID).isEmpty
+            if runningCache && !running && ["starting", "listening", "stopping"].contains(state) {
+                state = "error"
+                stopAsked = nil
+                error = L("AI Face Listener quit unexpectedly.")
+            }
+            runningCache = running
             runningChecked = now
         }
         return runningCache
     }
 
+    var capturing: Bool { on && state == "listening" }
+    var stopping: Bool { stopAsked != nil || state == "stopping" }
+
     /// The panel's line: what it is doing now.
     func statusLine(_ now: Date = Date()) -> String {
+        if stopAsked != nil { return L("Stopping transcription…") }
         switch state {
         case "starting": return L("Starting Whisper…")
         case "stopping": return L("Finishing the last lines…")
+        case "stopped": return L("Transcript saved")
         case "error": return String(format: L("Transcription stopped: %@"), error)
         default:
             if !on { return "" }
@@ -98,8 +112,7 @@ final class Transcriber {
     func stop() {
         DistributedNotificationCenter.default().postNotificationName(Self.stopName, object: nil, userInfo: nil,
                                                                     deliverImmediately: true)
-        if state != "stopping" { stopAsked = Date() }
-        state = "stopping"
+        if stopAsked == nil { stopAsked = Date() }
         DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
             guard let self = self, let asked = self.stopAsked, self.on, !self.confirmedStopping,
                   Date().timeIntervalSince(asked) < 120 else { return }
@@ -108,12 +121,10 @@ final class Transcriber {
     }
 
     func openTranscript() {
-        let file = URL(fileURLWithPath: folder).appendingPathComponent("transcript.md")
-        if FileManager.default.fileExists(atPath: file.path) {
-            NSWorkspace.shared.open(file)
-        } else if !folder.isEmpty {
-            NSWorkspace.shared.open(URL(fileURLWithPath: folder))
-        }
+        guard !folder.isEmpty else { return }
+        let directory = URL(fileURLWithPath: folder, isDirectory: true)
+        let file = directory.appendingPathComponent("transcript.md")
+        NSWorkspace.shared.open(FileManager.default.fileExists(atPath: file.path) ? file : directory)
     }
 
     func openTranscriptFolder() {
@@ -197,24 +208,33 @@ final class Transcriber {
         config.activates = false
         config.addsToRecentItems = false
         state = "starting"
+        launching = true
         stopAsked = nil
         confirmedStopping = false
         warning = ""
         error = ""
+        folder = ""
         lines = 0
-        NSWorkspace.shared.openApplication(at: helper, configuration: config) { [weak self] _, err in
-            guard let err = err else { return }
+        NSWorkspace.shared.openApplication(at: helper, configuration: config) { [weak self] app, err in
             DispatchQueue.main.async {
-                self?.state = "error"
-                self?.error = err.localizedDescription
+                guard let self = self else { return }
+                self.launching = false
+                if let err = err {
+                    self.state = "error"
+                    self.stopAsked = nil
+                    self.error = err.localizedDescription
+                } else if !self.confirmedStopping {
+                    self.runningCache = app != nil
+                    self.runningChecked = 0
+                }
             }
         }
     }
 }
 
 /// Title, language, and the "everyone agreed" box that enables Start.
-private final class ConsentForm: NSObject {
-    let view = NSStackView()
+final class ConsentForm: NSObject {
+    let view = NSView()
     let title = NSTextField()
     let language = NSPopUpButton()
     let agree = NSButton(checkboxWithTitle: L("Everyone in the conversation agreed"), target: nil, action: nil)
@@ -229,13 +249,20 @@ private final class ConsentForm: NSObject {
         let languageRow = NSStackView(views: [NSTextField(labelWithString: L("Language")), language])
         agree.target = self
         agree.action = #selector(toggled)
-        view.orientation = .vertical
-        view.alignment = .leading
-        view.spacing = 8
-        view.addArrangedSubview(title)
-        view.addArrangedSubview(languageRow)
-        view.addArrangedSubview(agree)
-        view.frame = NSRect(x: 0, y: 0, width: 260, height: 86)
+        let controls = NSStackView(views: [title, languageRow, agree])
+        controls.orientation = .vertical
+        controls.alignment = .leading
+        controls.spacing = 8
+        controls.setVisibilityPriority(.mustHold, for: agree)
+        controls.translatesAutoresizingMaskIntoConstraints = false
+        view.setFrameSize(controls.fittingSize)
+        view.addSubview(controls)
+        NSLayoutConstraint.activate([
+            controls.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            controls.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            controls.topAnchor.constraint(equalTo: view.topAnchor),
+            controls.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+        ])
     }
 
     @objc private func toggled() {

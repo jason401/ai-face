@@ -352,7 +352,7 @@ final class StatusController: NSObject, NSMenuDelegate, FacePanelActions {
         let side = NSStatusBar.system.thickness
         let face = renderFace(side: side, inset: 2, view: view, pose: animator.pose, fire: fire, now: now,
                               offset: bounce(now))
-        item.button?.image = Transcriber.shared.on ? Self.recDot(face) : face
+        item.button?.image = Transcriber.shared.capturing ? Self.recDot(face) : face
         if menuOpen {
             updateHeader(now)
             if let progress = updateProgress { updateProgressItem.title = progress.summary(at: Date()) }
@@ -386,6 +386,8 @@ final class StatusController: NSObject, NSMenuDelegate, FacePanelActions {
         let transcriber = Transcriber.shared
         m.set(\.transcribeSupported, transcriber.supported)
         m.set(\.transcribeOn, transcriber.on)
+        m.set(\.transcribeStopping, transcriber.stopping)
+        m.set(\.transcribeHasTranscript, !transcriber.folder.isEmpty)
         m.set(\.transcribeLine, transcriber.statusLine())
         m.set(\.transcribeWarning, transcriber.on ? transcriber.warning : "")
         m.set(\.updateAvailable, updateAvailable)
@@ -401,8 +403,6 @@ final class StatusController: NSObject, NSMenuDelegate, FacePanelActions {
             face.draw(in: rect)
             let d = max(5, size.width * 0.28)
             let dot = NSRect(x: size.width - d, y: size.height - d, width: d, height: d)
-            NSColor.white.setFill()
-            NSBezierPath(ovalIn: dot.insetBy(dx: -1, dy: -1)).fill()
             NSColor.systemRed.setFill()
             NSBezierPath(ovalIn: dot).fill()
             return true

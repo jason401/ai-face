@@ -74,6 +74,8 @@ final class PanelModel: ObservableObject {
     @Published var awakePausedMinutes = 0
     @Published var transcribeSupported = false
     @Published var transcribeOn = false
+    @Published var transcribeStopping = false
+    @Published var transcribeHasTranscript = false
     @Published var transcribeLine = ""
     @Published var transcribeWarning = ""
     @Published var updateAvailable = false
@@ -559,7 +561,7 @@ struct FacePanelView: View {
             HStack {
                 sectionTitle(L("Transcribe"))
                 Spacer()
-                if model.transcribeOn {
+                if model.transcribeHasTranscript {
                     Button(L("Open transcript")) { panel.actions?.panelOpenTranscript() }.buttonStyle(.link)
                 }
             }
@@ -567,6 +569,7 @@ struct FacePanelView: View {
                 chip(model.transcribeOn ? L("Stop transcribing") : L("Start transcribing…"), on: model.transcribeOn) {
                     panel.actions?.panelTranscribe()
                 }
+                .disabled(model.transcribeStopping)
                 Button { panel.actions?.panelOpenTranscriptFolder() } label: {
                     Image(systemName: "folder")
                         .frame(width: 30).padding(.vertical, 4)

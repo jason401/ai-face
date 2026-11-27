@@ -71,6 +71,9 @@ cat > "$CANDIDATE/Contents/Info.plist" <<'PLIST'
 <key>NSAppleEventsUsageDescription</key><string>AI Face reads your mail in the Mail app (read only) so the AI apps you allow (Settings → AI) can answer questions about it. It never sends, moves or deletes mail.</string>
 <key>NSCalendarsFullAccessUsageDescription</key><string>AI Face reads your calendar so the AI apps you allow (Settings → AI) can answer questions about your schedule. It never changes events.</string>
 <key>NSCalendarsUsageDescription</key><string>AI Face reads your calendar so the AI apps you allow (Settings → AI) can answer questions about your schedule. It never changes events.</string>
+<!-- macOS may attribute a nested Listener's audio requests to the enclosing app bundle. -->
+<key>NSMicrophoneUsageDescription</key><string>AI Face Listener transcribes microphone audio while you have Transcribe on. No audio is kept.</string>
+<key>NSAudioCaptureUsageDescription</key><string>AI Face Listener transcribes the sound this Mac plays while you have Transcribe on. No audio is kept.</string>
 </dict></plist>
 PLIST
 cat > "$LISTENER/Contents/Info.plist" <<'PLIST'

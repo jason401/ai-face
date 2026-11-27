@@ -39,6 +39,19 @@ class ListenerChecks(unittest.TestCase):
             self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
             self.assertIn('listener checks: OK', run.stdout)
 
+    def test_consent_checkbox_is_visible_and_required(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            binary = Path(tmp) / 'check'
+            built = swiftc(binary, ROOT / 'app/macos/Transcribe.swift',
+                           ROOT / 'tools/tests/transcribe_check/main.swift')
+            self.assertEqual(built.returncode, 0, built.stderr[-2000:])
+            strings = ROOT / 'app/macos/Resources/ko.lproj/Localizable.strings'
+            for args in ([], [str(strings)]):
+                with self.subTest(korean=bool(args)):
+                    run = subprocess.run([str(binary), *args], capture_output=True, text=True, timeout=30)
+                    self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+                    self.assertIn('consent form: OK', run.stdout)
+
     def test_helper_plist_and_build_script(self):
         script = (ROOT / 'tools/build_app.sh').read_text()
         self.assertIn('Contents/Helpers/AI Face Listener.app', script)
@@ -46,9 +59,13 @@ class ListenerChecks(unittest.TestCase):
         self.assertIn('NSAudioCaptureUsageDescription', script)
         self.assertIn('apple-macos14.2', script)
         self.assertIn('Set up Transcription.command', script)
-        # The main app never asks for audio itself: only the helper has the usage strings.
-        main_plist = script.split('cat > "$CANDIDATE/Contents/Info.plist"')[1].split('\nPLIST\n')[0]
-        self.assertNotIn('NSMicrophoneUsageDescription', main_plist)
+        # macOS can look up the descriptions on the enclosing app even when the helper requests audio.
+        for bundle in ('$CANDIDATE', '$LISTENER'):
+            plist = script.split(f'cat > "{bundle}/Contents/Info.plist"')[1].split('\nPLIST\n')[0]
+            for key in ('NSMicrophoneUsageDescription', 'NSAudioCaptureUsageDescription'):
+                self.assertIn(f'<key>{key}</key><string>', plist)
+        launcher = (ROOT / 'app/macos/Transcribe.swift').read_text()
+        self.assertNotIn('requestAccess(for: .audio)', launcher)
 
     def test_no_audio_is_written(self):
         # The only file writes in the Listener are the transcript (Data(header) + FileHandle);
