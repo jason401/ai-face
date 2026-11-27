@@ -60,12 +60,16 @@ final class Whisper {
         let work = FileManager.default.temporaryDirectory.appendingPathComponent("aiface-whisper-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
         self.work = work
+        Self.reapOrphans()
         let p = Process()
-        p.executableURL = exe
+        // Through a small sh that ends the server when the Listener is gone, also after a crash
+        // (macOS does not end children with their parent; a crashed Listener used to leave
+        // whisper-server running with its model loaded).
+        p.executableURL = URL(fileURLWithPath: "/bin/sh")
         var args = ["-m", model.path, "--host", "127.0.0.1", "--port", String(port), "-t", "4"]
         let vad = Self.modelFolder.appendingPathComponent(Self.vadModel)
         if FileManager.default.fileExists(atPath: vad.path) { args += ["--vad", "-vm", vad.path] }
-        p.arguments = args
+        p.arguments = ["-c", Self.guardScript, "aiface-whisper", String(getpid()), exe.path] + args
         p.currentDirectoryURL = work
         p.standardOutput = FileHandle.nullDevice
         let errors = Pipe()
@@ -87,6 +91,45 @@ final class Whisper {
         }
         stop()
         throw WhisperError.notStarting("no answer in 90 s")
+    }
+
+    /// sh -c SCRIPT name LISTENER_PID SERVER ARGS…: runs the server, and ends it when the Listener
+    /// exits or when sh is asked to stop; sh itself ends when the server does.
+    static let guardScript = """
+        owner="$1"; shift
+        "$@" &
+        server=$!
+        trap 'kill "$server" 2>/dev/null; wait "$server"; exit 0' TERM INT HUP
+        while kill -0 "$owner" 2>/dev/null && kill -0 "$server" 2>/dev/null; do sleep 1; done
+        kill "$server" 2>/dev/null
+        wait "$server"
+        """
+
+    /// whisper-servers on our models whose parent is gone (left by an older Listener that crashed).
+    static func orphans(ps: String, models: String) -> [Int32] {
+        var out: [Int32] = []
+        for line in ps.split(separator: "\n") {
+            let parts = line.split(separator: " ", maxSplits: 2, omittingEmptySubsequences: true)
+            guard parts.count == 3, let pid = Int32(parts[0]), parts[1] == "1" else { continue }
+            let command = String(parts[2])
+            if command.contains("whisper-server") && command.contains(models) && !command.hasPrefix("/bin/sh") {
+                out.append(pid)
+            }
+        }
+        return out
+    }
+
+    static func reapOrphans() {
+        let ps = Process()
+        ps.executableURL = URL(fileURLWithPath: "/bin/ps")
+        ps.arguments = ["-axo", "pid=,ppid=,command="]
+        let pipe = Pipe()
+        ps.standardOutput = pipe
+        ps.standardError = FileHandle.nullDevice
+        guard (try? ps.run()) != nil else { return }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        ps.waitUntilExit()
+        for pid in orphans(ps: String(decoding: data, as: UTF8.self), models: modelFolder.path) { kill(pid, SIGTERM) }
     }
 
     func stop() {

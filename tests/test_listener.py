@@ -33,7 +33,8 @@ class ListenerChecks(unittest.TestCase):
     def test_swift_checks(self):
         with tempfile.TemporaryDirectory() as tmp:
             built = swiftc(Path(tmp) / 'check', LISTENER / 'Segmenter.swift', LISTENER / 'Transcript.swift',
-                           LISTENER / 'Capture.swift', ROOT / 'tools/tests/listener_check/main.swift')
+                           LISTENER / 'Capture.swift', LISTENER / 'Whisper.swift',
+                           ROOT / 'tools/tests/listener_check/main.swift')
             self.assertEqual(built.returncode, 0, built.stderr[-2000:])
             run = subprocess.run([str(Path(tmp) / 'check')], capture_output=True, text=True, timeout=60)
             self.assertEqual(run.returncode, 0, run.stdout + run.stderr)

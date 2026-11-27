@@ -192,5 +192,18 @@ do {
           "non-interleaved: two buffers after two device inputs")
 }
 
+// Leftover whisper-servers: only ours (model folder), only orphans (parent 1), never the sh guard.
+do {
+    let models = "/Users/x/Library/Application Support/AI Face/Listener/models"
+    let ps = """
+      101     1 /opt/homebrew/bin/whisper-server -m \(models)/ggml-large-v3-turbo-q5_0.bin --host 127.0.0.1
+      102   500 /opt/homebrew/bin/whisper-server -m \(models)/ggml-large-v3-turbo-q5_0.bin --host 127.0.0.1
+      103     1 /opt/homebrew/bin/whisper-server -m /other/model.bin
+      104     1 /bin/sh -c owner=... aiface-whisper 9 /opt/homebrew/bin/whisper-server -m \(models)/x.bin
+      105     1 /usr/bin/python3 server.py
+    """
+    check(Whisper.orphans(ps: ps, models: models) == [101], "orphans: \(Whisper.orphans(ps: ps, models: models))")
+}
+
 if failures == 0 { print("listener checks: OK") }
 exit(failures == 0 ? 0 : 1)
