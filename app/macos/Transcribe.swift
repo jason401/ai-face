@@ -15,6 +15,7 @@ final class Transcriber {
     static let outputFolderKey = "transcriptOutputFolder"
     static let defaultOutputFolder = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Meetings", isDirectory: true)
+    static var glossaryFile: URL { support.appendingPathComponent("glossary.txt") }
 
     static func outputFolder(for path: String) -> URL {
         path.isEmpty ? defaultOutputFolder : URL(fileURLWithPath: path, isDirectory: true)
@@ -141,6 +142,22 @@ final class Transcriber {
         }
     }
 
+    func openGlossary() {
+        let file = Self.glossaryFile
+        try? FileManager.default.createDirectory(at: Self.support, withIntermediateDirectories: true)
+        if !FileManager.default.fileExists(atPath: file.path) {
+            let starter = "# Names and terms Whisper should spell right, one per line (lines starting with # are ignored).\n# Example:\n# LiNbO3\n# hydrophone\n"
+            try? starter.write(to: file, atomically: true, encoding: .utf8)
+        }
+        NSWorkspace.shared.open(file)
+    }
+
+    func openSetup() {
+        if let tool = Bundle.main.resourceURL?.appendingPathComponent("tools/Set up Transcription.command") {
+            NSWorkspace.shared.open(tool)
+        }
+    }
+
     private func folderExists(_ folder: URL) -> Bool {
         var isDirectory: ObjCBool = false
         return FileManager.default.fileExists(atPath: folder.path, isDirectory: &isDirectory)
@@ -152,7 +169,7 @@ final class Transcriber {
         let alert = NSAlert()
         alert.alertStyle = .warning
         alert.messageText = L("Transcript folder unavailable")
-        alert.informativeText = [folder.path, reason, L("Check the folder or choose another in Settings → General → Transcribe.")]
+        alert.informativeText = [folder.path, reason, L("Check the folder or choose another in Settings → AI → Transcribe.")]
             .compactMap { $0 }.joined(separator: "\n\n")
         alert.runModal()
     }
@@ -173,9 +190,8 @@ final class Transcriber {
             alert.informativeText = L("Set Up opens a Terminal window that installs whisper.cpp with Homebrew and downloads the Whisper model (about 600 MB) to this Mac. Transcribing then runs only on this Mac.")
             alert.addButton(withTitle: L("Set Up…"))
             alert.addButton(withTitle: L("Cancel"))
-            if alert.runModal() == .alertFirstButtonReturn,
-               let tool = Bundle.main.resourceURL?.appendingPathComponent("tools/Set up Transcription.command") {
-                NSWorkspace.shared.open(tool)
+            if alert.runModal() == .alertFirstButtonReturn {
+                openSetup()
             }
             return
         }

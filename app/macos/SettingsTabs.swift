@@ -7,7 +7,6 @@ import UniformTypeIdentifiers
 
 struct GeneralTab: View {
     @ObservedObject var store: SettingsStore
-    @AppStorage(Transcriber.outputFolderKey) private var transcriptFolderPath = ""
 
     var body: some View {
         SettingsPage {
@@ -15,6 +14,11 @@ struct GeneralTab: View {
                 SettingsRow(title: L("Open at login")) {
                     SettingsSwitch(title: L("Open at login"), isOn: Binding(get: { store.loginItem }, set: { store.setLogin($0) }))
                         .help(L("The face appears in the menu bar as soon as you log in."))
+                }
+                Divider()
+                SettingsRow(title: L("Panel on hover")) {
+                    SettingsSwitch(title: L("Show on hover over the face"), isOn: $store.folderShelfHover)
+                        .help(L("Resting the pointer on the menu bar face shows its panel (face, timer, keep awake, shared folders). Off: only a click opens it. While you drag a folder it appears by itself: drop it there to share it."))
                 }
             }
             SettingsCard(title: L("Updates")) {
@@ -61,9 +65,6 @@ struct GeneralTab: View {
                         .help(Bundle.main.bundlePath)
                 }
             }
-            if Transcriber.shared.supported || API.preview {
-                transcriptSettings
-            }
             SettingsCard(title: L("About")) {
                 SettingsRow(title: L("Version")) {
                     Text(store.version).foregroundStyle(.secondary).textSelection(.enabled)
@@ -81,39 +82,6 @@ struct GeneralTab: View {
             }
         }
         .environment(\.settingsLabelWidth, 118)
-    }
-
-    private var transcriptSettings: some View {
-        let folder = Transcriber.outputFolder(for: transcriptFolderPath)
-        return SettingsCard(title: L("Transcribe")) {
-            SettingsRow(title: L("Save transcripts to")) {
-                Text((folder.path as NSString).abbreviatingWithTildeInPath)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1).truncationMode(.middle)
-                    .textSelection(.enabled)
-                    .help(folder.path)
-            }
-            SettingsRow(title: L("Folder")) {
-                SettingsAction(title: L("Open")) { Transcriber.shared.openTranscriptFolder() }
-                SettingsAction(title: L("Change…")) { chooseTranscriptFolder(current: folder) }
-                SettingsAction(title: L("Use Default")) { transcriptFolderPath = "" }
-                    .disabled(transcriptFolderPath.isEmpty)
-            }
-            SettingsNote(text: L("The new folder applies to future transcripts."))
-        }
-    }
-
-    private func chooseTranscriptFolder(current: URL) {
-        let panel = NSOpenPanel()
-        panel.message = L("Choose where new transcripts are saved.")
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.canCreateDirectories = true
-        panel.allowsMultipleSelection = false
-        panel.directoryURL = FileManager.default.fileExists(atPath: current.path)
-            ? current : FileManager.default.homeDirectoryForCurrentUser
-        guard panel.runModal() == .OK, let folder = panel.url else { return }
-        transcriptFolderPath = folder.path == Transcriber.defaultOutputFolder.path ? "" : folder.path
     }
 }
 
@@ -270,10 +238,54 @@ struct BoardCard: View {
     }
 }
 
-// MARK: - AI: which apps show faces, and what they may read or change
+// MARK: - AI: which apps show faces, compact AI access summary, and local tools
+
+private struct AIFeatureRow: View {
+    let title: String
+    let subtitle: String
+    var ok: Bool = false
+    var switchTitle: String? = nil
+    var isOn: Binding<Bool>? = nil
+    var switchHelp: String? = nil
+    var active: Bool = false
+    let openDetails: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title).lineLimit(1)
+                Text(subtitle).font(.system(size: 10))
+                    .foregroundStyle(ok ? Color.green : Color.secondary)
+                    .lineLimit(1).truncationMode(.middle)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if let isOn = isOn {
+                Toggle(switchTitle ?? title, isOn: isOn)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .help(switchHelp ?? "")
+            }
+            Button(action: openDetails) {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(active ? Color.accentColor : Color.primary)
+                    .frame(width: 28, height: 22)
+                    .background(RoundedRectangle(cornerRadius: 5)
+                        .fill(active ? Color.accentColor.opacity(0.18) : Color.primary.opacity(0.07)))
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(L("Details…"))
+            .accessibilityLabel(title + " · " + L("Details…"))
+        }
+        .padding(.horizontal, 10).padding(.vertical, 6)
+        .frame(minHeight: 38)
+    }
+}
 
 struct AITab: View {
     @ObservedObject var store: SettingsStore
+    @AppStorage(Transcriber.outputFolderKey) private var transcriptFolderPath = ""
 
     func statusText(_ s: String) -> String {
         switch s {
@@ -291,48 +303,55 @@ struct AITab: View {
             if available {
                 SettingsAction(title: status == "on" ? L("Disconnect") : L("Connect")) {
                     store.setAI(target, on: status != "on")
-                }.frame(width: 68)
+                }.frame(width: 84)
             }
         }
     }
 
-    /// One checkbox per AI for a read or write switch (AI Illuminati only when it is installed).
-    func perAI(_ claude: Bool, _ gpt: Bool, _ illuminati: Bool, _ set: @escaping (String, Bool) -> Void) -> some View {
-        HStack(spacing: store.illuminatiAvailable ? 3 : 14) {
-            Toggle("Claude", isOn: Binding(get: { claude }, set: { set("claude", $0) })).fixedSize()
-            Toggle("GPT", isOn: Binding(get: { gpt }, set: { set("gpt", $0) })).fixedSize()
-            if store.illuminatiAvailable {
-                Toggle("Illuminati", isOn: Binding(get: { illuminati }, set: { set("illuminati", $0) })).fixedSize()
-                    .help("AI Illuminati")
-            }
-        }.toggleStyle(.checkbox).font(.system(size: store.illuminatiAvailable ? 11 : 12))
+    private var foldersSummary: (String, Bool) {
+        if !store.folderOn { return (L("Off"), false) }
+        if store.folders.isEmpty { return (L("No folders"), false) }
+        let active = store.folders.filter { $0.on }.count
+        return (String(format: L("%d of %d on"), active, store.folders.count), active > 0)
     }
 
-    func accessRow(_ text: String, ok: Bool, busy: Bool = false, button: String?, title: String = L("Access"),
-                   _ action: @escaping () -> Void) -> some View {
-        SettingsRow(title: title) {
-            SettingsStatus(text: text, ok: ok)
-            if busy {
-                ProgressView().controlSize(.small)
-            } else if let button = button {
-                SettingsAction(title: button, action: action).fixedSize()
-            }
-        }
+    private var calendarSummary: (String, Bool) {
+        if store.calAccess != "full" { return (store.calAccessText, false) }
+        if !store.calOn { return (L("Off"), false) }
+        if store.calendars.isEmpty { return (L("Allowed"), true) }
+        let shown = store.calendars.filter { $0.shown }.count
+        return (String(format: L("%d of %d on"), shown, store.calendars.count), shown > 0)
     }
 
-    var calendarButton: String? {
-        let a = store.calAccess
-        if a == "full" || a == "" || a == "unavailable" { return nil }
-        return a == "notDetermined" ? L("Allow…") : L("Open System Settings")
+    private var mailSummary: (String, Bool) {
+        if store.mailAccess != "allowed" { return (store.mailAccessText, false) }
+        if !store.mailOn { return (L("Off"), false) }
+        if store.mailAccounts.isEmpty { return (L("Allowed"), true) }
+        let shown = store.mailAccounts.filter { $0.shown }.count
+        return (String(format: L("%d of %d on"), shown, store.mailAccounts.count), shown > 0)
     }
 
-    var mailButton: String? {
-        let a = store.mailAccess
-        if a == "allowed" || a == "" || a == "unavailable" { return nil }
-        return a == "denied" ? L("Open System Settings") : L("Allow…")
+    private var awakeSummary: (String, Bool) {
+        if !store.awakeReady { return (L("Not set up"), false) }
+        if !store.awakeAIOn { return (L("Off"), false) }
+        if store.awakeOn { return (store.awakeStatus, true) }
+        return (L("Allowed"), true)
+    }
+
+    private var transcribeSummary: (String, Bool) {
+        let folder = Transcriber.outputFolder(for: transcriptFolderPath)
+        let short = (folder.path as NSString).abbreviatingWithTildeInPath
+        let ready = Transcriber.shared.setUp || API.preview
+        return (ready ? short : short + " · " + L("Not set up"), ready)
     }
 
     var body: some View {
+        let foldersInfo = foldersSummary
+        let calInfo = calendarSummary
+        let mailInfo = mailSummary
+        let awakeInfo = awakeSummary
+        let transcribeInfo = transcribeSummary
+
         SettingsPage {
             SettingsCard(title: L("AI apps")) {
                 appRow(L("Claude desktop"), store.claude, "claude")
@@ -349,158 +368,72 @@ struct AITab: View {
                     .help(L("Once connected, the AI picks a face for every reply. After connecting or disconnecting, quit that app (⌘Q) and open it again. Ring colors: Claude orange, GPT green, AI Illuminati gold, your own picks white."))
             }
 
-            if store.awakeSupported {
-                SettingsCard(title: L("Keep awake")) {
-                    accessRow(store.awakeReady ? L("Allowed") : L("Not set up"), ok: store.awakeReady,
-                              button: store.awakeReady ? L("Remove…") : L("Set up…"), title: L("Permission")) {
-                        store.setUpAwake(remove: store.awakeReady)
-                    }
-                    .help(store.awakeReady ? L("Removes the permission and the awake command (in Terminal, with your Mac password).")
-                          : L("Asks for your Mac password once, in Terminal, and allows only this one setting."))
-                    if store.awakeReady {   // the rest only matters once the permission is set up
-                        Divider()
-                        SettingsRow(title: L("Status")) {
-                            SettingsStatus(text: store.awakeStatus, ok: store.awakeOn)
-                        }
-                        Divider()
-                        SettingsRow(title: "Claude Code") {
-                            Toggle(L("While it works"), isOn: Binding(get: { store.hooks == "on" },
-                                                                      set: { store.setAI("claude_code_awake", on: $0) }))
-                                .toggleStyle(.checkbox)
-                                .help(L("Claude Code: keep the Mac awake while it works"))
-                        }
-                        Divider()
-                        SettingsRow(title: L("AI can ask")) {
-                            perAI(store.awakeClaude, store.awakeGPT, store.awakeIlluminati) { ai, on in store.setAwakeApps(ai, on) }
-                                .help(L("Which AIs may keep the Mac awake when you ask them to (up to 4 hours, renewed while they work)."))
-                        }
-                        Divider()
-                        SettingsRow(title: L("Terminal command")) {
-                            if store.awakeCommand {
-                                SettingsStatus(text: L("Installed"))
-                            } else {
-                                SettingsAction(title: L("Install…")) { store.setUpAwake() }
+            SettingsCard(title: L("AI access")) {
+                AIFeatureRow(
+                    title: L("Shared folders"),
+                    subtitle: foldersInfo.0,
+                    ok: foldersInfo.1,
+                    switchTitle: L("Shared folders") + " · " + L("AI access"),
+                    isOn: Binding(get: { store.folderOn }, set: { store.setFolderAccess($0) }),
+                    switchHelp: L("Off: no AI can read shared folders. Your choices below are kept for when you turn it back on."),
+                    active: store.activeAIDetail == .sharedFolders
+                ) { store.openAIDetail?(.sharedFolders) }
+                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.accentColor, lineWidth: 2)
+                    .opacity(store.folderDropping ? 1 : 0))
+                .onDrop(of: [UTType.fileURL], isTargeted: $store.folderDropping) { providers in
+                    droppedURLs(providers) { store.addFolders($0) }
+                }
+                Divider()
+                AIFeatureRow(
+                    title: L("Calendar"),
+                    subtitle: calInfo.0,
+                    ok: calInfo.1,
+                    switchTitle: L("Calendar") + " · " + L("AI access"),
+                    isOn: Binding(get: { store.calOn }, set: { store.setCalendar(["on": $0]) }),
+                    switchHelp: L("Off: no AI can read or change the calendar. Your choices below are kept for when you turn it back on."),
+                    active: store.activeAIDetail == .calendar
+                ) { store.openAIDetail?(.calendar) }
+                Divider()
+                AIFeatureRow(
+                    title: L("Mail"),
+                    subtitle: mailInfo.0,
+                    ok: mailInfo.1,
+                    switchTitle: L("Mail") + " · " + L("AI access"),
+                    isOn: Binding(get: { store.mailOn }, set: { store.setMail(["on": $0]) }),
+                    switchHelp: L("Off: no AI can read mail. Your choices below are kept for when you turn it back on."),
+                    active: store.activeAIDetail == .mail
+                ) { store.openAIDetail?(.mail) }
+                if store.awakeSupported {
+                    Divider()
+                    AIFeatureRow(
+                        title: L("Keep awake"),
+                        subtitle: awakeInfo.0,
+                        ok: awakeInfo.1,
+                        switchTitle: L("Keep awake") + " · " + L("AI access"),
+                        isOn: Binding(
+                            get: { store.awakeReady && store.awakeAIOn },
+                            set: { on in
+                                if store.awakeReady { store.setAwakeAI(on) }
+                                else { store.openAIDetail?(.keepAwake) }
                             }
-                        }
-                        .help(L("In Terminal, awake COMMAND keeps the Mac awake while COMMAND runs (for example: awake python train.py)."))
-                    }
-                    SettingsNote(text: store.awakeNotice.isEmpty
-                                 ? L("Lid closed, 1–4 hours from the menu. Turns off by itself.") : store.awakeNotice, lines: 3)
-                        .help(L("Keeps the MacBook awake even with the lid closed, for 1, 2 or 4 hours (menu → Keep awake). It turns off at the end, at 20% battery, when the Mac gets hot, in Low Power Mode and when AI Face quits. Setting it up asks for your Mac password once, in Terminal, and allows only this one setting."))
+                        ),
+                        switchHelp: L("Off: no AI or Claude Code hook can keep the Mac awake. Manual keep awake from the menu and Terminal still works."),
+                        active: store.activeAIDetail == .keepAwake
+                    ) { store.openAIDetail?(.keepAwake) }
                 }
+                SettingsNote(text: L("Turn AI access on or off here, or click ⋯ for per-AI and item settings."), lines: 2)
             }
 
-            SettingsCard(title: L("Shared folders")) {
-                SettingsRow(title: L("AI access")) {
-                    SettingsSwitch(title: L("AI access"), isOn: Binding(get: { store.folderOn }, set: { store.setFolderAccess($0) }))
-                        .help(L("Off: no AI can read shared folders. Your choices below are kept for when you turn it back on."))
+            if Transcriber.shared.supported || API.preview {
+                SettingsCard(title: L("Local tools")) {
+                    AIFeatureRow(
+                        title: L("Transcribe"),
+                        subtitle: transcribeInfo.0,
+                        ok: transcribeInfo.1,
+                        active: store.activeAIDetail == .transcribe
+                    ) { store.openAIDetail?(.transcribe) }
+                    SettingsNote(text: L("Runs locally on this Mac. AIs cannot start or control it."), lines: 2)
                 }
-                Divider()
-                if store.folderOn {   // the quick panel row below is about the whole panel, so it stays
-                    SettingsRow(title: L("Can read")) {
-                        perAI(store.folderClaude, store.folderGPT, store.folderIlluminati) { ai, on in store.setFolderApps(ai, on) }
-                    }
-                    Divider()
-                    SettingsRow(title: L("Folder list")) {
-                        SettingsAction(title: store.folders.isEmpty ? L("Add folders…")
-                                       : String(format: L("%d of %d on…"), store.folders.filter { $0.on }.count, store.folders.count)) {
-                            if store.folders.isEmpty { store.chooseFolders() } else { store.showFolders = true }
-                        }
-                        .popover(isPresented: $store.showFolders, arrowEdge: .bottom) { FolderList(store: store) }
-                    }
-                    Divider()
-                }
-                SettingsRow(title: L("Quick panel")) {
-                    Toggle(L("Show on hover over the face"), isOn: $store.folderShelfHover).toggleStyle(.checkbox)
-                        .help(L("Resting the pointer on the menu bar face shows its panel (face, timer, keep awake, shared folders). Off: only a click opens it. While you drag a folder it appears by itself: drop it there to share it."))
-                }
-                SettingsNote(text: store.folderNotice.isEmpty ? L("Read only. Drop folders here. Hidden and secret files are never shown.") : store.folderNotice, lines: 2)
-                    .help(L("Folders you share here can be listed, searched and read from Claude desktop, Claude Code and Codex on this Mac, by the AIs you allow. Nothing is changed or deleted. Hidden files, keys and .env files are never shown, and paths cannot leave the folder. File text sent to an AI becomes part of that conversation."))
-            }
-            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.accentColor, lineWidth: 2)
-                .opacity(store.folderDropping ? 1 : 0))
-            .onDrop(of: [UTType.fileURL], isTargeted: $store.folderDropping) { providers in
-                droppedURLs(providers) { store.addFolders($0) }
-            }
-
-            SettingsCard(title: L("Calendar")) {
-                accessRow(store.calAccessText, ok: store.calAccess == "full", button: calendarButton) { store.requestCalendarAccess() }
-                Divider()
-                SettingsRow(title: L("AI access")) {
-                    SettingsSwitch(title: L("AI access"), isOn: Binding(get: { store.calOn }, set: { store.setCalendar(["on": $0]) }))
-                        .help(L("Off: no AI can read or change the calendar. Your choices below are kept for when you turn it back on."))
-                }
-                if store.calOn {   // the details only matter while AIs may use the calendar
-                    Divider()
-                    SettingsRow(title: L("Can read")) {
-                        perAI(store.calClaude, store.calGPT, store.calIlluminati) { ai, on in store.setCalendar(["apps": [ai: on]]) }
-                    }
-                    Divider()
-                    SettingsRow(title: L("Can change")) {
-                        perAI(store.calWriteClaude, store.calWriteGPT, store.calWriteIlluminati) { ai, on in store.setCalendar(["write_apps": [ai: on]]) }
-                    }
-                    Divider()
-                    SettingsRow(title: L("Details")) {
-                        Toggle(L("Notes and attendees"), isOn: Binding(get: { store.calDetails }, set: { store.setCalendar(["details": $0]) }))
-                            .toggleStyle(.checkbox)
-                            .help(L("Include notes and attendees"))
-                    }
-                    Divider()
-                    SettingsRow(title: L("Ask first")) {
-                        SettingsSwitch(title: L("Ask me before every change"), isOn: Binding(get: { store.calConfirm }, set: { store.setCalendar(["confirm": $0]) }))
-                            .help(L("Ask me before every change"))
-                    }
-                    Divider()
-                    SettingsRow(title: L("Calendars")) {
-                        SettingsAction(title: String(format: L("%d of %d on…"), store.calendars.filter { $0.shown }.count, store.calendars.count)) {
-                            store.showCalendars = true
-                        }
-                        .disabled(store.calendars.isEmpty)
-                        .popover(isPresented: $store.showCalendars, arrowEdge: .bottom) { CalendarList(store: store) }
-                    }
-                }
-                if !store.calChanges.isEmpty {
-                    Divider()
-                    SettingsRow(title: L("Recent changes")) {
-                        SettingsAction(title: String(format: L("%d changes…"), store.calChanges.count)) { store.showCalChanges = true }
-                            .popover(isPresented: $store.showCalChanges, arrowEdge: .bottom) { CalendarChanges(store: store) }
-                    }
-                }
-                SettingsNote(text: L("AIs change or delete only events they added. Every change can be undone."), lines: 3)
-                    .help(L("Only the AIs you allow see the calendars you leave on: titles, times and places; notes and attendees only if you turn them on. After a change, quit that AI app (⌘Q) and open it again.")
-                          + "\n\n" + L("AIs may add events to the calendars turned on here, and change or delete only events they added through AI Face; never anyone else's. With asking on, each change waits for your OK in a window. No invitations are sent."))
-            }
-
-            SettingsCard(title: L("Mail")) {
-                accessRow(store.mailAccessText, ok: store.mailAccess == "allowed", busy: store.mailAsking,
-                          button: mailButton) { store.requestMailAccess() }
-                Divider()
-                SettingsRow(title: L("AI access")) {
-                    SettingsSwitch(title: L("AI access"), isOn: Binding(get: { store.mailOn }, set: { store.setMail(["on": $0]) }))
-                        .help(L("Off: no AI can read mail. Your choices below are kept for when you turn it back on."))
-                }
-                if store.mailOn {
-                    Divider()
-                    SettingsRow(title: L("Can read")) {
-                        perAI(store.mailClaude, store.mailGPT, store.mailIlluminati) { ai, on in store.setMail(["apps": [ai: on]]) }
-                    }
-                    Divider()
-                    SettingsRow(title: L("Links")) {
-                        Toggle(L("Hide links and codes"), isOn: Binding(get: { store.mailHideLinks }, set: { store.setMail(["hide_links": $0]) }))
-                            .toggleStyle(.checkbox)
-                    }
-                    Divider()
-                    SettingsRow(title: L("Accounts")) {
-                        SettingsAction(title: String(format: L("%d of %d on…"), store.mailAccounts.filter { $0.shown }.count, store.mailAccounts.count)) {
-                            store.showMailAccounts = true
-                        }
-                        .disabled(store.mailAccounts.isEmpty)
-                        .popover(isPresented: $store.showMailAccounts, arrowEdge: .bottom) { MailAccountList(store: store) }
-                    }
-                }
-                SettingsNote(text: L("Read only: never sends, moves, deletes or marks mail as read."), lines: 2)
-                    .help(L("AI Face reads the Mail app's inboxes. It never sends, moves or deletes mail, and does not mark it as read.")
-                          + "\n\n" + L("Only the AIs you allow can read the accounts you leave on. With links and codes hidden, a link shows only its site and sign-in codes and passwords are left out. After a change, quit that AI app (⌘Q) and open it again."))
             }
 
             SettingsCard(title: L("Other apps")) {
@@ -707,46 +640,13 @@ struct BoardDetails: View {
     }
 }
 
-// MARK: - AI tab popovers: lists that need not show all the time
+// MARK: - AI details window: roomy per-feature settings
 
 func nameLabel(_ title: String, _ detail: String) -> some View {
     VStack(alignment: .leading, spacing: 0) {
         Text(title).lineLimit(1)
-        if !detail.isEmpty { Text(detail).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1) }
+        if !detail.isEmpty { Text(detail).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle) }
     }.frame(maxWidth: .infinity, alignment: .leading)
-}
-
-struct CalendarList: View {
-    @ObservedObject var store: SettingsStore
-
-    var body: some View {
-        SettingsPopover(title: L("Calendars"), listHeight: CGFloat(store.calendars.count) * 36 + 20) {
-            HStack(spacing: 0) {
-                Spacer()
-                Text(L("Read")).frame(width: 44)
-                Text(L("Change")).frame(width: 44)
-            }
-            .font(.system(size: 10)).foregroundStyle(.secondary).padding(.bottom, 4)
-            ForEach(store.calendars) { cal in
-                HStack(spacing: 0) {
-                    nameLabel(cal.title, cal.account)
-                    Toggle(L("Read"), isOn: Binding(get: { cal.shown }, set: { store.setCalendarShown(cal.id, $0) }))
-                        .labelsHidden().frame(width: 44)
-                    Group {
-                        if cal.canWrite {
-                            Toggle(L("Change"), isOn: Binding(get: { cal.write }, set: { store.setCalendarWritable(cal.id, $0) }))
-                                .labelsHidden()
-                        } else {
-                            Text("–").foregroundStyle(.tertiary)
-                        }
-                    }.frame(width: 44)
-                }
-                .toggleStyle(.checkbox)
-                .frame(height: 36)
-                if cal.id != store.calendars.last?.id { Divider() }
-            }
-        }
-    }
 }
 
 /// The file URLs in a drop, on the main thread.
@@ -764,108 +664,419 @@ func droppedURLs(_ providers: [NSItemProvider], _ done: @escaping ([URL]) -> Voi
     return true
 }
 
-struct FolderList: View {
+/// One checkbox per AI for a read or write switch (AI Illuminati only when it is installed).
+private func perAICheckboxes(_ store: SettingsStore, _ claude: Bool, _ gpt: Bool, _ illuminati: Bool,
+                             _ set: @escaping (String, Bool) -> Void) -> some View {
+    HStack(spacing: 14) {
+        Toggle("Claude", isOn: Binding(get: { claude }, set: { set("claude", $0) })).fixedSize()
+        Toggle("GPT", isOn: Binding(get: { gpt }, set: { set("gpt", $0) })).fixedSize()
+        if store.illuminatiAvailable {
+            Toggle("AI Illuminati", isOn: Binding(get: { illuminati }, set: { set("illuminati", $0) })).fixedSize()
+        }
+    }.toggleStyle(.checkbox)
+}
+
+private func accessStatusRow(_ text: String, ok: Bool, busy: Bool = false, button: String?,
+                             title: String = L("Access"), _ action: @escaping () -> Void) -> some View {
+    SettingsRow(title: title) {
+        SettingsStatus(text: text, ok: ok)
+        if busy {
+            ProgressView().controlSize(.small)
+        } else if let button = button {
+            SettingsAction(title: button, action: action).fixedSize()
+        }
+    }
+}
+
+struct AIDetailWindowView: View {
     @ObservedObject var store: SettingsStore
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(L("Shared folders")).font(.system(size: 12, weight: .semibold))
-            ScrollView {
-                VStack(spacing: 0) {
-                    if store.folders.isEmpty {
-                        Text(L("No folders yet. Add one, or drop folders here."))
-                            .foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 60)
+        Group {
+            switch store.activeAIDetail ?? .sharedFolders {
+            case .sharedFolders: SharedFoldersDetailView(store: store)
+            case .calendar: CalendarDetailView(store: store)
+            case .mail: MailDetailView(store: store)
+            case .keepAwake: KeepAwakeDetailView(store: store)
+            case .transcribe: TranscribeDetailView(store: store)
+            }
+        }
+        .environment(\.settingsLabelWidth, 118)
+        .frame(minWidth: 400, minHeight: 380)
+    }
+}
+
+struct SharedFoldersDetailView: View {
+    @ObservedObject var store: SettingsStore
+
+    var body: some View {
+        SettingsPage {
+            SettingsCard(title: L("AI access")) {
+                SettingsRow(title: L("AI access")) {
+                    SettingsSwitch(title: L("AI access"), isOn: Binding(get: { store.folderOn }, set: { store.setFolderAccess($0) }))
+                        .help(L("Off: no AI can read shared folders. Your choices below are kept for when you turn it back on."))
+                }
+                if store.folderOn {
+                    Divider()
+                    SettingsRow(title: L("Can read")) {
+                        perAICheckboxes(store, store.folderClaude, store.folderGPT, store.folderIlluminati) { ai, on in
+                            store.setFolderApps(ai, on)
+                        }
                     }
-                    ForEach(store.folders) { folder in row(folder) }
+                }
+                SettingsNote(text: L("Read only. Drop folders below. Hidden and secret files are never shown."), lines: 2)
+                    .help(L("Folders you share here can be listed, searched and read from Claude desktop, Claude Code and Codex on this Mac, by the AIs you allow. Nothing is changed or deleted. Hidden files, keys and .env files are never shown, and paths cannot leave the folder. File text sent to an AI becomes part of that conversation."))
+            }
+
+            SettingsCard(title: L("Shared folders")) {
+                if store.folders.isEmpty {
+                    Text(L("No folders yet. Add one, or drop folders here."))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, minHeight: 64)
+                        .padding(.horizontal, 10)
+                } else {
+                    ForEach(store.folders) { folder in
+                        folderRow(folder)
+                        Divider()
+                    }
+                }
+                HStack {
+                    SettingsAction(title: L("Add folder…")) { store.chooseFolders() }
+                }
+                .padding(.horizontal, 10).padding(.vertical, 8)
+                if !store.folderNotice.isEmpty {
+                    SettingsNote(text: store.folderNotice, lines: 3)
                 }
             }
-            .frame(height: min(320, max(60, CGFloat(store.folders.count) * 41)))
-            .background(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.accentColor, lineWidth: 2)
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.accentColor, lineWidth: 2)
                 .opacity(store.folderDropping ? 1 : 0))
             .onDrop(of: [UTType.fileURL], isTargeted: $store.folderDropping) { providers in
                 droppedURLs(providers) { store.addFolders($0) }
             }
-            SettingsAction(title: L("Add folder…")) { store.chooseFolders() }
-            if !store.folderNotice.isEmpty {
-                Text(store.folderNotice).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(3)
-            }
         }
-        .font(.system(size: 12))
-        .controlSize(.small)
-        .padding(12)
-        .frame(width: 320)
     }
 
-    func row(_ folder: SharedFolder) -> some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                if folder.missing {
-                    Image(systemName: "questionmark.folder").foregroundStyle(.secondary).frame(width: 18)
-                } else {
-                    Image(nsImage: NSWorkspace.shared.icon(for: .folder)).resizable().frame(width: 18, height: 18)
-                }
-                nameLabel(folder.name, folder.missing ? L("Not found: moved or deleted?")
-                          : (folder.last.isEmpty ? folder.shortPath : folder.last))
-                    .help(folder.path)
-                    .opacity(folder.on || folder.missing ? 1 : 0.5)
-                if folder.missing {
-                    SettingsAction(title: L("Locate…")) { store.locateFolder(folder) }.frame(width: 64)
-                } else {
-                    Toggle(L("Share"), isOn: Binding(get: { folder.on }, set: { store.setFolderOn(folder, $0) }))
-                        .labelsHidden().toggleStyle(.switch).controlSize(.mini)
-                        .help(L("Off: paused, the AIs cannot read it until you turn it on again"))
-                }
-                Button { store.removeFolder(folder) } label: {
-                    Image(systemName: "minus.circle").foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .help(L("Stop sharing (the folder itself is not touched)"))
+    private func folderRow(_ folder: SharedFolder) -> some View {
+        HStack(spacing: 8) {
+            if folder.missing {
+                Image(systemName: "questionmark.folder").foregroundStyle(.secondary).frame(width: 18)
+            } else {
+                Image(nsImage: NSWorkspace.shared.icon(for: .folder)).resizable().frame(width: 18, height: 18)
             }
-            .frame(height: 40)
-            if folder.id != store.folders.last?.id { Divider() }
+            nameLabel(folder.name, folder.missing ? L("Not found: moved or deleted?")
+                      : (folder.last.isEmpty ? folder.shortPath : folder.last))
+                .help(folder.path)
+                .opacity(folder.on || folder.missing ? 1 : 0.5)
+            if folder.missing {
+                SettingsAction(title: L("Locate…")) { store.locateFolder(folder) }.frame(width: 80)
+            } else {
+                Toggle(L("Share"), isOn: Binding(get: { folder.on }, set: { store.setFolderOn(folder, $0) }))
+                    .labelsHidden().toggleStyle(.switch).controlSize(.mini)
+                    .help(L("Off: paused, the AIs cannot read it until you turn it on again"))
+            }
+            Button { store.removeFolder(folder) } label: {
+                Image(systemName: "minus.circle").foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help(L("Stop sharing (the folder itself is not touched)"))
         }
+        .padding(.horizontal, 10).padding(.vertical, 6)
+        .frame(minHeight: 40)
     }
 }
 
-struct MailAccountList: View {
+struct CalendarDetailView: View {
     @ObservedObject var store: SettingsStore
 
-    var body: some View {
-        SettingsPopover(title: L("Mail accounts"), listHeight: CGFloat(store.mailAccounts.count) * 32) {
-            ForEach(store.mailAccounts) { acct in
-                HStack(spacing: 0) {
-                    nameLabel(acct.name, "")
-                    Toggle(L("Read"), isOn: Binding(get: { acct.shown }, set: { store.setMailShown(acct.name, $0) }))
-                        .labelsHidden().toggleStyle(.checkbox).frame(width: 44)
-                }
-                .frame(height: 32)
-                if acct.id != store.mailAccounts.last?.id { Divider() }
-            }
-        }
+    private var calendarButton: String? {
+        let a = store.calAccess
+        if a == "full" || a == "" || a == "unavailable" { return nil }
+        return a == "notDetermined" ? L("Allow…") : L("Open System Settings")
     }
-}
-
-struct CalendarChanges: View {
-    @ObservedObject var store: SettingsStore
 
     var body: some View {
-        SettingsPopover(title: L("Recent changes"), listHeight: CGFloat(store.calChanges.count) * 44) {
-            ForEach(store.calChanges) { change in
-                HStack(spacing: 8) {
-                    Text(change.text).font(.system(size: 11)).lineLimit(2)
-                        .foregroundStyle(change.undone ? Color.secondary : Color.primary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .help(change.text)
-                    if change.undone {
-                        Text(L("Undone")).font(.system(size: 11)).foregroundStyle(.secondary)
-                    } else {
-                        SettingsAction(title: L("Undo")) { store.undoCalendarChange(change.n) }.frame(width: 60)
+        SettingsPage {
+            SettingsCard(title: L("AI access")) {
+                accessStatusRow(store.calAccessText, ok: store.calAccess == "full", button: calendarButton) {
+                    store.requestCalendarAccess()
+                }
+                Divider()
+                SettingsRow(title: L("AI access")) {
+                    SettingsSwitch(title: L("AI access"), isOn: Binding(get: { store.calOn }, set: { store.setCalendar(["on": $0]) }))
+                        .help(L("Off: no AI can read or change the calendar. Your choices below are kept for when you turn it back on."))
+                }
+                if store.calOn {
+                    Divider()
+                    SettingsRow(title: L("Can read")) {
+                        perAICheckboxes(store, store.calClaude, store.calGPT, store.calIlluminati) { ai, on in
+                            store.setCalendar(["apps": [ai: on]])
+                        }
+                    }
+                    Divider()
+                    SettingsRow(title: L("Can change")) {
+                        perAICheckboxes(store, store.calWriteClaude, store.calWriteGPT, store.calWriteIlluminati) { ai, on in
+                            store.setCalendar(["write_apps": [ai: on]])
+                        }
+                    }
+                    Divider()
+                    SettingsRow(title: L("Details")) {
+                        Toggle(L("Notes and attendees"), isOn: Binding(get: { store.calDetails }, set: { store.setCalendar(["details": $0]) }))
+                            .toggleStyle(.checkbox)
+                            .help(L("Include notes and attendees"))
+                    }
+                    Divider()
+                    SettingsRow(title: L("Ask first")) {
+                        SettingsSwitch(title: L("Ask me before every change"), isOn: Binding(get: { store.calConfirm }, set: { store.setCalendar(["confirm": $0]) }))
+                            .help(L("Ask me before every change"))
                     }
                 }
-                .frame(height: 44)
-                if change.id != store.calChanges.last?.id { Divider() }
+                SettingsNote(text: L("AIs change or delete only events they added. Every change can be undone."), lines: 3)
+                    .help(L("Only the AIs you allow see the calendars you leave on: titles, times and places; notes and attendees only if you turn them on. After a change, quit that AI app (⌘Q) and open it again.")
+                          + "\n\n" + L("AIs may add events to the calendars turned on here, and change or delete only events they added through AI Face; never anyone else's. With asking on, each change waits for your OK in a window. No invitations are sent."))
+            }
+
+            if store.calOn {
+                SettingsCard(title: L("Calendars")) {
+                    if store.calendars.isEmpty {
+                        SettingsNote(text: L("No calendars available."), lines: 2).padding(.top, 8)
+                    } else {
+                        HStack(spacing: 0) {
+                            Spacer()
+                            Text(L("Read")).frame(width: 48)
+                            Text(L("Change")).frame(width: 54)
+                        }
+                        .font(.system(size: 10)).foregroundStyle(.secondary)
+                        .padding(.horizontal, 10).padding(.top, 6).padding(.bottom, 4)
+                        Divider()
+                        ForEach(store.calendars) { cal in
+                            HStack(spacing: 0) {
+                                nameLabel(cal.title, cal.account)
+                                Toggle(L("Read"), isOn: Binding(get: { cal.shown }, set: { store.setCalendarShown(cal.id, $0) }))
+                                    .labelsHidden().frame(width: 48)
+                                Group {
+                                    if cal.canWrite {
+                                        Toggle(L("Change"), isOn: Binding(get: { cal.write }, set: { store.setCalendarWritable(cal.id, $0) }))
+                                            .labelsHidden()
+                                    } else {
+                                        Text("–").foregroundStyle(.tertiary)
+                                    }
+                                }.frame(width: 54)
+                            }
+                            .toggleStyle(.checkbox)
+                            .padding(.horizontal, 10)
+                            .frame(minHeight: 36)
+                            if cal.id != store.calendars.last?.id { Divider() }
+                        }
+                    }
+                }
+            }
+
+            if !store.calChanges.isEmpty {
+                SettingsCard(title: L("Recent changes")) {
+                    ForEach(store.calChanges) { change in
+                        HStack(spacing: 8) {
+                            Text(change.text).font(.system(size: 11)).lineLimit(2)
+                                .foregroundStyle(change.undone ? Color.secondary : Color.primary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .help(change.text)
+                            if change.undone {
+                                Text(L("Undone")).font(.system(size: 11)).foregroundStyle(.secondary)
+                            } else {
+                                SettingsAction(title: L("Undo")) { store.undoCalendarChange(change.n) }.frame(width: 64)
+                            }
+                        }
+                        .padding(.horizontal, 10).padding(.vertical, 6)
+                        .frame(minHeight: 40)
+                        if change.id != store.calChanges.last?.id { Divider() }
+                    }
+                }
             }
         }
+    }
+}
+
+struct MailDetailView: View {
+    @ObservedObject var store: SettingsStore
+
+    private var mailButton: String? {
+        let a = store.mailAccess
+        if a == "allowed" || a == "" || a == "unavailable" { return nil }
+        return a == "denied" ? L("Open System Settings") : L("Allow…")
+    }
+
+    var body: some View {
+        SettingsPage {
+            SettingsCard(title: L("AI access")) {
+                accessStatusRow(store.mailAccessText, ok: store.mailAccess == "allowed", busy: store.mailAsking,
+                                button: mailButton) { store.requestMailAccess() }
+                Divider()
+                SettingsRow(title: L("AI access")) {
+                    SettingsSwitch(title: L("AI access"), isOn: Binding(get: { store.mailOn }, set: { store.setMail(["on": $0]) }))
+                        .help(L("Off: no AI can read mail. Your choices below are kept for when you turn it back on."))
+                }
+                if store.mailOn {
+                    Divider()
+                    SettingsRow(title: L("Can read")) {
+                        perAICheckboxes(store, store.mailClaude, store.mailGPT, store.mailIlluminati) { ai, on in
+                            store.setMail(["apps": [ai: on]])
+                        }
+                    }
+                    Divider()
+                    SettingsRow(title: L("Links")) {
+                        Toggle(L("Hide links and codes"), isOn: Binding(get: { store.mailHideLinks }, set: { store.setMail(["hide_links": $0]) }))
+                            .toggleStyle(.checkbox)
+                    }
+                }
+                SettingsNote(text: L("Read only: never sends, moves, deletes or marks mail as read."), lines: 2)
+                    .help(L("AI Face reads the Mail app's inboxes. It never sends, moves or deletes mail, and does not mark it as read.")
+                          + "\n\n" + L("Only the AIs you allow can read the accounts you leave on. With links and codes hidden, a link shows only its site and sign-in codes and passwords are left out. After a change, quit that AI app (⌘Q) and open it again."))
+            }
+
+            if store.mailOn {
+                SettingsCard(title: L("Mail accounts")) {
+                    if store.mailAccounts.isEmpty {
+                        SettingsNote(text: L("Open Mail to see your accounts."), lines: 2).padding(.top, 8)
+                    } else {
+                        HStack(spacing: 0) {
+                            Spacer()
+                            Text(L("Read")).frame(width: 48)
+                        }
+                        .font(.system(size: 10)).foregroundStyle(.secondary)
+                        .padding(.horizontal, 10).padding(.top, 6).padding(.bottom, 4)
+                        Divider()
+                        ForEach(store.mailAccounts) { acct in
+                            HStack(spacing: 0) {
+                                nameLabel(acct.name, "")
+                                Toggle(L("Read"), isOn: Binding(get: { acct.shown }, set: { store.setMailShown(acct.name, $0) }))
+                                    .labelsHidden().toggleStyle(.checkbox).frame(width: 48)
+                            }
+                            .padding(.horizontal, 10)
+                            .frame(minHeight: 32)
+                            if acct.id != store.mailAccounts.last?.id { Divider() }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct KeepAwakeDetailView: View {
+    @ObservedObject var store: SettingsStore
+
+    var body: some View {
+        SettingsPage {
+            SettingsCard(title: L("Keep awake")) {
+                accessStatusRow(store.awakeReady ? L("Allowed") : L("Not set up"), ok: store.awakeReady,
+                                button: store.awakeReady ? L("Remove…") : L("Set up…"), title: L("Permission")) {
+                    store.setUpAwake(remove: store.awakeReady)
+                }
+                .help(store.awakeReady ? L("Removes the permission and the awake command (in Terminal, with your Mac password).")
+                      : L("Asks for your Mac password once, in Terminal, and allows only this one setting."))
+                if store.awakeReady {
+                    Divider()
+                    SettingsRow(title: L("Status")) {
+                        SettingsStatus(text: store.awakeStatus, ok: store.awakeOn)
+                    }
+                    Divider()
+                    SettingsRow(title: L("Terminal command")) {
+                        if store.awakeCommand {
+                            SettingsStatus(text: L("Installed"), ok: true)
+                        } else {
+                            SettingsAction(title: L("Install…")) { store.setUpAwake() }.fixedSize()
+                        }
+                    }
+                    .help(L("In Terminal, awake COMMAND keeps the Mac awake while COMMAND runs (for example: awake python train.py)."))
+                }
+                SettingsNote(text: store.awakeNotice.isEmpty
+                             ? L("Lid closed, 1–4 hours from the menu. Turns off by itself.") : store.awakeNotice, lines: 3)
+                    .help(L("Keeps the MacBook awake even with the lid closed, for 1, 2 or 4 hours (menu → Keep awake). It turns off at the end, at 20% battery, when the Mac gets hot, in Low Power Mode and when AI Face quits. Setting it up asks for your Mac password once, in Terminal, and allows only this one setting."))
+            }
+
+            if store.awakeReady {
+                SettingsCard(title: L("AI access")) {
+                    SettingsRow(title: L("AI access")) {
+                        SettingsSwitch(title: L("AI access"), isOn: Binding(get: { store.awakeAIOn }, set: { store.setAwakeAI($0) }))
+                            .help(L("Off: no AI or Claude Code hook can keep the Mac awake. Manual keep awake from the menu and Terminal still works."))
+                    }
+                    if store.awakeAIOn {
+                        Divider()
+                        SettingsRow(title: "Claude Code") {
+                            Toggle(L("While it works"), isOn: Binding(get: { store.hooks == "on" },
+                                                                      set: { store.setAI("claude_code_awake", on: $0) }))
+                                .toggleStyle(.checkbox)
+                                .help(L("Claude Code: keep the Mac awake while it works"))
+                        }
+                        Divider()
+                        SettingsRow(title: L("AI can ask")) {
+                            perAICheckboxes(store, store.awakeClaude, store.awakeGPT, store.awakeIlluminati) { ai, on in
+                                store.setAwakeApps(ai, on)
+                            }
+                            .help(L("Which AIs may keep the Mac awake when you ask them to (up to 4 hours, renewed while they work)."))
+                        }
+                    }
+                    SettingsNote(text: L("Manual keep awake (menu bar and Terminal) works even when AI access is off."), lines: 2)
+                }
+            }
+        }
+    }
+}
+
+struct TranscribeDetailView: View {
+    @ObservedObject var store: SettingsStore
+    @AppStorage(Transcriber.outputFolderKey) private var transcriptFolderPath = ""
+
+    var body: some View {
+        let folder = Transcriber.outputFolder(for: transcriptFolderPath)
+        let ready = Transcriber.shared.setUp || API.preview
+        return SettingsPage {
+            SettingsCard(title: L("Storage")) {
+                SettingsRow(title: L("Save transcripts to")) {
+                    Text((folder.path as NSString).abbreviatingWithTildeInPath)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1).truncationMode(.middle)
+                        .textSelection(.enabled)
+                        .help(folder.path)
+                }
+                Divider()
+                SettingsRow(title: L("Folder")) {
+                    SettingsAction(title: L("Open")) { Transcriber.shared.openTranscriptFolder() }
+                    SettingsAction(title: L("Change…")) { chooseTranscriptFolder(current: folder) }
+                    SettingsAction(title: L("Use Default")) { transcriptFolderPath = "" }
+                        .disabled(transcriptFolderPath.isEmpty)
+                }
+                SettingsNote(text: L("The new folder applies to future transcripts."), lines: 2)
+            }
+
+            SettingsCard(title: L("Setup & glossary")) {
+                accessStatusRow(ready ? L("Ready") : L("Not set up"), ok: ready,
+                                button: ready ? nil : L("Set Up…"), title: "Whisper") {
+                    Transcriber.shared.openSetup()
+                }
+                Divider()
+                SettingsRow(title: L("Glossary")) {
+                    Text("glossary.txt").foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .help(Transcriber.glossaryFile.path)
+                    SettingsAction(title: L("Open")) { Transcriber.shared.openGlossary() }.fixedSize()
+                }
+                .help(L("Names and terms Whisper should spell right (one per line)."))
+                SettingsNote(text: L("Runs locally on this Mac and keeps text only (no audio files). AIs cannot start or control it; add the folder in Shared folders if you want AIs to read transcripts."), lines: 4)
+            }
+        }
+    }
+
+    private func chooseTranscriptFolder(current: URL) {
+        let panel = NSOpenPanel()
+        panel.message = L("Choose where new transcripts are saved.")
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = FileManager.default.fileExists(atPath: current.path)
+            ? current : FileManager.default.homeDirectoryForCurrentUser
+        guard panel.runModal() == .OK, let folder = panel.url else { return }
+        transcriptFolderPath = folder.path == Transcriber.defaultOutputFolder.path ? "" : folder.path
     }
 }
 

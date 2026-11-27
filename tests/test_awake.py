@@ -162,6 +162,40 @@ class AwakeTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 awake.save_agents(bad, now)
 
+    def test_ai_master_switch(self):
+        settings = awake.settings_store.SETTINGS
+        saved = settings.read_text() if settings.exists() else None
+        self.addCleanup(lambda: settings.write_text(saved) if saved is not None else settings.unlink(missing_ok=True))
+        now = time.time()
+        self.assertTrue(awake.ai_on())
+        self.assertTrue(awake.status(now)['ai_on'])
+        awake.start(60, now)
+        awake.acquire('mcp:claude', 20, 'Claude', auto=True, now=now)
+        awake.acquire('claude-code:s1', 20, 'Claude Code', auto=True, now=now)
+        awake.save_ai_on(False, now)
+        self.assertFalse(awake.ai_on())
+        self.assertFalse(awake.status(now)['ai_on'])
+        # AI leases end right away; the user's manual lease stays alive.
+        self.assertEqual([x['id'] for x in awake.status(now)['leases']], ['manual'])
+        self.assertEqual(self.value(), '1')
+        with self.assertRaises(ValueError):
+            awake.acquire('mcp:claude', 20, 'Claude', auto=True, now=now)
+        with self.assertRaises(ValueError):
+            awake.acquire('claude-code:s2', 20, 'Claude Code', auto=True, now=now)
+        # Per-AI edits keep the master switch off.
+        awake.save_agents({'gpt': False}, now)
+        self.assertFalse(awake.ai_on())
+        # Turning it back on restores AI access while preserving per-AI choices.
+        awake.save_ai_on(True, now)
+        self.assertTrue(awake.ai_on())
+        self.assertTrue(awake.acquire('mcp:claude', 20, 'Claude', auto=True, now=now))
+        self.assertTrue(awake.acquire('claude-code:s2', 20, 'Claude Code', auto=True, now=now))
+        with self.assertRaises(ValueError):
+            awake.acquire('mcp:gpt', 20, 'GPT', auto=True, now=now)
+        for bad in (None, 1, 'yes'):
+            with self.assertRaises(ValueError):
+                awake.save_ai_on(bad, now)
+
     def test_setup_and_remove_open_their_own_script(self):
         opened = []
         with patch.object(awake, '_run', lambda args, timeout=10: (opened.append(args[-1]), (0, ''))[1]):

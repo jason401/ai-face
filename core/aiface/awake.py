@@ -99,8 +99,14 @@ def open_setup(remove=False):
 AGENTS = ('claude', 'gpt', 'illuminati')   # the AIs that may ask through MCP (default: all)
 
 
+def ai_on():
+    """Master switch for AI keep-awake requests (MCP + Claude Code hooks). Default: on."""
+    data = settings_store.load_settings().get('awake')
+    return data.get('on') is not False if isinstance(data, dict) else True
+
+
 def agents():
-    """Which AIs may keep the Mac awake through MCP (settings 'awake': {'apps': {...}})."""
+    """Which AIs may keep the Mac awake through MCP (settings 'awake': {'on': ..., 'apps': {...}})."""
     data = settings_store.load_settings().get('awake')
     apps = data.get('apps') if isinstance(data, dict) else None
     apps = apps if isinstance(apps, dict) else {}
@@ -108,7 +114,22 @@ def agents():
 
 
 def agent_allowed(agent):
-    return agents().get(agent, False)
+    return ai_on() and agents().get(agent, False)
+
+
+def save_ai_on(on, now=None):
+    """Turn all AI keep-awake requests (MCP and Claude Code hooks) on or off.
+    Manual menu leases and Terminal `awake` jobs are unaffected."""
+    if type(on) is not bool:
+        raise ValueError(T('잘못된 요청입니다.', 'Bad request.'))
+    with _lock:
+        settings_store.save_settings(awake=dict(on=on, apps=agents()))
+        if not on:
+            state = _load()
+            for lid in list(state['leases']):
+                if lid.startswith(('mcp:', 'claude-code:')):
+                    release(lid, now)
+    return on
 
 
 def save_agents(apps, now=None):
@@ -118,7 +139,7 @@ def save_agents(apps, now=None):
     with _lock:
         current = agents()
         current.update(apps)
-        settings_store.save_settings(awake=dict(apps=current))
+        settings_store.save_settings(awake=dict(on=ai_on(), apps=current))
         for k, on in current.items():
             if not on:
                 release('mcp:' + k, now)
@@ -261,6 +282,9 @@ def acquire(lid, minutes, label='', pid=None, auto=False, now=None):
     if lid.startswith('mcp:') and not agent_allowed(lid[4:]):
         raise ValueError(T('사용자가 이 AI의 깨어 있기 요청을 꺼 두었습니다 (설정 → AI → 깨어 있기).',
                            'The user turned off keep awake for this AI (AI Face settings → AI → Keep awake).'))
+    if lid.startswith('claude-code:') and not ai_on():
+        raise ValueError(T('사용자가 AI 깨어 있기 요청을 꺼 두었습니다 (설정 → AI → 깨어 있기).',
+                           'The user turned off AI keep awake (AI Face settings → AI → Keep awake).'))
     if pid is not None and (type(pid) is not int or not _alive(pid)):
         raise ValueError(T('작업 프로세스를 찾지 못했습니다.', 'The job process is not running.'))
     if not supported():
@@ -380,7 +404,7 @@ def status(now=None):
                      for k, v in state['leases'].items() if _active(v, now)), key=lambda x: -x['left'])
     paused = max(0, int((state.get('paused_until') or 0) - now))
     return dict(supported=supported(), ready=bool(_cache['ready']), command=command_installed(),
-                on=bool(_cache['on']), apps=agents(),
+                on=bool(_cache['on']), ai_on=ai_on(), apps=agents(),
                 ours=bool(state.get('on')), left=max([x['left'] for x in leases], default=0),
                 leases=leases, paused=paused, reason=last_reason)
 

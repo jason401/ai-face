@@ -113,6 +113,24 @@ struct LibraryItem: Identifiable, Hashable {
     var id: String { return "\(name)|\(mtime)" }
 }
 
+enum AIDetailSection: String, Equatable {
+    case sharedFolders
+    case calendar
+    case mail
+    case keepAwake
+    case transcribe
+
+    var title: String {
+        switch self {
+        case .sharedFolders: return L("Shared folders")
+        case .calendar: return L("Calendar")
+        case .mail: return L("Mail")
+        case .keepAwake: return L("Keep awake")
+        case .transcribe: return L("Transcribe")
+        }
+    }
+}
+
 
 /// Four real updater stages; timing comes from /update, never from a simulated percentage.
 struct UpdateProgress {
@@ -261,16 +279,13 @@ final class SettingsStore: NSObject, ObservableObject {
     var foldersChanged: ((String) -> Void)?   // the menu refreshes its list (and shows errors)
     var openBoard: (() -> Void)?        // opens the board details window
     var openStream: (() -> Void)?       // opens the streaming test window
+    var openAIDetail: ((AIDetailSection) -> Void)?   // opens the AI details auxiliary window
+    @Published var activeAIDetail: AIDetailSection?
     @Published var folderShelfHover = FacePanel.showOnHover {
         didSet { if !API.preview { UserDefaults.standard.set(folderShelfHover, forKey: FacePanel.hoverKey) } }
     }
     @Published var hooks = "off"
     @Published var aiNotice = ""
-    // Popovers in the AI tab (no @State in views: see BoardTab)
-    @Published var showCalendars = false
-    @Published var showCalChanges = false
-    @Published var showMailAccounts = false
-    @Published var showFolders = false
     // General
     @Published var loginItem = false
     @Published var mono = false
@@ -286,6 +301,7 @@ final class SettingsStore: NSObject, ObservableObject {
     @Published var awakeSupported = false
     @Published var awakeReady = false
     @Published var awakeOn = false
+    @Published var awakeAIOn = true        // master switch for AI keep-awake requests (MCP + Claude Code hooks)
     @Published var awakeLeft = 0
     @Published var awakeNotice = ""
     @Published var awakeCommand = false
@@ -372,6 +388,7 @@ final class SettingsStore: NSObject, ObservableObject {
                 self.awakeSupported = (a["supported"] as? Bool) ?? false
                 self.awakeReady = (a["ready"] as? Bool) ?? false
                 self.awakeOn = (a["on"] as? Bool) ?? false
+                self.awakeAIOn = (a["ai_on"] as? Bool) ?? true
                 self.awakeLeft = (a["left"] as? NSNumber)?.intValue ?? 0
                 self.awakeCommand = (a["command"] as? Bool) ?? false
                 if let apps = a["apps"] as? [String: Bool] {
@@ -1162,6 +1179,19 @@ final class SettingsStore: NSObject, ObservableObject {
         }
     }
 
+    /// Turn all AI keep-awake requests (MCP + Claude Code hooks) on or off. Applies right away.
+    func setAwakeAI(_ on: Bool) {
+        awakeAIOn = on
+        API.shared.call("awake_settings", ["on": on]) { [weak self] ok, reply in
+            if !ok {
+                self?.awakeAIOn = !on
+                self?.aiNotice = (reply["message"] as? String) ?? ""
+            } else {
+                self?.refresh()
+            }
+        }
+    }
+
     /// Which AIs may keep the Mac awake through MCP. Applies right away (no restart).
     func setAwakeApps(_ ai: String, _ on: Bool) {
         switch ai {
@@ -1257,9 +1287,11 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     let store = SettingsStore()
     private var window: NSWindow?
     private var boardWindow: NSWindow?
+    private var aiDetailWindow: NSWindow?
     private var clickMonitor: Any?
 
     static let size = NSSize(width: 334, height: 460)
+    static let aiDetailSize = NSSize(width: 440, height: 540)
 
     private func tab<V: View>(_ content: V, _ title: String, _ symbol: String) -> NSTabViewItem {
         let size = SettingsWindowController.size
@@ -1292,6 +1324,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
             window = w
             store.openBoard = { [weak self] in self?.showBoard() }
             store.openStream = { StreamTestWindow.shared.show() }
+            store.openAIDetail = { [weak self] section in self?.showAIDetail(section) }
         }
         if clickMonitor == nil, let window { clickMonitor = SettingsTabs.clickMonitor(for: window) }
         store.start()
@@ -1322,14 +1355,57 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         boardWindow?.makeKeyAndOrderFront(nil)
     }
 
+    /// AI feature details in a single roomy, resizable window beside Settings.
+    func showAIDetail(_ section: AIDetailSection) {
+        store.activeAIDetail = section
+        switch section {
+        case .sharedFolders: store.loadFolders()
+        case .calendar: store.loadCalendar()
+        case .mail: store.loadMail()
+        case .keepAwake: store.refresh(); store.refreshAI()
+        case .transcribe: break
+        }
+        if aiDetailWindow == nil {
+            let size = SettingsWindowController.aiDetailSize
+            let host = NSHostingController(rootView: AIDetailWindowView(store: store))
+            let w = NSWindow(contentViewController: host)
+            w.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+            w.setContentSize(size)
+            w.minSize = NSSize(width: 400, height: 380)
+            w.maxSize = NSSize(width: 640, height: 820)
+            w.isReleasedWhenClosed = false
+            w.delegate = self
+            if let frame = window?.frame {
+                var x = frame.maxX + 12
+                var y = frame.maxY
+                if let screen = window?.screen?.visibleFrame ?? NSScreen.main?.visibleFrame {
+                    if x + size.width > screen.maxX {
+                        x = max(screen.minX + 8, frame.minX - size.width - 12)
+                    }
+                    y = min(y, screen.maxY)
+                }
+                w.setFrameTopLeftPoint(NSPoint(x: x, y: y))
+            } else {
+                w.center()
+            }
+            aiDetailWindow = w
+        }
+        aiDetailWindow?.title = section.title
+        aiDetailWindow?.makeKeyAndOrderFront(nil)
+    }
+
     func windowWillClose(_ notification: Notification) {
-        // The store keeps polling while either window is still open.
-        if (notification.object as? NSWindow) === window, let monitor = clickMonitor {
+        // The store keeps polling while any settings window is still open.
+        let closed = notification.object as? NSWindow
+        if closed === window, let monitor = clickMonitor {
             NSEvent.removeMonitor(monitor)
             clickMonitor = nil
         }
-        let other = (notification.object as? NSWindow) === window ? boardWindow : window
-        if other?.isVisible != true { store.stop() }
+        if closed === aiDetailWindow {
+            store.activeAIDetail = nil
+        }
+        let anyVisible = [window, boardWindow, aiDetailWindow].contains { $0 !== closed && $0?.isVisible == true }
+        if !anyVisible { store.stop() }
     }
 }
 

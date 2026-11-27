@@ -551,8 +551,13 @@ def main():
                         awake.release(data.get('id'))
                     elif action == 'awake_resume':
                         awake.resume_auto()
-                    elif action == 'awake_settings':   # which AIs may ask (settings window)
-                        awake.save_agents(data.get('apps'))
+                    elif action == 'awake_settings':   # AI access switch and which AIs may ask (settings window)
+                        if 'on' not in data and 'apps' not in data:
+                            raise ValueError(T('잘못된 요청입니다.', 'Bad request.'))
+                        if 'on' in data:
+                            awake.save_ai_on(data.get('on'))
+                        if 'apps' in data:
+                            awake.save_agents(data.get('apps'))
                     elif action == 'calendar_settings':
                         calendar_access.save(data.get('changes'))
                     elif action == 'mail_settings':

@@ -79,7 +79,7 @@ struct SettingsAction: View {
 
     var body: some View {
         Button(action: action) {
-            Text(title).lineLimit(1).frame(maxWidth: .infinity, minHeight: 24)
+            Text(title).lineLimit(1).padding(.horizontal, 8).frame(maxWidth: .infinity, minHeight: 24)
                 .background(RoundedRectangle(cornerRadius: 5).fill(Color.primary.opacity(0.07)))
         }.buttonStyle(.plain)
     }

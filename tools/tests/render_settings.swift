@@ -105,21 +105,33 @@ import SwiftUI
         }
         let noAwakeStore = SettingsStore()
         noAwakeStore.awakeSupported = true
+        noAwakeStore.awakeAIOn = false
         noAwakeStore.calOn = false; noAwakeStore.mailOn = false; noAwakeStore.folderOn = false
+        func aiDetail(_ section: AIDetailSection) -> AnyView {
+            store.activeAIDetail = section
+            return AnyView(AIDetailWindowView(store: store))
+        }
         let views: [(String, () -> AnyView)] = [
             ("1general-waiting", { AnyView(GeneralTab(store: waitingStore)) }),
             ("1general", { AnyView(GeneralTab(store: store)) }), ("1appearance", { AnyView(AppearanceTab(store: store)) }), ("1appearance-noboard", { AnyView(SettingsPage { BoardCard(store: SettingsStore()) }) }),
-            ("1weather-date", { AnyView(SettingsPage { CampfireWeatherCard(store: weatherStore) }) }), ("2ai", { AnyView(AITab(store: store)) }),
+            ("1weather-date", { AnyView(SettingsPage { CampfireWeatherCard(store: weatherStore) }) }),
+            ("2ai", { store.activeAIDetail = .sharedFolders; return AnyView(AITab(store: store)) }),
             ("2ai-shelf", { AnyView(FolderShelfView(store: store, panel: FacePanel(store: store)).padding(12).frame(width: FacePanel.width).background(Color(nsColor: .windowBackgroundColor))) }),
-            ("5panel-peek", { panelView(pinned: false) }), ("5panel-noawake", { panelView(pinned: false, awake: false) }), ("6ai-off", { AnyView(AITab(store: noAwakeStore)) }), ("5panel-pinned", { panelView(pinned: true) }), ("5panel-drag", { panelView(pinned: false, compact: true) }), ("2ai-folders", { AnyView(FolderList(store: store).background(Color(nsColor: .windowBackgroundColor))) }), ("2ai-calendars", { AnyView(CalendarList(store: store).background(Color(nsColor: .windowBackgroundColor))) }), ("2ai-changes", { AnyView(CalendarChanges(store: store).background(Color(nsColor: .windowBackgroundColor))) }),
-            ("2ai-mail", { AnyView(MailAccountList(store: store).background(Color(nsColor: .windowBackgroundColor))) }),
+            ("5panel-peek", { panelView(pinned: false) }), ("5panel-noawake", { panelView(pinned: false, awake: false) }), ("6ai-off", { AnyView(AITab(store: noAwakeStore)) }), ("5panel-pinned", { panelView(pinned: true) }), ("5panel-drag", { panelView(pinned: false, compact: true) }),
+            ("2detail-folders", { aiDetail(.sharedFolders) }),
+            ("2detail-calendar", { aiDetail(.calendar) }),
+            ("2detail-mail", { aiDetail(.mail) }),
+            ("2detail-awake", { aiDetail(.keepAwake) }),
+            ("2detail-transcribe", { aiDetail(.transcribe) }),
             ("3board", { AnyView(BoardDetails(store: store)) }),
             ("4history-day", { history("day") }), ("4history-week", { history("week") }),
             ("4history-month", { history("month") }), ("4history-year", { history("year") })]
         for appearance in [NSAppearance.Name.darkAqua, .aqua] {
             for (name, make) in views {
                 let view = make()
-                let size = NSSize(width: SettingsWindowController.size.width, height: name.hasPrefix("2ai-") ? 420 : 1000)
+                let size = name.hasPrefix("2detail-")
+                    ? SettingsWindowController.aiDetailSize
+                    : NSSize(width: SettingsWindowController.size.width, height: name.hasPrefix("2ai-") ? 420 : 1000)
                 let host = NSHostingView(rootView: view.frame(width: size.width, height: size.height))
                 let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
                 window.appearance = NSAppearance(named: appearance)
