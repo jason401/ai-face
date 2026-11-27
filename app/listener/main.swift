@@ -1,6 +1,8 @@
 // AI Face Listener: writes down what this Mac plays and what the microphone hears, as text only.
-// A helper app of its own (Contents/Helpers/AI Face Listener.app) so that only it holds the microphone
-// and system audio permissions; AI Face, which AIs can drive over MCP, never does.
+// A helper app of its own (Contents/Helpers/AI Face Listener.app): only it opens the microphone and
+// the system audio tap. macOS attributes the permission to the enclosing AI Face bundle (its usage
+// strings are checked, and Privacy & Security lists AI Face), but no code in AI Face or its server
+// records audio.
 //
 //   --start --agreed TIME [--title T] [--language auto|ko|en] [--out FOLDER]
 //        live, until "stop" (AI Face's panel). TIME: when everyone's agreement was confirmed there;

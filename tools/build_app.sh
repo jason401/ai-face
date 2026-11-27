@@ -27,8 +27,9 @@ xcrun swiftc -swift-version 5 -O -target "$ARCH-apple-macos13.0" \
   -o "$CANDIDATE/Contents/MacOS/AIFace" app/macos/*.swift >"$LOG" 2>&1
 xcrun swiftc -swift-version 5 -O -target "$ARCH-apple-macos13.0" -framework Cocoa tools/install_bridge.swift \
   -o "$CANDIDATE/Contents/Helpers/InstallBridge" >>"$LOG" 2>&1
-# AI Face Listener (Transcribe): an app of its own so that only it holds the microphone and system
-# audio permissions. The process tap needs macOS 14.2.
+# AI Face Listener (Transcribe): an app of its own, the only code that opens the microphone and the
+# system audio tap. macOS attributes the permission to the enclosing AI Face bundle, so both carry
+# the usage strings. The process tap needs macOS 14.2.
 LISTENER="$CANDIDATE/Contents/Helpers/AI Face Listener.app"
 mkdir -p "$LISTENER/Contents/MacOS"
 xcrun swiftc -swift-version 5 -O -target "$ARCH-apple-macos14.2" -framework Cocoa -framework AVFoundation -framework CoreAudio \

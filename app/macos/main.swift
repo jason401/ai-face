@@ -93,13 +93,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Keeps a previously chosen transcript folder synced with the Python server for MCP reads.
+    /// AIs read transcripts where the Listener writes them (SettingsStore.syncTranscriptFolder).
     private func syncTranscriptFolder() {
-        let localFolder = UserDefaults.standard.string(forKey: Transcriber.outputFolderKey) ?? ""
-        guard !localFolder.isEmpty else { return }
         API.shared.getJSON("transcripts/status") { json in
-            guard let s = json as? [String: Any], (s["custom"] as? Bool) != true else { return }
-            API.shared.call("transcript_settings", ["changes": ["folder": localFolder]])
+            if let s = json as? [String: Any] { SettingsStore.syncTranscriptFolder(s) }
         }
     }
 

@@ -1021,7 +1021,18 @@ final class SettingsStore: NSObject, ObservableObject {
 
     // MARK: Transcripts (read only for AIs)
 
-    func loadTranscripts() {
+    /// The Listener writes where this app's setting says; the server lets AIs read where its own
+    /// setting says. If they differ (a change made while the server was not answering, a reset of
+    /// either), this app's setting wins. `done(true)` after a change was saved.
+    static func syncTranscriptFolder(_ status: [String: Any], done: ((Bool) -> Void)? = nil) {
+        let local = UserDefaults.standard.string(forKey: Transcriber.outputFolderKey) ?? ""
+        let want = Transcriber.outputFolder(for: local).resolvingSymlinksInPath().standardizedFileURL.path
+        let have = URL(fileURLWithPath: (status["folder"] as? String) ?? "").resolvingSymlinksInPath().standardizedFileURL.path
+        guard want != have else { done?(false); return }
+        API.shared.call("transcript_settings", ["changes": ["folder": local]]) { ok, _ in done?(ok) }
+    }
+
+    func loadTranscripts(sync: Bool = true) {
         API.shared.getJSON("transcripts/status") { [weak self] json in
             guard let self = self, let s = json as? [String: Any] else { return }
             self.transcriptOn = (s["on"] as? Bool) ?? true
@@ -1033,10 +1044,8 @@ final class SettingsStore: NSObject, ObservableObject {
             self.transcriptLast = (s["last"] as? String) ?? ""
             self.transcriptBlocked = (s["blocked"] as? String) ?? ""
             self.transcriptMissing = (s["missing"] as? Bool) ?? false
-            let serverCustom = (s["custom"] as? Bool) ?? false
-            let localFolder = UserDefaults.standard.string(forKey: Transcriber.outputFolderKey) ?? ""
-            if !serverCustom && !localFolder.isEmpty {
-                self.setTranscripts(["folder": localFolder], notifyRestart: false)
+            if sync {   // once: a folder the server cannot take must not make this loop
+                Self.syncTranscriptFolder(s) { changed in if changed { self.loadTranscripts(sync: false) } }
             }
         }
     }
