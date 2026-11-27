@@ -1,5 +1,5 @@
 // "Transcribe" in the panel: starts and stops AI Face Listener (Contents/Helpers/AI Face Listener.app),
-// which writes what this Mac plays and what the microphone hears to Documents/Meetings/…/transcript.md,
+// which writes what this Mac plays and what the microphone hears to ~/Meetings/…/transcript.md,
 // as text only. AI Face itself never gets the microphone or system audio permission: it only launches
 // the helper, asks it to stop, and shows the status it posts (app/listener/main.swift).
 import Cocoa
@@ -19,12 +19,15 @@ final class Transcriber {
     private(set) var warning = ""
     private(set) var error = ""
     private var runningCache = false
+    private var stopAsked: Date?
+    private var confirmedStopping = false   // the Listener itself said "stopping": its inputs are closed
     private var runningChecked = 0.0
 
     private init() {
         DistributedNotificationCenter.default().addObserver(forName: Self.statusName, object: nil, queue: .main) { [weak self] note in
             guard let self = self, let info = note.userInfo else { return }
             self.state = (info["state"] as? String) ?? ""
+            self.confirmedStopping = self.state == "stopping" || self.state == "stopped" || self.state == "error"
             self.folder = (info["folder"] as? String) ?? self.folder
             self.since = (info["since"] as? NSNumber)?.doubleValue ?? 0
             self.lines = (info["lines"] as? NSNumber)?.intValue ?? 0
@@ -78,10 +81,18 @@ final class Transcriber {
         if on { stop() } else { ask() }
     }
 
+    /// Asks the Listener to stop, and asks again every 5 s until it says it is stopping (a distributed
+    /// notification can be missed, e.g. while it was still loading).
     func stop() {
         DistributedNotificationCenter.default().postNotificationName(Self.stopName, object: nil, userInfo: nil,
                                                                     deliverImmediately: true)
+        if state != "stopping" { stopAsked = Date() }
         state = "stopping"
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
+            guard let self = self, let asked = self.stopAsked, self.on, !self.confirmedStopping,
+                  Date().timeIntervalSince(asked) < 120 else { return }
+            self.stop()
+        }
     }
 
     func openTranscript() {
@@ -95,6 +106,14 @@ final class Transcriber {
 
     private func ask() {
         NSApp.activate(ignoringOtherApps: true)
+        if !NSRunningApplication.runningApplications(withBundleIdentifier: Self.bundleID).isEmpty {
+            // The last session is still writing its last lines: one Listener at a time.
+            let alert = NSAlert()
+            alert.messageText = L("The last transcript is still being finished")
+            alert.informativeText = L("Try again in a moment.")
+            alert.runModal()
+            return
+        }
         if !setUp {
             let alert = NSAlert()
             alert.messageText = L("Transcription needs whisper.cpp and a Whisper model")
@@ -110,7 +129,7 @@ final class Transcriber {
         let form = ConsentForm()
         let alert = NSAlert()
         alert.messageText = L("Start transcribing?")
-        alert.informativeText = L("AI Face Listener writes down what this Mac plays (every app) and what your microphone hears, as text only: no audio is kept. Transcripts go to Documents/Meetings; share that folder with the AIs to let them read them.\n\nIn California everyone in a conversation must agree before it is recorded or listened to. Ask first.")
+        alert.informativeText = L("AI Face Listener writes down what this Mac plays (every app, also videos and notifications) and what your microphone hears (also people near you), as text only: no audio is kept. Transcripts go to Meetings in your home folder, on this Mac only; share that folder with the AIs only if you want them to read them.\n\nIn California everyone in a conversation must agree before it is recorded or listened to. Ask first, and if someone joins later, stop until they agree too.")
         alert.accessoryView = form.view
         let start = alert.addButton(withTitle: L("Start"))
         alert.addButton(withTitle: L("Cancel"))
@@ -118,15 +137,19 @@ final class Transcriber {
         form.agreed = { start.isEnabled = $0 }
         alert.window.initialFirstResponder = form.title
         guard alert.runModal() == .alertFirstButtonReturn, form.agree.state == .on else { return }
-        launch(title: form.title.stringValue, language: ["auto", "ko", "en"][max(0, form.language.indexOfSelectedItem)])
+        let agreed = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+        launch(title: form.title.stringValue, language: ["auto", "ko", "en"][max(0, form.language.indexOfSelectedItem)],
+               agreed: agreed)
     }
 
-    private func launch(title: String, language: String) {
+    private func launch(title: String, language: String, agreed: String) {
         let config = NSWorkspace.OpenConfiguration()
-        config.arguments = ["--start", "--title", title, "--language", language]
+        config.arguments = ["--start", "--agreed", agreed, "--title", title, "--language", language]
         config.activates = false
         config.addsToRecentItems = false
         state = "starting"
+        stopAsked = nil
+        confirmedStopping = false
         warning = ""
         error = ""
         lines = 0

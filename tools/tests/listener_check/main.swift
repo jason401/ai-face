@@ -1,5 +1,6 @@
-// Checks for AI Face Listener's audio-free parts (app/listener/Segmenter.swift, Transcript.swift).
-// Built and run by tests/test_listener.py: swiftc app/listener/{Segmenter,Transcript}.swift this main.swift
+// Checks for AI Face Listener's audio-free parts (segmenter, transcript, the tap buffer layout).
+// Built and run by tests/test_listener.py: swiftc app/listener/{Segmenter,Transcript,Capture}.swift this main.swift
+import CoreAudio
 import Foundation
 
 var failures = 0
@@ -132,20 +133,63 @@ do {
     a.add(Line(track: .me, start: 10, end: 12, text: "so the pressure drops quickly"))      // the speakers, heard again
     a.add(Line(track: .them, start: 9.8, end: 12.2, text: "So the pressure drops quickly."))
     a.add(Line(track: .me, start: 4, end: 6, text: "그럼 다음 주에 다시 측정할게요"))
-    check(a.ready(now: 13).isEmpty, "nothing before the delay")
-    let out = a.ready(now: 21)
-    check(out.map(\.track) == [.me, .them], "time order, bleed dropped: \(out.map { $0.track.rawValue + ":" + $0.text })")
+    check(a.ready(frontier: 3, now: 13).isEmpty, "nothing before the frontier")
+    let early = a.ready(frontier: 8, now: 13)
+    check(early.map(\.start) == [4], "only lines well before the frontier: \(early.map(\.start))")
+    let out = a.ready(frontier: 30, now: 31)
+    check(out.map(\.track) == [.them, .me], "time order: \(out.map { $0.track.rawValue + ":" + $0.text })")
+    check(out.count == 2 && out[1].echo && !out[0].echo, "the bleed is kept and marked, not deleted")
+    if out.count == 2 { check(Transcript.format(out[1]).hasPrefix("[00:00:10] **Me (echo?):**"), Transcript.format(out[1])) }
     a.add(Line(track: .me, start: 30, end: 32, text: "So the pressure drops quickly."))   // same words, much later: real
-    check(a.drain().count == 1, "the same words later are not bleed")
+    let later = a.drain()
+    check(later.count == 1 && !later[0].echo, "the same words later are not an echo")
 }
 do {
-    // The microphone line arrives first and the speaker line only later: still bleed.
+    // The microphone line is done first; the speaker line it repeats is still in Whisper (frontier 10.1).
     let a = Assembler()
     a.add(Line(track: .me, start: 10, end: 12, text: "evanescent field near the plate"))
-    check(a.ready(now: 15).isEmpty, "held")
+    check(a.ready(frontier: 10.1, now: 20).isEmpty, "held while an earlier-starting line may still come")
     a.add(Line(track: .them, start: 10.1, end: 12.1, text: "Evanescent field near the plate."))
-    let out = a.ready(now: 30)
-    check(out.count == 1 && out[0].track == .them, "late speaker line still removes the bleed")
+    let out = a.ready(frontier: 40, now: 40)
+    check(out.count == 2 && out[0].echo && out[0].track == .me, "a late speaker line still marks the echo")
+    // A track that stopped delivering does not hold lines forever.
+    a.add(Line(track: .them, start: 50, end: 52, text: "still there?"))
+    check(a.ready(frontier: 0, now: 100).isEmpty && a.ready(frontier: 0, now: 113).count == 1, "released after the 60 s cap")
+}
+do {
+    // Notes: not transcribed, no ⚑, never an echo.
+    let note = Line.missing(.them, start: 61, end: 64.4, "Whisper failed")
+    check(Transcript.format(note) == "[00:01:01] **Them:** _(not transcribed, 3 s: Whisper failed)_", Transcript.format(note))
+    check(!note.flagged, "a note has no ⚑")
+}
+
+// Segmenter frontier: the pre-roll start while idle, the utterance start while speaking.
+do {
+    let seg = Segmenter(track: .me, origin: 5)
+    _ = seg.push(silence(2))
+    check(abs(seg.frontier - (5 + 2 - 0.36)) < 0.03, "idle frontier = now − pre-roll: \(seg.frontier)")
+    _ = seg.push(tone(1))
+    check(seg.speaking && abs(seg.frontier - (5 + 2 - 0.3)) < 0.1, "speaking frontier = utterance start: \(seg.frontier)")
+}
+
+// Where the tap's buffers are in the aggregate's input list.
+do {
+    var f = AudioStreamBasicDescription()
+    f.mFormatFlags = kAudioFormatFlagIsFloat     // interleaved stereo float32
+    f.mChannelsPerFrame = 2
+    f.mBytesPerFrame = 8
+    let tap = TapLayout(format: f, deviceInputs: 1)
+    check(tap.index(in: [(channels: 1, bytes: 2048), (channels: 2, bytes: 4096)]) == 1, "after the headset microphone")
+    check(tap.index(in: [(channels: 2, bytes: 4096)]) == 0, "no device inputs reported: the last buffer if it fits")
+    check(tap.index(in: [(channels: 1, bytes: 2048)]) == nil, "nothing that fits: nil, no guessing")
+    check(tap.index(in: [(channels: 2, bytes: 4096), (channels: 2, bytes: 0)]) == nil, "an empty tap buffer is skipped, not replaced by a guess")
+    var n = AudioStreamBasicDescription()
+    n.mFormatFlags = kAudioFormatFlagIsFloat | kAudioFormatFlagIsNonInterleaved
+    n.mChannelsPerFrame = 2
+    n.mBytesPerFrame = 4
+    let split = TapLayout(format: n, deviceInputs: 2)
+    check(split.index(in: [(channels: 1, bytes: 512), (channels: 1, bytes: 512), (channels: 1, bytes: 1024), (channels: 1, bytes: 1024)]) == 2,
+          "non-interleaved: two buffers after two device inputs")
 }
 
 if failures == 0 { print("listener checks: OK") }

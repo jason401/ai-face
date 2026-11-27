@@ -99,6 +99,15 @@ final class Whisper {
         work = nil
     }
 
+    /// The server is still running (it can crash, e.g. out of memory).
+    var alive: Bool { process?.isRunning ?? false }
+
+    /// After a crash: start it again on a new port.
+    func restart() throws {
+        stop()
+        try start()
+    }
+
     /// The folder the server runs in (empty unless something wrote audio there; the tests check).
     var workFolder: URL? { work }
 
@@ -119,7 +128,7 @@ final class Whisper {
         if !prompt.isEmpty { field("prompt", prompt) }
         body.append(Data("--\(boundary)--\r\n".utf8))
 
-        var req = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/inference")!, timeoutInterval: 300)
+        var req = URLRequest(url: URL(string: "http://127.0.0.1:\(port)/inference")!, timeoutInterval: 120)
         req.httpMethod = "POST"
         req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         req.httpBody = body

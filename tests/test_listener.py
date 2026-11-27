@@ -33,7 +33,7 @@ class ListenerChecks(unittest.TestCase):
     def test_swift_checks(self):
         with tempfile.TemporaryDirectory() as tmp:
             built = swiftc(Path(tmp) / 'check', LISTENER / 'Segmenter.swift', LISTENER / 'Transcript.swift',
-                           ROOT / 'tools/tests/listener_check/main.swift')
+                           LISTENER / 'Capture.swift', ROOT / 'tools/tests/listener_check/main.swift')
             self.assertEqual(built.returncode, 0, built.stderr[-2000:])
             run = subprocess.run([str(Path(tmp) / 'check')], capture_output=True, text=True, timeout=60)
             self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
@@ -58,6 +58,9 @@ class ListenerChecks(unittest.TestCase):
                        '"--convert"']:   # --convert: whisper-server would write ffmpeg temp files
             self.assertNotIn(banned, source, banned)
         self.assertEqual(source.count('FileHandle(forWritingTo'), 1)   # the transcript
+        # AI Face passes the time everyone's agreement was confirmed; the Listener refuses without it.
+        self.assertIn('"--agreed"', (ROOT / 'app/macos/Transcribe.swift').read_text())
+        self.assertIn('options.agreed.isEmpty', (LISTENER / 'main.swift').read_text())
 
 
 @unittest.skipUnless(os.environ.get('AIFACE_LISTENER_E2E') == '1', 'set AIFACE_LISTENER_E2E=1 (needs whisper.cpp + model)')
@@ -114,10 +117,18 @@ class ListenerEndToEnd(unittest.TestCase):
             # The glossary helps but does not force a spelling: Whisper may still write it in Hangul.
             self.assertTrue('hydrophone' in lines[2].lower() or '하이드로폰' in lines[2], lines[2])
             self.assertIn('- Stopped', text)
+            self.assertIn('Everyone agreed: not recorded', text)   # file mode: no agreement asked
             # Only the transcript was written, and whisper-server's own folder is gone.
             written = [p for p in out.rglob('*') if p.is_file()]
             self.assertEqual(written, [transcript])
             self.assertEqual(list((tmp / 'whisper-tmp').iterdir()), [])
+
+            # Live without the agreement confirmed in AI Face: refused before anything opens.
+            refused = subprocess.run([str(tmp / 'AIFaceListener'), '--start', '--out', str(tmp / 'live')],
+                                     capture_output=True, text=True, timeout=30, env=env)
+            self.assertEqual(refused.returncode, 2, refused.stderr)
+            self.assertIn('everyone agreed', refused.stderr)
+            self.assertFalse((tmp / 'live').exists())
 
 
 def wav_header(n):

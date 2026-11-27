@@ -57,6 +57,14 @@ final class Segmenter {
 
     var speaking: Bool { !current.isEmpty }
 
+    /// Session time before which this track can produce no new utterance: the start of the one in
+    /// progress, or else of the pre-roll it would keep. Lines are written only up to the earliest
+    /// frontier of both tracks, so they come out in time order.
+    var frontier: Double {
+        let first = current.isEmpty ? index - history.count : currentStart
+        return origin + Double(first) / Double(Self.rate)
+    }
+
     /// Adds samples; returns the utterances they finished.
     func push(_ samples: [Float]) -> [Utterance] {
         pending.append(contentsOf: samples)

@@ -451,10 +451,12 @@
 "Set Up opens a Terminal window that installs whisper.cpp with Homebrew and downloads the Whisper model (about 600 MB) to this Mac. Transcribing then runs only on this Mac." = "설정을 누르면 터미널 창이 열려 Homebrew로 whisper.cpp를 설치하고 Whisper 모델(약 600 MB)을 이 Mac에 받아요. 받아쓰기는 그 뒤로 이 Mac 안에서만 돌아가요.";
 "Set Up…" = "설정…";
 "Start transcribing?" = "받아쓰기를 시작할까요?";
-"AI Face Listener writes down what this Mac plays (every app) and what your microphone hears, as text only: no audio is kept. Transcripts go to Documents/Meetings; share that folder with the AIs to let them read them.\n\nIn California everyone in a conversation must agree before it is recorded or listened to. Ask first." = "AI Face Listener가 이 Mac에서 나오는 소리(모든 앱)와 마이크로 들어오는 소리를 글로만 받아 적어요. 소리는 남기지 않아요. 기록은 문서/Meetings에 저장돼요. 그 폴더를 AI와 공유하면 AI가 읽을 수 있어요.\n\n캘리포니아에서는 대화하는 모든 사람이 동의해야 녹음하거나 들을 수 있어요. 먼저 물어보세요.";
+"AI Face Listener writes down what this Mac plays (every app, also videos and notifications) and what your microphone hears (also people near you), as text only: no audio is kept. Transcripts go to Meetings in your home folder, on this Mac only; share that folder with the AIs only if you want them to read them.\n\nIn California everyone in a conversation must agree before it is recorded or listened to. Ask first, and if someone joins later, stop until they agree too." = "AI Face Listener가 이 Mac에서 나오는 소리(모든 앱, 영상과 알림 소리 포함)와 마이크로 들어오는 소리(주변 사람 목소리 포함)를 글로만 받아 적어요. 소리는 남기지 않아요. 기록은 홈 폴더의 Meetings에, 이 Mac에만 저장돼요. AI가 읽길 원할 때만 그 폴더를 공유하세요.\n\n캘리포니아에서는 대화하는 모든 사람이 동의해야 녹음하거나 들을 수 있어요. 먼저 물어보고, 나중에 누가 들어오면 그 사람도 동의할 때까지 멈추세요.";
 "Everyone in the conversation agreed" = "대화하는 모든 사람이 동의했어요";
 "Title (optional)" = "제목 (선택)";
 "Automatic (each line)" = "자동 (줄마다)";
 "Korean" = "한국어";
 "English" = "영어";
 "Language" = "언어";
+"The last transcript is still being finished" = "이전 기록을 아직 마무리하는 중이에요";
+"Try again in a moment." = "잠시 후 다시 시도하세요.";

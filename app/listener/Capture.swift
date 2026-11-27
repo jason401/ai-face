@@ -55,38 +55,51 @@ final class Resampler {
 final class SystemCapture {
     var onSamples: (([Float]) -> Void)?
     var onRestart: (() -> Void)?             // after a rebuild: the next samples start a new timeline
-    private(set) var lastCallback = Date()
+    /// Callbacks whose buffers did not look like the tap's (wrong stream layout): reported as a warning.
+    var mismatched: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return misses
+    }
+    private var misses = 0
     private var tap = AudioObjectID(kAudioObjectUnknown)
     private var aggregate = AudioObjectID(kAudioObjectUnknown)
     private var proc: AudioDeviceIOProcID?
-    private var resampler: Resampler?
     private let queue = DispatchQueue(label: "local.aiface.listener.system", qos: .userInitiated)
-    private var listening = false
+    private var active = false               // between start and stop; a late rebuild after stop does nothing
+    private let lock = NSLock()
+    private var callbackTime = Date.timeIntervalSinceReferenceDate
     private lazy var outputChanged: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
         DispatchQueue.main.async { self?.rebuild() }
     }
 
+    /// Seconds since the tap last delivered audio (the Listener rebuilds after a few).
+    var silentFor: Double {
+        lock.lock()
+        defer { lock.unlock() }
+        return Date.timeIntervalSinceReferenceDate - callbackTime
+    }
+
     func start() throws {
+        active = true
         try build()
-        if !listening {
-            var addr = Self.address(kAudioHardwarePropertyDefaultSystemOutputDevice)
-            AudioObjectAddPropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &addr, .main, outputChanged)
-            listening = true
-        }
+        // Where apps play (not the alert device): the aggregate's clock is that device.
+        var addr = Self.address(kAudioHardwarePropertyDefaultOutputDevice)
+        AudioObjectAddPropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &addr, .main, outputChanged)
     }
 
     func stop() {
-        if listening {
-            var addr = Self.address(kAudioHardwarePropertyDefaultSystemOutputDevice)
-            AudioObjectRemovePropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &addr, .main, outputChanged)
-            listening = false
-        }
+        guard active else { return }
+        active = false
+        var addr = Self.address(kAudioHardwarePropertyDefaultOutputDevice)
+        AudioObjectRemovePropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &addr, .main, outputChanged)
         teardown()
     }
 
     /// Tear everything down and build it again (device change, no callbacks, or a long run of zeros:
     /// long sessions have been seen to deliver only zero buffers until the tap is recreated).
     func rebuild() {
+        guard active else { return }
         teardown()
         onRestart?()
         do { try build() } catch { NSLog("AI Face Listener: system audio rebuild failed: \(error)") }
@@ -106,14 +119,13 @@ final class SystemCapture {
         var size = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
         var addr = Self.address(kAudioTapPropertyFormat)
         err = AudioObjectGetPropertyData(tap, &addr, 0, nil, &size, &format)
-        guard err == noErr, let avFormat = AVAudioFormat(streamDescription: &format),
+        guard err == noErr, format.mBytesPerFrame > 0, let avFormat = AVAudioFormat(streamDescription: &format),
               let resampler = Resampler(from: avFormat) else {
             teardown()
             throw CaptureError.os("Reading the tap format", err)
         }
-        self.resampler = resampler
 
-        let output = try Self.defaultOutputUID()
+        let (device, output) = try Self.defaultOutput()
         let settings: [String: Any] = [
             kAudioAggregateDeviceNameKey: "AI Face Listener",
             kAudioAggregateDeviceUIDKey: UUID().uuidString,
@@ -133,11 +145,22 @@ final class SystemCapture {
         }
         aggregate = aggregateID
 
+        // The aggregate's input buffers are the output device's own input streams (a headset's or
+        // AirPods' microphone) and then the tap's. Read only the tap's; check their shape every time.
+        let layout = TapLayout(format: format, deviceInputs: Self.inputStreams(device))
         var procID: AudioDeviceIOProcID?
         err = AudioDeviceCreateIOProcIDWithBlock(&procID, aggregate, queue) { [weak self] _, input, _, _, _ in
-            guard let self = self,
-                  let buffer = AVAudioPCMBuffer(pcmFormat: avFormat, bufferListNoCopy: input, deallocator: nil) else { return }
-            self.lastCallback = Date()
+            guard let self = self else { return }
+            self.lock.lock()
+            self.callbackTime = Date.timeIntervalSinceReferenceDate
+            self.lock.unlock()
+            guard let buffer = layout.copy(UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: input)),
+                                           format: avFormat) else {
+                self.lock.lock()
+                self.misses += 1
+                self.lock.unlock()
+                return
+            }
             let samples = resampler.convert(buffer)
             if !samples.isEmpty { self.onSamples?(samples) }
         }
@@ -146,12 +169,37 @@ final class SystemCapture {
             throw CaptureError.os("Creating the audio callback", err)
         }
         proc = procID
+        disableDeviceInputs(layout.deviceInputs, proc: procID)
         err = AudioDeviceStart(aggregate, procID)
         guard err == noErr else {
             teardown()
             throw CaptureError.os("Starting system audio", err)
         }
-        lastCallback = Date()
+        lock.lock()
+        callbackTime = Date.timeIntervalSinceReferenceDate
+        lock.unlock()
+    }
+
+    /// Asks Core Audio not to run the output device's own input streams for our callback, so a
+    /// headset's microphone is not opened by us (it may also keep Bluetooth out of call mode; not
+    /// measured). If it fails nothing changes: TapLayout still skips those buffers.
+    private func disableDeviceInputs(_ count: Int, proc: AudioDeviceIOProcID) {
+        guard count > 0 else { return }
+        var addr = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyIOProcStreamUsage,
+                                              mScope: kAudioObjectPropertyScopeInput, mElement: kAudioObjectPropertyElementMain)
+        var size: UInt32 = 0
+        guard AudioObjectGetPropertyDataSize(aggregate, &addr, 0, nil, &size) == noErr,
+              Int(size) >= MemoryLayout<AudioHardwareIOProcStreamUsage>.size else { return }
+        let raw = UnsafeMutableRawPointer.allocate(byteCount: Int(size), alignment: 8)
+        defer { raw.deallocate() }
+        let usage = raw.bindMemory(to: AudioHardwareIOProcStreamUsage.self, capacity: 1)
+        usage.pointee.mIOProc = unsafeBitCast(proc, to: UnsafeMutableRawPointer.self)
+        guard AudioObjectGetPropertyData(aggregate, &addr, 0, nil, &size, raw) == noErr,
+              let offset = MemoryLayout<AudioHardwareIOProcStreamUsage>.offset(of: \.mStreamIsOn) else { return }
+        let streams = Int(usage.pointee.mNumberStreams)
+        let on = raw.advanced(by: offset).bindMemory(to: UInt32.self, capacity: streams)
+        for i in 0..<min(count, streams) { on[i] = 0 }
+        AudioObjectSetPropertyData(aggregate, &addr, 0, nil, size, raw)
     }
 
     private func teardown() {
@@ -173,10 +221,11 @@ final class SystemCapture {
                                           mElement: kAudioObjectPropertyElementMain)
     }
 
-    static func defaultOutputUID() throws -> String {
+    /// The device apps play to, and its UID.
+    static func defaultOutput() throws -> (AudioObjectID, String) {
         var device = AudioObjectID(kAudioObjectUnknown)
         var size = UInt32(MemoryLayout<AudioObjectID>.size)
-        var addr = address(kAudioHardwarePropertyDefaultSystemOutputDevice)
+        var addr = address(kAudioHardwarePropertyDefaultOutputDevice)
         var err = AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &addr, 0, nil, &size, &device)
         guard err == noErr else { throw CaptureError.os("Finding the output device", err) }
         var uid: Unmanaged<CFString>?
@@ -184,7 +233,61 @@ final class SystemCapture {
         addr = address(kAudioDevicePropertyDeviceUID)
         err = AudioObjectGetPropertyData(device, &addr, 0, nil, &size, &uid)
         guard err == noErr, let value = uid?.takeRetainedValue() else { throw CaptureError.os("Reading the output device", err) }
-        return value as String
+        return (device, value as String)
+    }
+
+    /// How many input streams a device has (a headset's microphone, for example).
+    static func inputStreams(_ device: AudioObjectID) -> Int {
+        var addr = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyStreams, mScope: kAudioObjectPropertyScopeInput,
+                                              mElement: kAudioObjectPropertyElementMain)
+        var size: UInt32 = 0
+        guard AudioObjectGetPropertyDataSize(device, &addr, 0, nil, &size) == noErr else { return 0 }
+        return Int(size) / MemoryLayout<AudioStreamID>.size
+    }
+}
+
+/// Where the tap's buffers are in the aggregate's input buffer list, and a checked copy of them.
+struct TapLayout {
+    let deviceInputs: Int        // buffers before the tap's (the output device's own inputs)
+    let buffers: Int             // the tap's buffers: 1 interleaved, or one per channel
+    let channelsPerBuffer: Int
+    let bytesPerFrame: Int
+
+    init(format: AudioStreamBasicDescription, deviceInputs: Int) {
+        let interleaved = format.mFormatFlags & kAudioFormatFlagIsNonInterleaved == 0
+        self.deviceInputs = deviceInputs
+        buffers = interleaved ? 1 : Int(format.mChannelsPerFrame)
+        channelsPerBuffer = interleaved ? Int(format.mChannelsPerFrame) : 1
+        bytesPerFrame = Int(format.mBytesPerFrame)
+    }
+
+    /// The tap's first buffer: right after the device's inputs; if the list does not look like
+    /// that, the last buffers when their shape fits; else nil (nothing is guessed).
+    func index(in list: [(channels: Int, bytes: Int)]) -> Int? {
+        func fits(_ at: Int) -> Bool {
+            guard at >= 0, at + buffers <= list.count else { return false }
+            let bytes = list[at].bytes
+            return bytes > 0 && bytes % bytesPerFrame == 0
+                && (at..<(at + buffers)).allSatisfy { list[$0].channels == channelsPerBuffer && list[$0].bytes == bytes }
+        }
+        if fits(deviceInputs) { return deviceInputs }
+        if fits(list.count - buffers) { return list.count - buffers }
+        return nil
+    }
+
+    func copy(_ list: UnsafeMutableAudioBufferListPointer, format: AVAudioFormat) -> AVAudioPCMBuffer? {
+        let shape = list.map { (channels: Int($0.mNumberChannels), bytes: $0.mData == nil ? 0 : Int($0.mDataByteSize)) }
+        guard let at = index(in: shape) else { return nil }
+        let frames = shape[at].bytes / bytesPerFrame
+        guard let out = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(frames)) else { return nil }
+        out.frameLength = AVAudioFrameCount(frames)
+        let target = UnsafeMutableAudioBufferListPointer(out.mutableAudioBufferList)
+        guard target.count == buffers else { return nil }
+        for k in 0..<buffers {
+            guard let from = list[at + k].mData, let to = target[k].mData else { return nil }
+            memcpy(to, from, min(Int(list[at + k].mDataByteSize), Int(target[k].mDataByteSize)))
+        }
+        return out
     }
 }
 

@@ -6,8 +6,14 @@ struct Line {
     let track: Track
     let start: Double
     let end: Double
-    let text: String          // with "(?)" after words Whisper was unsure of
-    var flagged: Bool { Transcript.hasNumber(text) }
+    let text: String          // with "(?)" after words Whisper was unsure of; for a note, the reason
+    var note = false          // not speech: "not transcribed" (Whisper failed or fell too far behind)
+    var echo = false          // a microphone line that repeats what the speakers played at that time
+    var flagged: Bool { !note && Transcript.hasNumber(text) }
+
+    static func missing(_ track: Track, start: Double, end: Double, _ reason: String) -> Line {
+        return Line(track: track, start: start, end: end, text: reason, note: true)
+    }
 }
 
 /// One word from whisper-server's verbose_json.
@@ -131,10 +137,14 @@ enum Transcript {
     }
 
     static func format(_ line: Line) -> String {
-        return "\(line.flagged ? "⚑ " : "")[\(clock(line.start))] **\(line.track.rawValue):** \(line.text)"
+        let who = line.track.rawValue + (line.echo ? " (echo?)" : "")
+        if line.note {
+            return "[\(clock(line.start))] **\(who):** _(not transcribed, \(Int((line.end - line.start).rounded())) s: \(line.text))_"
+        }
+        return "\(line.flagged ? "⚑ " : "")[\(clock(line.start))] **\(who):** \(line.text)"
     }
 
-    static func header(title: String, started: Date, language: String) -> String {
+    static func header(title: String, started: Date, language: String, agreed: String) -> String {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
         f.dateFormat = "yyyy-MM-dd HH:mm"
@@ -142,9 +152,11 @@ enum Transcript {
         return """
         # \(name) — \(f.string(from: started))
 
-        - Them = what this Mac played (every app), Me = the microphone. No audio was kept.
+        - Them = what this Mac played (every app), Me = the microphone (anyone near it). No audio was kept.
         - Language: \(language). Written by Whisper on this Mac; it can mishear names, terms and numbers.
         - ⚑ = the line has a number: check it before relying on it. (?) = a word Whisper was unsure of.
+          Me (echo?) = the microphone may have heard the speakers: probably the Them line next to it.
+        - Everyone agreed: \(agreed.isEmpty ? "not recorded" : "confirmed in AI Face at " + agreed).
 
 
         """
@@ -170,10 +182,13 @@ enum Transcript {
     }
 }
 
-/// Holds lines for a few seconds so both tracks come out in time order and a microphone line
-/// that only repeats what the speakers played (speakers instead of headphones) can be dropped.
+/// Puts both tracks' lines in time order and marks a microphone line that only repeats what the
+/// speakers played (speakers instead of headphones) as an echo; it is kept, never deleted.
+/// A line is written once nothing earlier can still come: its start is before the `frontier`
+/// (the earliest start either track may still produce, or that Whisper is still working on).
 final class Assembler {
-    var delay = 8.0
+    var slack = 1.5              // a microphone echo can begin a little before the speaker line
+    var cap = 60.0               // a line waits at most this long (a track that stopped delivering)
     var bleedSimilarity = 0.5
     private var pending: [Line] = []
     private var recentThem: [Line] = []
@@ -182,9 +197,9 @@ final class Assembler {
         pending.append(line)
     }
 
-    /// Lines that ended before `now - delay`, in order.
-    func ready(now: Double) -> [Line] {
-        return take { $0.end <= now - self.delay }
+    /// The lines that can be written now, in order.
+    func ready(frontier: Double, now: Double) -> [Line] {
+        return take { $0.start <= frontier - self.slack || $0.end < now - self.cap }
     }
 
     func drain() -> [Line] {
@@ -192,18 +207,16 @@ final class Assembler {
     }
 
     private func take(_ due: (Line) -> Bool) -> [Line] {
-        let out = pending.filter(due).sorted { $0.start < $1.start }
+        var out = pending.filter(due).sorted { $0.start < $1.start }
         if out.isEmpty { return [] }
         pending.removeAll(where: due)
-        let them = recentThem + pending.filter { $0.track == .them } + out.filter { $0.track == .them }
-        var kept: [Line] = []
-        for line in out {
-            if line.track == .me, them.contains(where: { isBleed(line, of: $0) }) { continue }
-            kept.append(line)
+        let them = (recentThem + pending + out).filter { $0.track == .them && !$0.note }
+        for i in out.indices where out[i].track == .me && !out[i].note {
+            if them.contains(where: { isBleed(out[i], of: $0) }) { out[i].echo = true }
         }
-        recentThem.append(contentsOf: out.filter { $0.track == .them })
+        recentThem.append(contentsOf: out.filter { $0.track == .them && !$0.note })
         if let last = out.last?.end { recentThem.removeAll { $0.end < last - 60 } }
-        return kept
+        return out
     }
 
     private func isBleed(_ me: Line, of them: Line) -> Bool {
