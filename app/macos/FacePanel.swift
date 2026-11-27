@@ -47,6 +47,7 @@ protocol FacePanelActions: AnyObject {
     func panelResumeAwake()
     func panelTranscribe()
     func panelOpenTranscript()
+    func panelOpenTranscriptFolder()
     func panelInstall()
     func panelQuit()
     func panelFaces() -> NSViewController?
@@ -562,8 +563,19 @@ struct FacePanelView: View {
                     Button(L("Open transcript")) { panel.actions?.panelOpenTranscript() }.buttonStyle(.link)
                 }
             }
-            chip(model.transcribeOn ? L("Stop transcribing") : L("Start transcribing…"), on: model.transcribeOn) {
-                panel.actions?.panelTranscribe()
+            HStack(spacing: 6) {
+                chip(model.transcribeOn ? L("Stop transcribing") : L("Start transcribing…"), on: model.transcribeOn) {
+                    panel.actions?.panelTranscribe()
+                }
+                Button { panel.actions?.panelOpenTranscriptFolder() } label: {
+                    Image(systemName: "folder")
+                        .frame(width: 30).padding(.vertical, 4)
+                        .background(RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.07)))
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(L("Open transcript folder"))
+                .accessibilityLabel(L("Open transcript folder"))
             }
             if !model.transcribeLine.isEmpty {
                 Text(model.transcribeLine).font(.system(size: 11).monospacedDigit())

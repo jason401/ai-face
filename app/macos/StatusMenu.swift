@@ -610,6 +610,11 @@ final class StatusController: NSObject, NSMenuDelegate, FacePanelActions {
         Transcriber.shared.openTranscript()
     }
 
+    func panelOpenTranscriptFolder() {
+        panel.hide()
+        Transcriber.shared.openTranscriptFolder()
+    }
+
     func panelInstall() {
         panel.hide()
         installUpdate()

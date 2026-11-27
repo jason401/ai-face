@@ -1,5 +1,5 @@
 // "Transcribe" in the panel: starts and stops AI Face Listener (Contents/Helpers/AI Face Listener.app),
-// which writes what this Mac plays and what the microphone hears to ~/Meetings/…/transcript.md,
+// which writes what this Mac plays and what the microphone hears to transcript.md,
 // as text only. AI Face itself never gets the microphone or system audio permission: it only launches
 // the helper, asks it to stop, and shows the status it posts (app/listener/main.swift).
 import Cocoa
@@ -11,6 +11,18 @@ final class Transcriber {
     static let statusName = Notification.Name("local.aiface.listener.status")
     static let support = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Application Support/AI Face/Listener")
+
+    static let outputFolderKey = "transcriptOutputFolder"
+    static let defaultOutputFolder = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent("Meetings", isDirectory: true)
+
+    static func outputFolder(for path: String) -> URL {
+        path.isEmpty ? defaultOutputFolder : URL(fileURLWithPath: path, isDirectory: true)
+    }
+
+    private var outputFolderPath: String {
+        UserDefaults.standard.string(forKey: Self.outputFolderKey) ?? ""
+    }
 
     private(set) var state = ""        // starting, listening, stopping, stopped, error ("" = no word yet)
     private(set) var folder = ""
@@ -104,6 +116,36 @@ final class Transcriber {
         }
     }
 
+    func openTranscriptFolder() {
+        let path = outputFolderPath
+        let folder = Self.outputFolder(for: path)
+        do {
+            if path.isEmpty {
+                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            }
+            if folderExists(folder), NSWorkspace.shared.open(folder) { return }
+            showFolderError(folder)
+        } catch {
+            showFolderError(folder, reason: error.localizedDescription)
+        }
+    }
+
+    private func folderExists(_ folder: URL) -> Bool {
+        var isDirectory: ObjCBool = false
+        return FileManager.default.fileExists(atPath: folder.path, isDirectory: &isDirectory)
+            && isDirectory.boolValue
+    }
+
+    private func showFolderError(_ folder: URL, reason: String? = nil) {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = L("Transcript folder unavailable")
+        alert.informativeText = [folder.path, reason, L("Check the folder or choose another in Settings → General → Transcribe.")]
+            .compactMap { $0 }.joined(separator: "\n\n")
+        alert.runModal()
+    }
+
     private func ask() {
         NSApp.activate(ignoringOtherApps: true)
         if !NSRunningApplication.runningApplications(withBundleIdentifier: Self.bundleID).isEmpty {
@@ -126,10 +168,16 @@ final class Transcriber {
             }
             return
         }
+        let path = outputFolderPath
+        let outputFolder = Self.outputFolder(for: path)
+        guard path.isEmpty || folderExists(outputFolder) else {
+            showFolderError(outputFolder)
+            return
+        }
         let form = ConsentForm()
         let alert = NSAlert()
         alert.messageText = L("Start transcribing?")
-        alert.informativeText = L("AI Face Listener writes down what this Mac plays (every app, also videos and notifications) and what your microphone hears (also people near you), as text only: no audio is kept. Transcripts go to Meetings in your home folder, on this Mac only; share that folder with the AIs only if you want them to read them.\n\nIn California everyone in a conversation must agree before it is recorded or listened to. Ask first, and if someone joins later, stop until they agree too.")
+        alert.informativeText = String(format: L("AI Face Listener writes down what this Mac plays (every app, also videos and notifications) and what your microphone hears (also people near you), as text only: no audio is kept.\n\nSave to: %@\n\nIn California everyone in a conversation must agree before it is recorded or listened to. Ask first, and if someone joins later, stop until they agree too."), outputFolder.path)
         alert.accessoryView = form.view
         let start = alert.addButton(withTitle: L("Start"))
         alert.addButton(withTitle: L("Cancel"))
@@ -139,12 +187,13 @@ final class Transcriber {
         guard alert.runModal() == .alertFirstButtonReturn, form.agree.state == .on else { return }
         let agreed = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
         launch(title: form.title.stringValue, language: ["auto", "ko", "en"][max(0, form.language.indexOfSelectedItem)],
-               agreed: agreed)
+               agreed: agreed, outputFolder: outputFolder)
     }
 
-    private func launch(title: String, language: String, agreed: String) {
+    private func launch(title: String, language: String, agreed: String, outputFolder: URL) {
         let config = NSWorkspace.OpenConfiguration()
-        config.arguments = ["--start", "--agreed", agreed, "--title", title, "--language", language]
+        config.arguments = ["--start", "--agreed", agreed, "--title", title, "--language", language,
+                            "--out", outputFolder.path]
         config.activates = false
         config.addsToRecentItems = false
         state = "starting"

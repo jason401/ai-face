@@ -7,6 +7,7 @@ import UniformTypeIdentifiers
 
 struct GeneralTab: View {
     @ObservedObject var store: SettingsStore
+    @AppStorage(Transcriber.outputFolderKey) private var transcriptFolderPath = ""
 
     var body: some View {
         SettingsPage {
@@ -60,6 +61,9 @@ struct GeneralTab: View {
                         .help(Bundle.main.bundlePath)
                 }
             }
+            if Transcriber.shared.supported || API.preview {
+                transcriptSettings
+            }
             SettingsCard(title: L("About")) {
                 SettingsRow(title: L("Version")) {
                     Text(store.version).foregroundStyle(.secondary).textSelection(.enabled)
@@ -77,6 +81,39 @@ struct GeneralTab: View {
             }
         }
         .environment(\.settingsLabelWidth, 118)
+    }
+
+    private var transcriptSettings: some View {
+        let folder = Transcriber.outputFolder(for: transcriptFolderPath)
+        return SettingsCard(title: L("Transcribe")) {
+            SettingsRow(title: L("Save transcripts to")) {
+                Text((folder.path as NSString).abbreviatingWithTildeInPath)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1).truncationMode(.middle)
+                    .textSelection(.enabled)
+                    .help(folder.path)
+            }
+            SettingsRow(title: L("Folder")) {
+                SettingsAction(title: L("Open")) { Transcriber.shared.openTranscriptFolder() }
+                SettingsAction(title: L("Change…")) { chooseTranscriptFolder(current: folder) }
+                SettingsAction(title: L("Use Default")) { transcriptFolderPath = "" }
+                    .disabled(transcriptFolderPath.isEmpty)
+            }
+            SettingsNote(text: L("The new folder applies to future transcripts."))
+        }
+    }
+
+    private func chooseTranscriptFolder(current: URL) {
+        let panel = NSOpenPanel()
+        panel.message = L("Choose where new transcripts are saved.")
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = FileManager.default.fileExists(atPath: current.path)
+            ? current : FileManager.default.homeDirectoryForCurrentUser
+        guard panel.runModal() == .OK, let folder = panel.url else { return }
+        transcriptFolderPath = folder.path == Transcriber.defaultOutputFolder.path ? "" : folder.path
     }
 }
 
