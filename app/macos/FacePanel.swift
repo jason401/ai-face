@@ -61,9 +61,12 @@ final class PanelModel: ObservableObject {
     @Published var page = Page.main
     @Published var title = "AI Face"
     @Published var detail = ""
-    @Published var extra = ""
+    @Published var extra = ""               // what runs, counting down: "⏱18:20  ☀1:16" (or the board)
+    @Published var recText = ""             // how long the transcription has run, shown in red
     @Published var kind = "face"
     @Published var timerOn = false
+    @Published var timerSeconds = 0         // the running timer's length: its button is lit
+    @Published var timerTip = ""
     @Published var customTimer = false
     @Published var customMinutes = "15"
     @Published var customError = false
@@ -77,6 +80,7 @@ final class PanelModel: ObservableObject {
     @Published var transcribeStopping = false
     @Published var transcribeHasTranscript = false
     @Published var transcribeLine = ""
+    @Published var transcribeFailed = false
     @Published var transcribeWarning = ""
     @Published var updateAvailable = false
     @Published var updateSummary = ""
@@ -443,14 +447,14 @@ struct FacePanelView: View {
         VStack(alignment: .leading, spacing: 10) {
             header
             Divider()
-            timer
-            if model.awakeSupported && model.awakeReady {   // not set up: Settings → AI → Keep awake
-                Divider()
-                awake
-            }
-            if model.transcribeSupported {   // macOS 14.2+ (the system audio tap)
-                Divider()
-                transcribe
+            VStack(alignment: .leading, spacing: 6) {   // one block of one-line rows, no dividers between
+                timer
+                if model.awakeSupported && model.awakeReady {   // not set up: Settings → AI → Keep awake
+                    awake
+                }
+                if model.transcribeSupported {   // macOS 14.2+ (the system audio tap)
+                    transcribe
+                }
             }
             if store.folderOn {   // AI access to shared folders turned off in Settings: nothing to drop here
                 Divider()
@@ -472,7 +476,7 @@ struct FacePanelView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(model.title).font(.system(size: 14, weight: .semibold)).lineLimit(1)
                 Text(model.detail).foregroundStyle(.secondary).lineLimit(1)
-                Text(model.extra).font(.system(size: 12).monospacedDigit()).foregroundStyle(.secondary).lineLimit(1)
+                status.font(.system(size: 12).monospacedDigit()).lineLimit(1).minimumScaleFactor(0.85)
             }
             Spacer(minLength: 4)
             VStack(spacing: 4) {
@@ -480,6 +484,13 @@ struct FacePanelView: View {
                 modeButton("clock", L("Show the clock"), on: model.kind == "clock") { panel.actions?.panelMode("CLOCK") }
             }
         }
+    }
+
+    /// What runs, in one line: the transcription in red first, then the timer and keep awake.
+    private var status: Text {
+        let rec = model.recText.isEmpty ? Text("")
+            : Text("● " + model.recText + (model.extra.isEmpty ? "" : "  ")).foregroundColor(.red)
+        return rec + Text(model.extra).foregroundColor(.secondary)
     }
 
     private func modeButton(_ symbol: String, _ tip: String, on: Bool, _ action: @escaping () -> Void) -> some View {
@@ -493,36 +504,53 @@ struct FacePanelView: View {
         .accessibilityLabel(tip)
     }
 
-    private func chip(_ title: String, on: Bool = false, _ action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title).frame(maxWidth: .infinity).padding(.vertical, 4)
-                .background(RoundedRectangle(cornerRadius: 6)
-                    .fill(on ? Color.accentColor.opacity(0.25) : Color.primary.opacity(0.07)))
+    // Timer, Keep awake and Transcribe are one line each: the name, then four equal cells in the same
+    // columns. The details (who keeps it awake, "Transcript saved") are the name's tooltip; what is
+    // running counts down in the header.
+    private static let labelWidth: CGFloat = 72
+    private static let cellWidth = (FacePanel.width - 24 - labelWidth - 4 * 4) / 4   // 39 pt
+
+    private func row<Cells: View>(_ title: String, tip: String, @ViewBuilder cells: () -> Cells) -> some View {
+        HStack(spacing: 4) {
+            Text(title).font(.system(size: 12, weight: .semibold)).lineLimit(1).minimumScaleFactor(0.85)
+                .frame(width: Self.labelWidth, alignment: .leading)
                 .contentShape(Rectangle())
+                .help(tip)
+            cells()
         }
-        .buttonStyle(.plain)
     }
 
-    private func sectionTitle(_ title: String) -> some View {
-        Text(title).font(.system(size: 12, weight: .semibold))
+    private func cell<Content: View>(_ help: String, cells: Int = 1, on: Bool = false, tint: Color? = nil,
+                                     _ action: @escaping () -> Void, @ViewBuilder label: () -> Content) -> some View {
+        let fill = on ? Color.accentColor.opacity(0.35) : tint.map { $0.opacity(0.2) } ?? Color.primary.opacity(0.07)
+        return Button(action: action) {
+            label().font(.system(size: 11).monospacedDigit()).lineLimit(1)
+                .foregroundStyle(tint ?? Color.primary)
+                .frame(width: Self.cellWidth * CGFloat(cells) + 4 * CGFloat(cells - 1), height: 22)
+                .background(RoundedRectangle(cornerRadius: 6).fill(fill))
+                .contentShape(RoundedRectangle(cornerRadius: 6))
+        }
+        .buttonStyle(.plain)
+        .help(help)
+        .accessibilityLabel(help)
     }
 
     private var timer: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                sectionTitle(L("Timer"))
-                Spacer()
-                if model.timerOn {
-                    Button(L("Cancel timer")) { panel.actions?.panelTimer(0) }.buttonStyle(.link)
-                }
-            }
-            HStack(spacing: 6) {
+            row(L("Timer"), tip: model.timerTip) {
                 ForEach([5, 25, 50], id: \.self) { minutes in
-                    chip(minutesText(minutes)) { panel.actions?.panelTimer(minutes * 60) }
+                    cell(minutesText(minutes), on: model.timerSeconds == minutes * 60, {
+                        model.customTimer = false
+                        panel.actions?.panelTimer(minutes * 60)
+                    }) { Text(shortMinutesText(minutes)) }
                 }
-                chip(L("Custom…"), on: model.customTimer) {
-                    model.customError = false
-                    model.customTimer.toggle()
+                if model.timerOn {
+                    cell(L("Cancel timer"), { panel.actions?.panelTimer(0) }) { Image(systemName: "xmark") }
+                } else {
+                    cell(L("Custom…"), on: model.customTimer, {
+                        model.customError = false
+                        model.customTimer.toggle()
+                    }) { Image(systemName: "ellipsis") }
                 }
             }
             if model.customTimer {
@@ -533,21 +561,14 @@ struct FacePanelView: View {
 
     private var awake: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                sectionTitle(L("Keep awake"))
-                Spacer()
-                if model.awakeOn {
-                    Button(L("Turn off all")) { panel.actions?.panelAwake(0) }.buttonStyle(.link)
-                }
-            }
-            HStack(spacing: 6) {
+            row(L("Keep awake"), tip: model.awakeLines.joined(separator: "\n")) {
                 ForEach([60, 120, 240], id: \.self) { minutes in
-                    chip(minutesText(minutes)) { panel.actions?.panelAwake(minutes) }
+                    cell(minutesText(minutes), { panel.actions?.panelAwake(minutes) }) { Text(shortMinutesText(minutes)) }
                 }
+                cell(L("Turn off all"), { panel.actions?.panelAwake(0) }) { Image(systemName: "xmark") }
+                    .disabled(!model.awakeOn)   // kept in its place, dimmed, so the columns stay
             }
-            ForEach(model.awakeLines, id: \.self) { line in
-                Text(line).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
-            }
+            // A button cannot hide in a tooltip.
             if model.awakePausedMinutes > 0 {
                 Text(String(format: L("Automatic keep awake paused · %ld min"), model.awakePausedMinutes))
                     .font(.system(size: 11)).foregroundStyle(.secondary)
@@ -558,31 +579,27 @@ struct FacePanelView: View {
 
     private var transcribe: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                sectionTitle(L("Transcribe"))
-                Spacer()
-                if model.transcribeHasTranscript {
-                    Button(L("Open transcript")) { panel.actions?.panelOpenTranscript() }.buttonStyle(.link)
+            row(L("Transcribe"), tip: model.transcribeLine) {
+                if model.transcribeOn {
+                    cell(L("Stop transcribing"), cells: 2, tint: .red, { panel.actions?.panelTranscribe() }) {
+                        Text("■ " + (model.recText.isEmpty ? "…" : model.recText))
+                    }
+                    .disabled(model.transcribeStopping)
+                } else {
+                    cell(L("Start transcribing…"), cells: 2, { panel.actions?.panelTranscribe() }) {
+                        HStack(spacing: 4) {
+                            Circle().fill(Color.red).frame(width: 7, height: 7)
+                            Text(L("Start…"))
+                        }
+                    }
                 }
+                cell(L("Open transcript"), { panel.actions?.panelOpenTranscript() }) { Image(systemName: "doc.text") }
+                    .disabled(!model.transcribeHasTranscript)
+                cell(L("Open transcript folder"), { panel.actions?.panelOpenTranscriptFolder() }) { Image(systemName: "folder") }
             }
-            HStack(spacing: 6) {
-                chip(model.transcribeOn ? L("Stop transcribing") : L("Start transcribing…"), on: model.transcribeOn) {
-                    panel.actions?.panelTranscribe()
-                }
-                .disabled(model.transcribeStopping)
-                Button { panel.actions?.panelOpenTranscriptFolder() } label: {
-                    Image(systemName: "folder")
-                        .frame(width: 30).padding(.vertical, 4)
-                        .background(RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.07)))
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help(L("Open transcript folder"))
-                .accessibilityLabel(L("Open transcript folder"))
-            }
-            if !model.transcribeLine.isEmpty {
-                Text(model.transcribeLine).font(.system(size: 11).monospacedDigit())
-                    .foregroundStyle(model.transcribeOn ? Color.red : Color.secondary).lineLimit(2)
+            // Errors stay as lines: a tooltip is easy to miss.
+            if model.transcribeFailed {
+                Text(model.transcribeLine).font(.system(size: 11)).foregroundStyle(.orange)
                     .fixedSize(horizontal: false, vertical: true)
             }
             if !model.transcribeWarning.isEmpty {

@@ -97,8 +97,13 @@ import SwiftUI
             let panel = FacePanel(store: store)
             let m = panel.model
             m.pinned = pinned; m.compact = compact
-            m.title = "Happy"; m.detail = L("Chosen by Claude"); m.extra = String(format: L("⏱ %ld:%02ld left"), 12, 5)
-            m.timerOn = true; m.customTimer = pinned
+            m.title = "Happy"; m.detail = L("Chosen by Claude")
+            // Peek: everything running (25m lit, the red stop button). Pinned: idle, with the custom timer open.
+            m.extra = pinned ? (awake ? "☀0:42" : L("● Board connected")) : (awake ? "⏱12:05  ☀0:42" : "⏱12:05")
+            m.timerOn = !pinned; m.timerSeconds = pinned ? 0 : 1500; m.customTimer = pinned
+            m.timerTip = String(format: L("⏱ %ld:%02ld left"), 12, 5)
+            m.transcribeSupported = true; m.transcribeOn = !pinned; m.recText = pinned ? "" : "03:12"
+            m.transcribeHasTranscript = pinned
             m.awakeSupported = true; m.awakeReady = awake; m.awakeOn = awake
             m.awakeLines = [String(format: L("%@ · %ld min"), "Claude Code", 42)]
             m.updateAvailable = true

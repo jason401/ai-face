@@ -32,6 +32,11 @@ func minutesText(_ m: Int) -> String {
     return String(format: L("%d min"), m)
 }
 
+/// For the panel's small buttons: "5m", "25m", "1h".
+func shortMinutesText(_ m: Int) -> String {
+    return m >= 60 && m % 60 == 0 ? String(format: L("%dh"), m / 60) : String(format: L("%dm"), m)
+}
+
 func secondsText(_ s: Int) -> String {
     return String(format: L("%d s"), s)
 }

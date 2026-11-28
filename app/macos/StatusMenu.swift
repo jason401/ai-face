@@ -370,9 +370,15 @@ final class StatusController: NSObject, NSMenuDelegate, FacePanelActions {
                                   offset: bounce(now))
         m.set(\.title, name.isEmpty ? "AI Face" : name)
         m.set(\.detail, view.kind == "face" ? ownerName(view.owner) : (board ? L("Showing on the board") : L("Showing in the menu bar")))
-        m.set(\.extra, timerText(now) ?? awakeText(now) ?? (board ? L("● Board connected") : L("○ No board")))
+        let transcriber = Transcriber.shared
+        let rec = transcriber.capturing && transcriber.since > 0 ? Date().timeIntervalSince1970 - transcriber.since : -1
+        m.set(\.recText, rec >= 0 ? clockText(Int(rec)) : "")
+        let running = [shortTimerText(now), shortAwakeText(now)].compactMap { $0 }.joined(separator: "  ")
+        m.set(\.extra, !running.isEmpty || rec >= 0 ? running : (board ? L("● Board connected") : L("○ No board")))
         m.set(\.kind, view.kind)
         m.set(\.timerOn, view.timerEnd > 0)
+        m.set(\.timerSeconds, view.timerEnd > 0 ? Int(view.timerTotal.rounded()) : 0)
+        m.set(\.timerTip, timerText(now) ?? "")
         m.set(\.awakeSupported, awakeSupported)
         m.set(\.awakeReady, awakeReady)
         m.set(\.awakeOn, view.awake)
@@ -383,12 +389,12 @@ final class StatusController: NSObject, NSMenuDelegate, FacePanelActions {
                 : String(format: L("%@ · %ld min"), label, (left + 59) / 60)
         })
         m.set(\.awakePausedMinutes, awakePaused > 0 ? (awakePaused + 59) / 60 : 0)
-        let transcriber = Transcriber.shared
         m.set(\.transcribeSupported, transcriber.supported)
         m.set(\.transcribeOn, transcriber.on)
         m.set(\.transcribeStopping, transcriber.stopping)
         m.set(\.transcribeHasTranscript, !transcriber.folder.isEmpty)
         m.set(\.transcribeLine, transcriber.statusLine())
+        m.set(\.transcribeFailed, transcriber.state == "error")
         m.set(\.transcribeWarning, transcriber.on ? transcriber.warning : "")
         m.set(\.updateAvailable, updateAvailable)
         m.set(\.updateSummary, updateProgress?.summary(at: Date()) ?? "")
@@ -428,6 +434,26 @@ final class StatusController: NSObject, NSMenuDelegate, FacePanelActions {
         if left <= 0 { return L("⏰ Time's up!") }
         let h = left / 3600, m = left % 3600 / 60, s = left % 60
         return h > 0 ? String(format: L("⏱ %ld:%02ld:%02ld left"), h, m, s) : String(format: L("⏱ %ld:%02ld left"), m, s)
+    }
+
+    /// The panel header's short forms: "⏱18:20", "☀1:16" (hours:minutes).
+    func shortTimerText(_ now: Double) -> String? {
+        guard view.timerEnd > 0 else { return nil }
+        let left = Int((view.timerEnd - now).rounded(.up))
+        return left <= 0 ? "⏰" : "⏱" + clockText(left)
+    }
+
+    func shortAwakeText(_ now: Double) -> String? {
+        guard view.awake else { return nil }
+        guard awakeEnd > now else { return "☀" }
+        let left = Int((awakeEnd - now).rounded(.up))
+        return String(format: "☀%ld:%02ld", left / 3600, left % 3600 / 60)
+    }
+
+    /// 3:12, 18:20, 1:02:03
+    func clockText(_ seconds: Int) -> String {
+        let h = seconds / 3600, m = seconds % 3600 / 60, s = seconds % 60
+        return h > 0 ? String(format: "%ld:%02ld:%02ld", h, m, s) : String(format: "%02ld:%02ld", m, s)
     }
 
     private func updateHeader(_ now: Double) {
