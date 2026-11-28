@@ -120,6 +120,12 @@ enum MailCLI {
         """
     }
 
+    // A direct reference by id first («class mssg» is Mail's message class: written as "message id N"
+    // it would read as the Message-ID header property). "whose" searches are slow in large inboxes
+    // (see messagesScript) and stay only as the fallback. Headers come first; the text and attachment
+    // names then each get a time limit (Mail may still be downloading a new message, and the headers
+    // alone are better than no answer). Mail answers one request at a time, so after the text timed
+    // out the attachment names are not asked for.
     static func readScript(account: String, id: Int) -> String {
         return """
         tell application "Mail"
@@ -129,12 +135,32 @@ enum MailCLI {
                     set acct to name of account of mb
                 end try
                 if acct is \(quote(account)) then
-                    set m to (first message of mb whose id is \(id))
-                    set attNames to {}
                     try
-                        set attNames to name of every mail attachment of m
+                        set m to «class mssg» id \(id) of mb
+                        set mSub to subject of m
+                    on error
+                        set m to (first message of mb whose id is \(id))
+                        set mSub to subject of m
                     end try
-                    return {subject of m, sender of m, date received of m, address of to recipients of m, address of cc recipients of m, content of m, attNames}
+                    set mHead to {mSub, sender of m, date received of m, address of to recipients of m, address of cc recipients of m}
+                    set mText to ""
+                    set mState to "ok"
+                    try
+                        with timeout of 25 seconds
+                            set mText to content of m
+                        end timeout
+                    on error
+                        set mState to "missing"
+                    end try
+                    set attNames to {}
+                    if mState is "ok" then
+                        try
+                            with timeout of 10 seconds
+                                set attNames to name of every mail attachment of m
+                            end timeout
+                        end try
+                    end if
+                    return mHead & {mText, attNames, mState}
                 end if
             end repeat
             error "not_found" number 404
@@ -148,12 +174,16 @@ enum MailCLI {
         return s == "allowed" ? nil : "no_access"
     }
 
-    /// status | accounts | messages <days> [hidden accounts as JSON on stdin] | read <account> <id>
+    static let maxMessages = 5000
+
+    /// status | accounts | messages <days> [--no-launch] [hidden accounts as JSON on stdin] | read <account> <id>
+    /// --no-launch: answer not_running instead of opening Mail (the server's read-ahead).
     static func run(_ args: [String]) -> Int32 {
         let command = args.first ?? ""
         if command == "status" {
             return output(["status": MailAccess.running ? MailAccess.status() : "notRunning"])
         }
+        if args.contains("--no-launch") && !MailAccess.running { return output(["error": "not_running"]) }
         if let problem = prepare() { return output(["error": problem]) }
         switch command {
         case "accounts":
@@ -200,7 +230,9 @@ enum MailCLI {
                 }
             }
             out.sort { (($0["date"] as? Double) ?? 0) > (($1["date"] as? Double) ?? 0) }
-            return output(Array(out.prefix(1000)))
+            let kept = Array(out.prefix(maxMessages))
+            return output(["messages": kept, "truncated": out.count > kept.count,
+                           "oldest": (kept.last?["date"] as? Double) ?? 0] as [String: Any])
         case "read":
             guard args.count >= 3, let id = Int(args[2]) else { return output(["error": "usage"]) }
             let (r, err) = run(script: readScript(account: args[1], id: id))
@@ -217,9 +249,10 @@ enum MailCLI {
                 "cc": strings(m.atIndex(5)),
                 "text": String((m.atIndex(6)?.stringValue ?? "").prefix(40000)),
                 "attachments": strings(m.atIndex(7)),
+                "text_missing": m.atIndex(8)?.stringValue == "missing",
             ])
         default:
-            return output(["error": "usage: --mail status | accounts | messages DAYS (hidden JSON on stdin) | read ACCOUNT ID"])
+            return output(["error": "usage: --mail status | accounts | messages DAYS [--no-launch] (hidden JSON on stdin) | read ACCOUNT ID"])
         }
     }
 }

@@ -108,6 +108,8 @@ Mail access is optional and controlled per AI and account. macOS requests permis
 
 The integration reads inbox messages only. It never sends, moves, deletes or marks messages read. **Hide links and codes**, on by default, reduces links to their site and removes common sign-in code/password patterns. Message content is untrusted sender text, not an instruction to the AI. Tools are `mail_messages` and `mail_read`; their results become part of the AI conversation.
 
+Mail needs 15-20 seconds to list an inbox, so AI Face keeps the last 60 days' list **in memory only** (never on disk). A list under 2 minutes old is answered at once; under 15 minutes it is answered at once and read again in the background; older lists are read again first. The first line of each answer says what time its list is from, and `fresh` always reads Mail again. While an AI used mail in the last day and Mail is already open, the list is read ahead every 3 minutes (30 minutes after the last request) or 10 minutes; read-ahead never opens Mail. Turning mail access off drops the kept list. If Mail does not hand over a message's text within 25 seconds (it may still be downloading), `mail_read` answers with the headers.
+
 ### Shared folders (read only)
 
 Share folders with the connected AIs in **Settings → AI → Shared folders**: click **Add folders…**, or drop folders from Finder onto the card or the folder list. The menu bar panel also adds folders and pauses or resumes each one with its switch. Claude may read them by default; turn GPT on separately. **AI access** turns shared folders off for every AI at once; the list and choices are kept, and the menu bar panel hides its folder section while it is off. Restart the AI app after changing which AIs may read them.

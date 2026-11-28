@@ -184,6 +184,8 @@ class ForwardingTests(Base):
             app = self.run_app()
             tool('mail_messages', days=3, query='prof', unread=True)
             self.assertEqual(app.calls[-1], ('GET', '/mail/messages?agent=claude&days=3&q=prof&unread=1'))
+            tool('mail_messages', fresh=True)
+            self.assertEqual(app.calls[-1], ('GET', '/mail/messages?agent=claude&fresh=1'))
             tool('mail_read', id='m2')
             self.assertEqual(app.calls[-1], ('GET', '/mail/read?agent=claude&id=m2'))
             mcp.SETTINGS.write_text(json.dumps({'mail': {'apps': {'claude': False}}}))

@@ -317,7 +317,8 @@ def main():
                         return self.reply(200, mail_access.status())
                     if route == '/mail/messages':
                         return self.reply(200, {'text': mail_access.messages(
-                            arg('agent'), arg('days'), arg('q'), arg('unread') == '1', arg('limit'))})
+                            arg('agent'), arg('days'), arg('q'), arg('unread') == '1', arg('limit'),
+                            fresh=arg('fresh') == '1')})
                     if route == '/mail/read':
                         return self.reply(200, {'text': mail_access.read(arg('agent'), arg('id'))})
                 except PermissionError as exc:
@@ -665,6 +666,7 @@ def main():
     threading.Thread(target=updater.watch, args=(device, stop), daemon=True).start()
     threading.Thread(target=weather.watch, args=(device, stop), daemon=True).start()
     threading.Thread(target=history_sync.watch, args=(stop,), daemon=True).start()
+    threading.Thread(target=mail_access.watch, args=(stop,), daemon=True).start()
     # The app stops the server with SIGTERM: run the cleanup below (keep awake off) then too.
     def terminated(*_):
         raise KeyboardInterrupt

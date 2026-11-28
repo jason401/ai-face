@@ -194,12 +194,15 @@ MAIL_TOOLS = [
     {'name': 'mail_messages', 'title': "List the user's mail",
      'description': ("Recent messages in the user's Mail app inboxes (read only), newest first: id, time, "
                      "sender, subject. query filters by subject or sender; days 1-60 (default 7); limit up "
-                     "to 50 (default 20). Use when the user asks about their email."),
+                     "to 50 (default 20). Use when the user asks about their email. The answer comes from "
+                     "a list AI Face keeps (its first line says what time it is from; usually a few minutes "
+                     "old); fresh=true reads Mail again (15-30 s) when the newest mail matters."),
      'inputSchema': {'type': 'object', 'properties': {
          'days': {'type': 'integer', 'minimum': 1, 'maximum': 60},
          'query': {'type': 'string'},
          'unread': {'type': 'boolean', 'description': 'Only unread messages'},
-         'limit': {'type': 'integer', 'minimum': 1, 'maximum': 50}},
+         'limit': {'type': 'integer', 'minimum': 1, 'maximum': 50},
+         'fresh': {'type': 'boolean', 'description': 'Read Mail again instead of the kept list (slower)'}},
          'additionalProperties': False},
      'annotations': READ_ONLY},
     {'name': 'mail_read', 'title': 'Read one email',
@@ -263,7 +266,8 @@ TRANSCRIPT_TOOLS = [
      'inputSchema': {'type': 'object', 'properties': {
          'days': {'type': 'integer', 'minimum': 1, 'maximum': 365},
          'query': {'type': 'string', 'description': 'Filter by transcript id or title'},
-         'limit': {'type': 'integer', 'minimum': 1, 'maximum': 50}},
+         'limit': {'type': 'integer', 'minimum': 1, 'maximum': 50},
+         'fresh': {'type': 'boolean', 'description': 'Read Mail again instead of the kept list (slower)'}},
          'additionalProperties': False},
      'annotations': READ_ONLY},
     {'name': 'transcript_search', 'title': 'Search meeting transcripts',
@@ -489,6 +493,8 @@ def call_tool(name, args):
                     query[short] = str(args[key])
             if args.get('unread') is True:
                 query['unread'] = '1'
+            if args.get('fresh') is True:
+                query['fresh'] = '1'
         path = '/mail/' + ('read' if name == 'mail_read' else 'messages') + '?' + urllib.parse.urlencode(query)
         return _request('GET', path, timeout=120).get('text', '')
     if name in ('folders_list', 'folder_files', 'folder_search', 'folder_read'):

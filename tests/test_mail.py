@@ -3,6 +3,7 @@ import json
 import stat
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -15,14 +16,19 @@ sys.path.insert(0, str(ROOT / 'core'))
 from aiface import mail_access as mail, moods  # noqa: E402
 
 FAKE = r'''#!/usr/bin/env python3
-import json, sys, time
+import json, os, sys, time
 args = sys.argv[2:]
 here = sys.argv[0]
 stdin = sys.stdin.read()
 log = open(here + '.log', 'a'); log.write(json.dumps([args, stdin]) + '\n'); log.close()
 access = open(here + '.access').read().strip()
+flag = lambda name: os.path.exists(here + '.' + name)
 if args[0] == 'status':
     print(json.dumps({'status': access})); sys.exit()
+if '--no-launch' in args and flag('closed'):
+    print(json.dumps({'error': 'not_running'})); sys.exit()
+if flag('slow'):
+    time.sleep(1)
 if access != 'allowed':
     print(json.dumps({'error': 'no_access'})); sys.exit()
 now = time.time()
@@ -34,8 +40,12 @@ elif args[0] == 'messages':
             'date': now - 3600, 'read': False, 'flagged': True},
            {'account': 'Gmail', 'id': 7, 'subject': 'Your code: 482913', 'from': 'Bank <no-reply@bank.com>',
             'date': now - 7200, 'read': True, 'flagged': False}]
-    print(json.dumps([m for m in out if m['account'] not in hidden]))
+    out = [m for m in out if m['account'] not in hidden]
+    print(json.dumps({'messages': out, 'truncated': True, 'oldest': out[-1]['date']} if flag('cut') else out))
 elif args[0] == 'read':
+    if args[1:] == ['Gmail', '7']:
+        print(json.dumps({'subject': 'Your code: 482913', 'from': 'Bank', 'date': now - 7200, 'to': [], 'cc': [],
+                          'attachments': [], 'text': '', 'text_missing': True})); sys.exit()
     if args[1:] != ['Example', '11']:
         print(json.dumps({'error': 'not_found'})); sys.exit()
     print(json.dumps({'subject': 'Lab meeting moved', 'from': 'Prof <p@example.org>', 'date': now - 3600,
@@ -54,6 +64,21 @@ class MailTests(unittest.TestCase):
         Path(str(self.exe) + '.access').write_text('allowed')
         p = patch.object(mail, 'binary', return_value=self.exe); p.start(); self.addCleanup(p.stop)
         p = patch.object(moods, 'SETTINGS', Path(tmp.name) / 'settings.json'); p.start(); self.addCleanup(p.stop)
+        mail._list, mail._flight, mail._last_request = None, None, 0.0   # the kept list lives in the module
+        mail._bodies.clear()
+
+    def flag(self, name, on=True):
+        f = Path(f'{self.exe}.{name}')
+        f.write_text('') if on else f.unlink()
+
+    def reads(self, command='messages'):
+        return [c for c in self.calls() if c[0][0] == command]
+
+    def wait_for(self, test):
+        end = time.time() + 10
+        while not test() and time.time() < end:
+            time.sleep(0.05)
+        self.assertTrue(test())
 
     def calls(self):
         return [json.loads(x) for x in Path(str(self.exe) + '.log').read_text().splitlines()]
@@ -83,8 +108,13 @@ class MailTests(unittest.TestCase):
         self.assertIn('No messages.', mail.messages('claude', query='dentist'))
         self.assertIn('Lab meeting', mail.messages('claude', query='PROF'))
         mail.save({'hidden': ['Gmail']})
-        self.assertNotIn('Gmail', mail.messages('claude', days=30))
-        self.assertEqual(self.calls()[-1], [['messages', '30'], '["Gmail"]'])
+        self.assertNotIn('Gmail', mail.messages('claude', days=30))   # filtered from the kept list
+        self.assertEqual(self.reads()[-1], [['messages', '60'], '[]'])
+        mail.save({'hidden': []})
+        self.assertIn('Gmail', mail.messages('claude'))               # shown again: read again
+        mail.save({'hidden': ['Gmail']})
+        mail.messages('claude', fresh=True)
+        self.assertEqual(self.reads()[-1], [['messages', '60'], '["Gmail"]'])
         with self.assertRaises(ValueError):
             mail.messages('claude', days=61)
         status = mail.status()
@@ -118,6 +148,80 @@ class MailTests(unittest.TestCase):
             mail.messages('claude')
         self.assertEqual(mail.status()['accounts'], [])
         self.assertFalse([n for n in dir(mail) if n.startswith(('send', 'delete', 'move', 'mark'))])
+
+
+    def test_kept_list_answers_at_once_and_says_its_time(self):
+        first = mail.messages('claude')
+        self.assertRegex(first.splitlines()[0], r'^Inbox, last 7 days: 2 message\(s\) \(as of \d\d:\d\d\)$')
+        mail.messages('claude', unread=True)
+        self.assertEqual(len(self.reads()), 1)                     # under 2 minutes: no new read
+        mail._list['at'] -= 5 * 60                                 # 5 minutes old: answer now, read behind
+        self.assertIn('5 min ago', mail.messages('claude'))
+        self.wait_for(lambda: len(self.reads()) == 2 and mail._flight is None)
+        self.assertEqual(self.reads()[-1][0], ['messages', '60', '--no-launch'])   # never opens Mail itself
+        mail._list['at'] -= 20 * 60                                # too old to give out: wait for a new read
+        self.assertNotIn('min ago', mail.messages('claude'))
+        self.assertEqual(len(self.reads()), 3)
+        mail.messages('claude', fresh=True)
+        self.assertEqual(len(self.reads()), 4)
+
+    def test_one_read_at_a_time_and_settings_changed_meanwhile(self):
+        self.flag('slow')
+        out = []
+        threads = [threading.Thread(target=lambda: out.append(mail.messages('claude'))) for _ in range(3)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        self.assertEqual(len(self.reads()), 1)
+        self.assertEqual(len(out), 3)
+        mail._list = None
+        t = threading.Thread(target=lambda: out.append(mail.messages('claude')))
+        t.start()
+        self.wait_for(lambda: mail._flight is not None)
+        mail.save({'hidden': ['Gmail']})                          # while Mail is being read
+        t.join()
+        self.assertNotIn('[Gmail]', out[-1])
+        self.assertIsNone(mail._list)                             # read with the old settings: not kept
+        mail.messages('claude')
+        mail.save({'on': False})
+        self.assertIsNone(mail._list)                             # mail off: nothing kept in memory
+
+    def test_cut_list_says_what_is_missing(self):
+        self.flag('cut')
+        self.assertIn("older messages are missing", mail.messages('claude', days=7))
+
+    def test_read_ahead_only_when_used_and_mail_open(self):
+        self.assertFalse(mail.read_ahead())                       # no AI asked for mail yet
+        self.assertEqual(self.calls() if Path(f'{self.exe}.log').exists() else [], [])
+        mail.messages('claude')
+        self.assertFalse(mail.read_ahead())                       # list is new
+        mail._list['at'] -= mail.WATCH_BUSY + 1
+        self.assertTrue(mail.read_ahead())
+        self.assertEqual(self.reads()[-1][0], ['messages', '60', '--no-launch'])
+        mail._list['at'] -= mail.WATCH_BUSY + 1
+        self.flag('closed')                                       # Mail closed right after the check
+        self.assertFalse(mail.read_ahead())
+        self.assertIn('2 message(s)', mail.messages('claude', fresh=True))
+        Path(str(self.exe) + '.access').write_text('notRunning')  # status says closed: no read at all
+        mail._list['at'] -= mail.WATCH_BUSY + 1
+        count = len(self.reads())
+        self.assertFalse(mail.read_ahead())
+        self.assertEqual(len(self.reads()), count)
+        mail._last_request -= mail.USED_FOR + 1                   # nobody used mail for a day
+        Path(str(self.exe) + '.access').write_text('allowed')
+        self.assertFalse(mail.read_ahead())
+
+    def test_read_keeps_texts_for_a_while_and_says_when_text_is_missing(self):
+        listing = mail.messages('claude')
+        lab = listing.split('#')[1].split()[0]
+        mail.read('claude', lab)
+        mail.read('claude', lab)
+        self.assertEqual(len(self.reads('read')), 1)
+        bank = [line for line in listing.splitlines() if '[Gmail]' in line][0].split('#')[1].split()[0]
+        self.assertIn('may still be downloading', mail.read('claude', bank))
+        mail.read('claude', bank)
+        self.assertEqual(len(self.reads('read')), 3)               # a missing text is asked for again
 
 
 if __name__ == '__main__':
